@@ -1,0 +1,72 @@
+@import '../../styles/variables.scss';
+
+.home {
+  min-height: 100vh;
+  padding: 140rpx $pad-outer 160rpx;
+
+  &__header {
+    margin-bottom: 60rpx;
+  }
+
+  &__greeting {
+    display: block;
+    font-size: 26rpx;
+    letter-spacing: 6rpx;
+    color: $text-tertiary;
+  }
+
+  &__el {
+    display: block;
+    font-size: 60rpx;
+    margin: 16rpx 0;
+  }
+
+  &__desc {
+    display: block;
+    font-size: 26rpx;
+    color: $text-secondary;
+  }
+
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: $gap-list;
+  }
+}
+
+.track {
+  display: flex;
+  align-items: center;
+  padding: 32rpx $pad-card;
+  border: 2rpx solid $border;
+  border-radius: $radius-md;
+  background: $surface;
+
+  &__dot {
+    width: 16rpx;
+    height: 16rpx;
+    border-radius: 50%;
+    margin-right: 28rpx;
+  }
+
+  &__info {
+    flex: 1;
+  }
+
+  &__title {
+    display: block;
+    font-size: 30rpx;
+    color: $text-primary;
+  }
+
+  &__meta {
+    display: block;
+    margin-top: 8rpx;
+    font-size: 22rpx;
+    color: $text-tertiary;
+  }
+
+  &__state {
+    font-size: 32rpx;
+  }
+}

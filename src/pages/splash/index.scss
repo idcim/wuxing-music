@@ -1,0 +1,32 @@
+@import '../../styles/variables.scss';
+
+.splash {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: $bg-deep;
+
+  &__compass {
+    width: 240rpx;
+    height: 240rpx;
+    border-radius: 50%;
+    border: 2rpx solid rgba(226, 232, 240, 0.15);
+    margin-bottom: 60rpx;
+    animation: rotate-slow 36s linear infinite;
+  }
+
+  &__title {
+    font-size: 64rpx;
+    letter-spacing: 12rpx;
+    color: $text-primary;
+  }
+
+  &__sub {
+    margin-top: 24rpx;
+    font-size: 24rpx;
+    letter-spacing: 4rpx;
+    color: $text-tertiary;
+  }
+}

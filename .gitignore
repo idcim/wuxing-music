@@ -1,0 +1,11 @@
+node_modules/
+dist/
+lib/
+.temp/
+.rn_temp/
+.swc/
+*.log
+.DS_Store
+.idea/
+.vscode/
+deploy_versions/

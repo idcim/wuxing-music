@@ -1,0 +1,53 @@
+@import '../../styles/variables.scss';
+
+.quiz {
+  min-height: 100vh;
+  padding: 120rpx $pad-outer 80rpx;
+  background: $bg-deep;
+
+  &__bar {
+    height: 6rpx;
+    border-radius: 6rpx;
+    background: $surface;
+    overflow: hidden;
+
+    &-fill {
+      height: 100%;
+      background: $text-primary;
+      transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+  }
+
+  &__step {
+    display: block;
+    margin: 32rpx 0 16rpx;
+    font-size: 24rpx;
+    color: $text-tertiary;
+  }
+
+  &__q {
+    display: block;
+    font-size: 44rpx;
+    line-height: 1.5;
+    color: $text-primary;
+    margin-bottom: 60rpx;
+  }
+
+  &__opts {
+    display: flex;
+    flex-direction: column;
+    gap: $gap-list;
+  }
+
+  &__opt {
+    padding: 36rpx $pad-card;
+    border: 2rpx solid $border;
+    border-radius: $radius-md;
+    background: $surface;
+
+    &-text {
+      font-size: 30rpx;
+      color: $text-secondary;
+    }
+  }
+}

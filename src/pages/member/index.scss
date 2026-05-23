@@ -1,0 +1,79 @@
+@import '../../styles/variables.scss';
+
+.member {
+  min-height: 100vh;
+  padding: 140rpx $pad-outer 160rpx;
+  background: $bg-deep;
+
+  &__title {
+    display: block;
+    font-size: 56rpx;
+    letter-spacing: 8rpx;
+    color: $text-primary;
+  }
+
+  &__sub {
+    display: block;
+    margin: 16rpx 0 48rpx;
+    font-size: 26rpx;
+    color: $text-tertiary;
+  }
+
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: 28rpx;
+  }
+
+  &__plan {
+    padding: 40rpx $pad-card;
+    border: 2rpx solid $border;
+    border-radius: $radius-lg;
+    background: $surface;
+
+    &--featured {
+      border-color: rgba(234, 179, 8, 0.4);
+    }
+
+    &-head {
+      display: flex;
+      align-items: center;
+      gap: 16rpx;
+    }
+
+    &-name {
+      font-size: 40rpx;
+      color: $text-primary;
+    }
+
+    &-badge {
+      font-size: 20rpx;
+      padding: 4rpx 16rpx;
+      border-radius: 20rpx;
+      background: rgba(234, 179, 8, 0.15);
+      color: #fde047;
+    }
+
+    &-price {
+      margin: 16rpx 0 24rpx;
+    }
+
+    &-amount {
+      font-size: 52rpx;
+      color: $text-primary;
+    }
+
+    &-unit {
+      font-size: 24rpx;
+      color: $text-tertiary;
+      margin-left: 8rpx;
+    }
+
+    &-feat {
+      display: block;
+      font-size: 26rpx;
+      line-height: 1.9;
+      color: $text-secondary;
+    }
+  }
+}

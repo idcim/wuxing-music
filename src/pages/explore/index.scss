@@ -1,0 +1,51 @@
+@import '../../styles/variables.scss';
+
+.explore {
+  min-height: 100vh;
+  padding: 140rpx $pad-outer 160rpx;
+  background: $bg-deep;
+
+  &__title {
+    display: block;
+    font-size: 56rpx;
+    letter-spacing: 8rpx;
+    color: $text-primary;
+  }
+
+  &__sub {
+    display: block;
+    margin: 16rpx 0 48rpx;
+    font-size: 26rpx;
+    color: $text-tertiary;
+  }
+
+  &__grid {
+    display: flex;
+    flex-direction: column;
+    gap: $gap-list;
+  }
+
+  &__card {
+    padding: 40rpx $pad-card;
+    border: 2rpx solid $border;
+    border-radius: $radius-lg;
+    background: $surface;
+
+    &-el {
+      font-size: 64rpx;
+    }
+
+    &-note {
+      display: block;
+      margin: 12rpx 0;
+      font-size: 24rpx;
+      color: $text-secondary;
+    }
+
+    &-desc {
+      display: block;
+      font-size: 26rpx;
+      color: $text-tertiary;
+    }
+  }
+}

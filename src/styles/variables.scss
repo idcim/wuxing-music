@@ -1,0 +1,30 @@
+// ─── 全局基色 ───────────────────────────────────────
+$bg-deep: #03050a;
+$bg-mid: #0a0e1a;
+$text-primary: #e2e8f0;
+$text-secondary: #94a3b8;
+$text-tertiary: #64748b;
+$text-quaternary: #475569;
+$border: rgba(255, 255, 255, 0.06);
+$surface: rgba(255, 255, 255, 0.025);
+
+// ─── 圆角 ───────────────────────────────────────────
+$radius-sm: 16rpx;
+$radius-md: 24rpx;
+$radius-lg: 32rpx;
+$radius-xl: 44rpx;
+$radius-pill: 60rpx;
+
+// ─── 间距 ───────────────────────────────────────────
+$pad-outer: 44rpx;
+$pad-card: 32rpx;
+$gap-list: 20rpx;
+
+// ─── 五行色（SCSS map，便于循环；运行时数据见 constants/wuxing.ts）─
+$wuxing-colors: (
+  wood: (#84cc16, #bef264, rgba(132, 204, 22, 0.25)),
+  fire: (#f97316, #fdba74, rgba(249, 115, 22, 0.25)),
+  earth: (#eab308, #fde047, rgba(234, 179, 8, 0.25)),
+  metal: (#cbd5e1, #f1f5f9, rgba(203, 213, 225, 0.2)),
+  water: (#38bdf8, #7dd3fc, rgba(56, 189, 248, 0.25))
+);

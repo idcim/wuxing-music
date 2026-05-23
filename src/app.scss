@@ -1,0 +1,40 @@
+@import './styles/variables.scss';
+
+page {
+  background: $bg-deep;
+  color: $text-primary;
+  font-family: 'PingFang SC', '苹方-简', system-ui, -apple-system, sans-serif;
+  font-size: 28rpx;
+  line-height: 1.6;
+}
+
+view,
+text,
+button {
+  box-sizing: border-box;
+}
+
+// 衬线标题（系统降级，约等于 Noto Serif SC）
+.serif {
+  font-family: 'STSong', 'SimSun', serif;
+}
+
+// ─── 通用动效 ───────────────────────────────────────
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(24rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes rotate-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes star-twinkle {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 1; }
+}
+
+.fade-up {
+  animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
