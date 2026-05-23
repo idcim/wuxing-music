@@ -13,6 +13,44 @@
     margin-bottom: 48rpx;
   }
 
+  &__user {
+    display: flex;
+    align-items: center;
+    gap: 28rpx;
+    margin-bottom: 28rpx;
+  }
+
+  &__avatar {
+    width: 112rpx;
+    height: 112rpx;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &-text {
+      font-size: 48rpx;
+    }
+  }
+
+  &__user-info {
+    flex: 1;
+  }
+
+  &__user-name {
+    display: block;
+    font-size: 34rpx;
+    color: $text-primary;
+  }
+
+  &__user-action {
+    display: inline-block;
+    margin-top: 10rpx;
+    font-size: 24rpx;
+    color: $text-secondary;
+  }
+
   &__card {
     padding: 44rpx $pad-card;
     border: 2rpx solid $border;

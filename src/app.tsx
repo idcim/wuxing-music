@@ -1,10 +1,11 @@
 import { PropsWithChildren } from 'react';
 import { useLaunch } from '@tarojs/taro';
+import { useUserStore } from '@/stores/user';
 import './app.scss';
 
 function App({ children }: PropsWithChildren) {
   useLaunch(() => {
-    console.log('五行律音 App launched.');
+    useUserStore.getState().initFromCache();
   });
 
   return children;

@@ -3,6 +3,7 @@ import { View, Text } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { QUIZ_QUESTIONS, EMPTY_SCORES, calcTopElement } from '@/constants/quiz';
 import { useUserStore } from '@/stores/user';
+import { submitQuiz } from '@/services/user';
 import type { ElementScores, QuizOption } from '@/types';
 import './index.scss';
 
@@ -26,6 +27,7 @@ export default function Quiz() {
     } else {
       const top = calcTopElement(next);
       setElement(top, next);
+      submitQuiz(top, next).catch(() => { /* 同步失败不阻断流程，已存本地 */ });
       Taro.redirectTo({ url: `/pages/result/index?element=${encodeURIComponent(top)}` });
     }
   };
