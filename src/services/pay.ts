@@ -108,6 +108,28 @@ export async function purchasePlan(planId: PlanId): Promise<PayOutcome> {
   }
 }
 
+// ── 我的订单 ──
+export interface MyOrder {
+  orderNo: string;
+  planId: PlanId;
+  planName: string;
+  amount: number;
+  status: string;          // pending/paid/refunding/refunded/failed/closed
+  isGift: boolean;
+  giftCode: string;
+  paidAt: string | null;
+  createdAt: string | null;
+}
+
+export async function getMyOrders(): Promise<MyOrder[]> {
+  if (USE_MOCK) return [];
+  try {
+    return await request<MyOrder[]>('/api/mp/orders');
+  } catch {
+    return [];
+  }
+}
+
 // ── 买卡送人（礼物码）──
 interface GiftOrderResult {
   dev_opened?: boolean;

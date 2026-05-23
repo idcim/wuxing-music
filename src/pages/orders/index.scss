@@ -1,0 +1,149 @@
+@import '../../styles/variables.scss';
+
+.orders {
+  min-height: 100vh;
+  padding: 0 $pad-outer 80rpx;
+  background: $bg-deep;
+
+  &__nav {
+    display: flex;
+    align-items: center;
+    padding-bottom: 24rpx;
+  }
+
+  &__back {
+    font-size: 56rpx;
+    color: $text-primary;
+    line-height: 1;
+    width: 80rpx;
+  }
+
+  &__nav-title {
+    flex: 1;
+    text-align: center;
+    font-size: 30rpx;
+    color: $text-primary;
+  }
+
+  &__nav-spacer {
+    width: 80rpx;
+  }
+
+  &__empty {
+    padding-top: 200rpx;
+    text-align: center;
+
+    &-text {
+      font-size: 26rpx;
+      color: $text-tertiary;
+    }
+  }
+
+  &__list {
+    margin-top: 16rpx;
+  }
+
+  &__item {
+    background: rgba(255, 255, 255, 0.02);
+    border: 2rpx solid rgba(255, 255, 255, 0.05);
+    border-radius: 28rpx;
+    padding: 32rpx;
+    margin-bottom: 24rpx;
+
+    &-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    &-title {
+      display: flex;
+      align-items: center;
+      gap: 12rpx;
+    }
+
+    &-name {
+      color: $text-primary;
+      font-size: 30rpx;
+      font-weight: 300;
+      letter-spacing: 1rpx;
+    }
+
+    &-status {
+      font-size: 24rpx;
+      color: $text-tertiary;
+
+      &--paid { color: #84cc16; }
+      &--pending { color: #eab308; }
+      &--refunded,
+      &--refunding { color: #f87171; }
+    }
+
+    &-meta {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-top: 16rpx;
+    }
+
+    &-amount {
+      color: $text-secondary;
+      font-size: 32rpx;
+    }
+
+    &-time {
+      color: $text-quaternary;
+      font-size: 22rpx;
+    }
+
+    &-no {
+      display: block;
+      margin-top: 16rpx;
+      font-size: 20rpx;
+      color: $text-quaternary;
+      letter-spacing: 1rpx;
+    }
+  }
+
+  // ── 礼物码区块 ──
+  &__gift {
+    margin-top: 24rpx;
+    padding: 24rpx;
+    border-radius: 20rpx;
+    background: rgba(132, 204, 22, 0.06);
+    border: 2rpx solid rgba(132, 204, 22, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    &-label {
+      display: block;
+      font-size: 20rpx;
+      color: $text-tertiary;
+      margin-bottom: 6rpx;
+    }
+
+    &-value {
+      color: #bef264;
+      font-size: 32rpx;
+      letter-spacing: 2rpx;
+    }
+
+    &-actions {
+      display: flex;
+      gap: 16rpx;
+    }
+
+    &-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4rpx;
+    }
+
+    &-btn-text {
+      font-size: 20rpx;
+      color: $text-tertiary;
+    }
+  }
+}

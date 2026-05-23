@@ -54,6 +54,10 @@ export default function Profile() {
     if (!requireLogin()) return;
     Taro.navigateTo({ url: '/pages/userinfo/index' });
   };
+  const goOrders = () => {
+    if (!requireLogin()) return;
+    Taro.navigateTo({ url: '/pages/orders/index' });
+  };
 
   // 会员剩余天数
   const expireDays = user?.membership.expireAt
@@ -89,6 +93,7 @@ export default function Profile() {
   // 账号类操作
   const accountMenu: MenuItem[] = [
     { icon: 'user', text: '个人信息', onClick: goUserInfo },
+    { icon: 'receipt', text: '我的订单', onClick: goOrders },
     { icon: 'history', text: '聆听历史', onClick: goHistory }
   ];
 

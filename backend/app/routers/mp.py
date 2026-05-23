@@ -692,6 +692,36 @@ def mp_gift_code(
     })
 
 
+# ── 我的订单 ──
+@router.get("/orders")
+def mp_my_orders(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """当前用户的订单列表（会员开通 + 礼物卡），按时间倒序。"""
+    rows = (
+        db.query(Order)
+        .filter(Order.user_id == user.id)
+        .order_by(Order.id.desc())
+        .limit(100)
+        .all()
+    )
+    items = []
+    for o in rows:
+        items.append({
+            "orderNo": o.order_no,
+            "planId": o.plan_id,
+            "planName": o.plan_name,
+            "amount": o.amount,
+            "status": o.status,
+            "isGift": bool(o.is_gift),
+            "giftCode": o.gift_code if o.is_gift else "",
+            "paidAt": o.paid_at.isoformat() if o.paid_at else None,
+            "createdAt": o.created_at.isoformat() if o.created_at else None,
+        })
+    return ok(items)
+
+
 # ── 聆听历史 ──
 class HistoryIn(BaseModel):
     track_id: int
