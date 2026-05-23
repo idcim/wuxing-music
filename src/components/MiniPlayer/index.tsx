@@ -1,9 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { usePlayerStore } from '@/stores/player';
 import { useUserStore } from '@/stores/user';
 import { WUXING } from '@/constants/wuxing';
+import SleepTimer from '@/components/SleepTimer';
 import type { ElementId } from '@/types';
 import './index.scss';
 
@@ -12,11 +13,14 @@ export default function MiniPlayer() {
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const isLoading = usePlayerStore((s) => s.isLoading);
   const progress = usePlayerStore((s) => s.progress);
+  const timerVal = usePlayerStore((s) => s.timerVal);
   const pause = usePlayerStore((s) => s.pause);
   const resume = usePlayerStore((s) => s.resume);
   const showUpgrade = usePlayerStore((s) => s.showUpgrade);
   const dismissUpgrade = usePlayerStore((s) => s.dismissUpgrade);
   const element = useUserStore((s) => s.element) || ('木' as ElementId);
+
+  const [timerOpen, setTimerOpen] = useState(false);
 
   useEffect(() => {
     if (!showUpgrade) return;
@@ -57,6 +61,15 @@ export default function MiniPlayer() {
           </Text>
         </View>
         <View
+          className={`mini-player__timer ${timerVal ? 'mini-player__timer--on' : ''}`}
+          style={timerVal ? { color: el.primary } : undefined}
+          onClick={() => setTimerOpen(true)}
+        >
+          <Text className="mini-player__timer-text">
+            {timerVal ? `${timerVal}'` : '⏱'}
+          </Text>
+        </View>
+        <View
           className="mini-player__toggle"
           style={{ background: el.primary }}
           onClick={toggle}
@@ -68,6 +81,8 @@ export default function MiniPlayer() {
           )}
         </View>
       </View>
+
+      <SleepTimer open={timerOpen} onClose={() => setTimerOpen(false)} />
     </View>
   );
 }

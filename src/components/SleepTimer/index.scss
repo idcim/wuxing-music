@@ -1,0 +1,82 @@
+@import '../../styles/variables.scss';
+
+.sleep-timer-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+}
+
+.sleep-timer {
+  width: 100%;
+  background: $bg-mid;
+  border-top-left-radius: $radius-xl;
+  border-top-right-radius: $radius-xl;
+  border-top: 2rpx solid $border;
+  padding: 28rpx $pad-outer 80rpx;
+
+  &__handle {
+    width: 80rpx;
+    height: 8rpx;
+    border-radius: 8rpx;
+    background: $text-quaternary;
+    margin: 0 auto 36rpx;
+  }
+
+  &__title {
+    display: block;
+    font-size: 40rpx;
+    color: $text-primary;
+  }
+
+  &__sub {
+    display: block;
+    margin: 12rpx 0 40rpx;
+    font-size: 26rpx;
+    color: $text-tertiary;
+  }
+
+  &__grid {
+    display: flex;
+    gap: 20rpx;
+  }
+
+  &__pill {
+    flex: 1;
+    padding: 28rpx 0;
+    border: 2rpx solid $border;
+    border-radius: $radius-md;
+    background: $surface;
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+
+    &-num {
+      font-size: 36rpx;
+      color: $text-tertiary;
+    }
+
+    &-unit {
+      font-size: 20rpx;
+      color: $text-tertiary;
+      margin-left: 4rpx;
+    }
+  }
+
+  &__cancel {
+    margin-top: 36rpx;
+    height: 88rpx;
+    border-radius: $radius-pill;
+    border: 2rpx solid $border;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &-text {
+      font-size: 28rpx;
+      color: $text-secondary;
+    }
+  }
+}

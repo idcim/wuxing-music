@@ -53,6 +53,27 @@
     letter-spacing: 2rpx;
   }
 
+  &__timer {
+    flex-shrink: 0;
+    min-width: 56rpx;
+    height: 56rpx;
+    margin-right: 8rpx;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: $text-tertiary;
+
+    &--on {
+      font-weight: 600;
+    }
+
+    &-text {
+      font-size: 26rpx;
+      color: inherit;
+    }
+  }
+
   &__toggle {
     width: 64rpx;
     height: 64rpx;
