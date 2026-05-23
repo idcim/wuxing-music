@@ -1,0 +1,64 @@
+@import '../../styles/variables.scss';
+
+.history {
+  min-height: 100vh;
+  padding: 0 $pad-outer 280rpx;
+  background: $bg-deep;
+
+  &__nav {
+    display: flex;
+    align-items: center;
+    padding-bottom: 24rpx;
+  }
+
+  &__back {
+    font-size: 30rpx;
+    color: $text-primary;
+    line-height: 1;
+    width: 140rpx;
+  }
+
+  &__nav-title {
+    flex: 1;
+    text-align: center;
+    font-size: 30rpx;
+    color: $text-primary;
+    letter-spacing: 2rpx;
+  }
+
+  &__nav-spacer {
+    width: 140rpx;
+  }
+
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: 20rpx;
+    margin-top: 16rpx;
+  }
+
+  &__item {
+    position: relative;
+  }
+
+  &__time {
+    display: block;
+    margin: 8rpx 8rpx 0;
+    font-size: 20rpx;
+    color: $text-quaternary;
+    letter-spacing: 1rpx;
+  }
+
+  &__empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-top: 240rpx;
+
+    &-text {
+      font-size: 26rpx;
+      color: $text-tertiary;
+      letter-spacing: 2rpx;
+    }
+  }
+}

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import Cdkey, CdkeyRedeemLog, Element, Plan, Track, User
+from app.models import Cdkey, CdkeyRedeemLog, Element, PlayHistory, Plan, Track, User
 
 router = APIRouter(prefix="/api/mp", tags=["miniprogram"])
 
@@ -320,3 +320,50 @@ def mp_create_order(
         "dev_opened": True,  # 标记开发期直接开通
         "membership": _user_dict(user)["membership"],
     })
+
+
+# ── 聆听历史 ──
+class HistoryIn(BaseModel):
+    track_id: int
+
+
+@router.post("/history")
+def add_history(
+    body: HistoryIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    db.add(PlayHistory(user_id=user.id, track_id=body.track_id))
+    db.commit()
+    return ok({"saved": True})
+
+
+@router.get("/history")
+def list_history(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # 取该用户最近记录，按曲目去重保留最新，最多 50 条
+    rows = (
+        db.query(PlayHistory)
+        .filter(PlayHistory.user_id == user.id)
+        .order_by(PlayHistory.played_at.desc())
+        .limit(300)
+        .all()
+    )
+    seen: set[int] = set()
+    items = []
+    for h in rows:
+        if h.track_id in seen:
+            continue
+        seen.add(h.track_id)
+        t = db.query(Track).filter(Track.id == h.track_id).first()
+        if not t:
+            continue
+        d = _track_dict(t)
+        d["element_id"] = t.element_id
+        d["played_at"] = h.played_at.isoformat() if h.played_at else None
+        items.append(d)
+        if len(items) >= 50:
+            break
+    return ok(items)

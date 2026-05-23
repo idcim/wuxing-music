@@ -2,6 +2,7 @@ export default defineAppConfig({
   pages: [
     'pages/splash/index',
     'pages/onboard/index',
+    'pages/login/index',
     'pages/quiz/index',
     'pages/result/index',
     'pages/home/index',
@@ -9,6 +10,7 @@ export default defineAppConfig({
     'pages/element/index',
     'pages/member/index',
     'pages/profile/index',
+    'pages/history/index',
     'pages/player/index',
     'pages/about/index'
   ],

@@ -177,3 +177,14 @@ class Setting(Base):
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     value: Mapped[str] = mapped_column(Text, default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class PlayHistory(Base):
+    """聆听历史。"""
+
+    __tablename__ = "play_history"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, index=True)
+    track_id: Mapped[int] = mapped_column(Integer, index=True)
+    played_at: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)

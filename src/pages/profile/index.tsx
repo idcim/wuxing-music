@@ -6,6 +6,7 @@ import { useUserStore } from '@/stores/user';
 import { bindPhone } from '@/services/user';
 import Icon from '@/components/Icon';
 import { A } from '@/utils/color';
+import { resolveUrl } from '@/utils/url';
 import { getNavTop } from '@/utils/nav';
 import CdkeyModal from '@/components/CdkeyModal';
 import MiniPlayer from '@/components/MiniPlayer';
@@ -17,12 +18,18 @@ import './index.scss';
 const BARS = [40, 65, 30, 80, 55, 70, 45];
 const WEEK_LABELS = ['一', '二', '三', '四', '五', '六', '今'];
 
+interface MenuItem {
+  icon: IconName;
+  text: string;
+  onClick: () => void;
+  highlight?: boolean;
+  danger?: boolean;
+}
+
 export default function Profile() {
   const element = useUserStore((s) => s.element);
   const isPremium = useUserStore((s) => s.isPremium);
   const user = useUserStore((s) => s.user);
-  const loggingIn = useUserStore((s) => s.loggingIn);
-  const login = useUserStore((s) => s.login);
   const logout = useUserStore((s) => s.logout);
   const setPhone = useUserStore((s) => s.setPhone);
   const setProfile = useUserStore((s) => s.setProfile);
@@ -32,6 +39,9 @@ export default function Profile() {
 
   const retakeQuiz = () => Taro.navigateTo({ url: '/pages/quiz/index' });
   const goAbout = () => Taro.navigateTo({ url: '/pages/about/index' });
+  const goLogin = () => Taro.navigateTo({ url: '/pages/login/index' });
+  const goHistory = () => Taro.navigateTo({ url: '/pages/history/index' });
+  const goMember = () => Taro.redirectTo({ url: '/pages/member/index' });
 
   // 会员剩余天数
   const expireDays = user?.membership.expireAt
@@ -41,12 +51,22 @@ export default function Profile() {
       )
     : null;
 
+  const requireLogin = (): boolean => {
+    if (user) return true;
+    Taro.showModal({
+      title: '请先登录',
+      content: '登录后即可使用该功能',
+      confirmText: '去登录',
+      success: (res) => {
+        if (res.confirm) goLogin();
+      }
+    });
+    return false;
+  };
+
   // 绑定手机号：真实环境用 getPhoneNumber 授权按钮拿加密数据；此处弹窗输入模拟。
   const onBindPhone = () => {
-    if (!user) {
-      Taro.showToast({ title: '请先登录', icon: 'none' });
-      return;
-    }
+    if (!requireLogin()) return;
     Taro.showModal({
       title: '绑定手机号',
       editable: true,
@@ -59,7 +79,7 @@ export default function Profile() {
           return;
         }
         try {
-          const bound = await bindPhone(Number(user.id), phone);
+          const bound = await bindPhone(Number(user!.id), phone);
           setPhone(bound);
           Taro.showToast({ title: '绑定成功', icon: 'success' });
         } catch {
@@ -67,14 +87,6 @@ export default function Profile() {
         }
       }
     } as any);
-  };
-
-  const onLogin = async () => {
-    try {
-      await login();
-    } catch {
-      Taro.showToast({ title: '登录失败，请重试', icon: 'none' });
-    }
   };
 
   const onLogout = () => {
@@ -98,15 +110,12 @@ export default function Profile() {
 
   // 修改昵称（弹窗输入）
   const onEditNickname = () => {
-    if (!user) {
-      Taro.showToast({ title: '请先登录', icon: 'none' });
-      return;
-    }
+    if (!requireLogin()) return;
     Taro.showModal({
       title: '修改昵称',
       editable: true,
       placeholderText: '输入新昵称',
-      content: user.nickname || '',
+      content: user!.nickname || '',
       success: (res: any) => {
         const name = String(res?.content || '').trim();
         if (res.confirm && name) {
@@ -117,19 +126,47 @@ export default function Profile() {
     } as any);
   };
 
-  // 功能菜单
-  const menu: { icon: IconName; text: string; onClick: () => void; highlight?: boolean }[] = [
+  // 账号类操作
+  const accountMenu: MenuItem[] = [
+    { icon: 'history', text: '聆听历史', onClick: goHistory },
     { icon: 'user', text: '修改昵称', onClick: onEditNickname },
-    { icon: 'circleDot', text: user?.phone ? `手机号 ${user.phone}` : '绑定手机号', onClick: onBindPhone },
-    { icon: 'keyRound', text: '兑换码 / CDKEY', onClick: () => setCdkeyOpen(true), highlight: true },
-    { icon: 'user', text: element ? '重新测评体质' : '立即测评体质', onClick: retakeQuiz },
-    { icon: 'history', text: '聆听历史', onClick: () => {} },
-    { icon: 'settings', text: '设置', onClick: () => {} },
-    { icon: 'messageCircle', text: '关于我们', onClick: goAbout },
-    user
-      ? { icon: 'user', text: '退出登录', onClick: onLogout }
-      : { icon: 'user', text: loggingIn ? '登录中…' : '微信登录', onClick: onLogin }
+    {
+      icon: 'circleDot',
+      text: user?.phone ? `手机号 ${user.phone}` : '绑定手机号',
+      onClick: onBindPhone
+    }
   ];
+
+  // 功能类操作
+  const featureMenu: MenuItem[] = [
+    { icon: 'keyRound', text: '兑换码 / CDKEY', onClick: () => setCdkeyOpen(true), highlight: true },
+    { icon: 'sparkles', text: element ? '重新测评体质' : '立即测评体质', onClick: retakeQuiz },
+    { icon: 'messageCircle', text: '关于我们', onClick: goAbout },
+    { icon: 'settings', text: '设置', onClick: () => Taro.showToast({ title: '敬请期待', icon: 'none' }) }
+  ];
+
+  const renderMenu = (items: MenuItem[]) => (
+    <View className="profile__menu">
+      {items.map((item, i) => (
+        <View
+          key={i}
+          className={`profile__menu-item ${i < items.length - 1 ? 'profile__menu-item--divider' : ''} ${item.danger ? 'profile__menu-item--danger' : ''}`}
+          onClick={item.onClick}
+        >
+          <Icon
+            name={item.icon}
+            size={32}
+            color={item.danger ? '#f87171' : item.highlight ? el.accent : '#64748b'}
+            strokeWidth={1.5}
+          />
+          <Text className="profile__menu-text" style={item.danger ? { color: '#f87171' } : undefined}>
+            {item.text}
+          </Text>
+          {!item.danger && <Icon name="chevronRight" size={28} color="#334155" strokeWidth={1.5} />}
+        </View>
+      ))}
+    </View>
+  );
 
   return (
     <View className="profile">
@@ -162,7 +199,7 @@ export default function Profile() {
               }}
             >
               {user.avatar ? (
-                <Image className="profile__avatar-img" src={user.avatar} mode="aspectFill" />
+                <Image className="profile__avatar-img" src={resolveUrl(user.avatar)} mode="aspectFill" />
               ) : (
                 <Icon name={el.icon as IconName} size={52} color={el.primary} strokeWidth={1.2} />
               )}
@@ -182,24 +219,48 @@ export default function Profile() {
 
         <View className="profile__user-info">
           {user ? (
-            <Text className="profile__user-name">{user.nickname || '律音用户'}</Text>
+            <>
+              <Text className="profile__user-name">{user.nickname || '律音用户'}</Text>
+              <Text className="profile__user-meta" style={{ color: el.accent }}>
+                {el.id}型 · {el.note}音 · {user.membership.name}
+                {expireDays !== null ? ` · ${expireDays}天到期` : ''}
+              </Text>
+            </>
           ) : (
-            <Text className="profile__user-name">未登录</Text>
-          )}
-          <Text className="profile__user-meta" style={{ color: el.accent }}>
-            {el.id}型 · {el.note}音 · {user ? user.membership.name : '听闻'}
-            {expireDays !== null ? ` · ${expireDays}天到期` : ''}
-          </Text>
-          {user ? (
-            <Text className="profile__user-sub">
-              {isPremium ? '已解锁全部权益' : '升级解锁全部曲目'}
-            </Text>
-          ) : (
-            <Text className="profile__user-action" onClick={onLogin}>
-              {loggingIn ? '登录中…' : '微信登录 ›'}
-            </Text>
+            <>
+              <Text className="profile__user-name">未登录</Text>
+              <Text className="profile__user-action" onClick={goLogin}>微信登录 ›</Text>
+            </>
           )}
         </View>
+
+        {user && (
+          <View className="profile__user-edit" onClick={onEditNickname}>
+            <Icon name="settings" size={30} color="#64748b" strokeWidth={1.5} />
+          </View>
+        )}
+      </View>
+
+      {/* 会员卡片 */}
+      <View
+        className="profile__vip fade-up"
+        style={{ animationDelay: '0.05s', borderColor: A.a20(el.primary) }}
+        onClick={goMember}
+      >
+        <View className="profile__vip-left">
+          <Icon name="crown" size={36} color={el.accent} strokeWidth={1.5} />
+          <View className="profile__vip-info">
+            <Text className="profile__vip-name">{user ? user.membership.name : '听闻'}</Text>
+            <Text className="profile__vip-sub">
+              {isPremium
+                ? expireDays !== null
+                  ? `已解锁全部权益 · ${expireDays}天到期`
+                  : '已解锁全部权益'
+                : '升级解锁全部曲目与下载'}
+            </Text>
+          </View>
+        </View>
+        <Text className="profile__vip-action" style={{ color: el.accent }}>升级会员 ›</Text>
       </View>
 
       {/* 本周统计 */}
@@ -239,25 +300,22 @@ export default function Profile() {
         </View>
       </View>
 
+      {/* 账号菜单 */}
+      {renderMenu(accountMenu)}
+
       {/* 功能菜单 */}
-      <View className="profile__menu">
-        {menu.map((item, i) => (
-          <View
-            key={i}
-            className={`profile__menu-item ${i < menu.length - 1 ? 'profile__menu-item--divider' : ''}`}
-            onClick={item.onClick}
-          >
-            <Icon
-              name={item.icon}
-              size={32}
-              color={item.highlight ? el.accent : '#64748b'}
-              strokeWidth={1.5}
-            />
-            <Text className="profile__menu-text">{item.text}</Text>
-            <Icon name="chevronRight" size={28} color="#334155" strokeWidth={1.5} />
-          </View>
-        ))}
-      </View>
+      <View className="profile__menu-gap" />
+      {renderMenu(featureMenu)}
+
+      {/* 退出登录（已登录才显示） */}
+      {user && (
+        <>
+          <View className="profile__menu-gap" />
+          {renderMenu([
+            { icon: 'x', text: '退出登录', onClick: onLogout, danger: true }
+          ])}
+        </>
+      )}
 
       <CdkeyModal open={cdkeyOpen} onClose={() => setCdkeyOpen(false)} />
       <MiniPlayer />

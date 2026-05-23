@@ -2,7 +2,7 @@
 // 演示/无后端时改回 true；生产部署时把 API_BASE 换成线上地址。
 export const USE_MOCK = false;
 
-export const API_BASE = 'http://localhost:8000';
+export const API_BASE = 'https://app-api.azure-glow.cn';
 
 export const TOKEN_KEY = 'wx_token';
 

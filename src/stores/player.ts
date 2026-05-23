@@ -3,6 +3,7 @@ import type { Track } from '@/types';
 import audioService from '@/services/audio';
 import { USE_MOCK, MOCK_AUDIO_URL } from '@/constants/env';
 import { resolveUrl } from '@/utils/url';
+import { request } from '@/services/api';
 import { useUserStore } from './user';
 
 let timerId: ReturnType<typeof setTimeout> | null = null;
@@ -68,6 +69,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     );
     // BackgroundAudioManager 在 src 赋值后自动播放，无需再调 play()
     set({ currentTrack: track, isLoading: true, isPlaying: true, progress: 0, currentTime: 0 });
+
+    // 聆听历史上报（mock 模式下跳过；失败静默）
+    if (!USE_MOCK) {
+      request('/api/mp/history', {
+        method: 'POST',
+        data: { track_id: track.id },
+        auth: true
+      }).catch(() => {});
+    }
   },
 
   pause: () => {

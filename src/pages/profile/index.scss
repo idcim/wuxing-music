@@ -27,13 +27,25 @@
 
   // ── 用户卡 ──
   &__user {
+    position: relative;
     border: 2rpx solid;
     border-radius: 44rpx;
     padding: 44rpx;
-    margin-bottom: 56rpx;
+    margin-bottom: 28rpx;
     display: flex;
     align-items: center;
     gap: 32rpx;
+  }
+
+  &__user-edit {
+    position: absolute;
+    top: 28rpx;
+    right: 28rpx;
+    width: 56rpx;
+    height: 56rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   &__avatar-btn {
@@ -96,9 +108,53 @@
 
   &__user-action {
     display: inline-block;
+    margin-top: 6rpx;
     color: $text-secondary;
     font-size: 24rpx;
     letter-spacing: 2rpx;
+  }
+
+  // ── 会员卡片 ──
+  &__vip {
+    border: 2rpx solid;
+    border-radius: 36rpx;
+    padding: 32rpx 36rpx;
+    margin-bottom: 56rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(255, 255, 255, 0.025);
+
+    &-left {
+      display: flex;
+      align-items: center;
+      gap: 24rpx;
+    }
+
+    &-info {
+      display: flex;
+      flex-direction: column;
+    }
+
+    &-name {
+      color: $text-primary;
+      font-size: 30rpx;
+      font-weight: 300;
+      letter-spacing: 2rpx;
+      margin-bottom: 6rpx;
+    }
+
+    &-sub {
+      color: $text-tertiary;
+      font-size: 22rpx;
+      letter-spacing: 1rpx;
+    }
+
+    &-action {
+      font-size: 24rpx;
+      letter-spacing: 2rpx;
+      flex-shrink: 0;
+    }
   }
 
   // ── 本周统计 ──
@@ -183,6 +239,15 @@
       &--divider {
         border-bottom: 2rpx solid rgba(255, 255, 255, 0.03);
       }
+
+      &--danger {
+        justify-content: center;
+        gap: 16rpx;
+
+        .profile__menu-text {
+          flex: none;
+        }
+      }
     }
 
     &-text {
@@ -190,6 +255,10 @@
       color: #cbd5e1;
       font-size: 28rpx;
       letter-spacing: 1rpx;
+    }
+
+    &-gap {
+      height: 28rpx;
     }
   }
 }
