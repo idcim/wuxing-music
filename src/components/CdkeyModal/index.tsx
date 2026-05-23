@@ -3,6 +3,7 @@ import { View, Text, Input } from '@tarojs/components';
 import { redeemCdkey } from '@/services/cdkey';
 import { useUserStore } from '@/stores/user';
 import Icon from '@/components/Icon';
+import PosterShare from '@/components/PosterShare';
 import type { CdkeyStatus } from '@/types';
 import './index.scss';
 
@@ -13,10 +14,12 @@ interface Props {
 
 export default function CdkeyModal({ open, onClose }: Props) {
   const updateMembership = useUserStore((s) => s.updateMembership);
+  const element = useUserStore((s) => s.element);
   const [code, setCode] = useState('');
   const [status, setStatus] = useState<CdkeyStatus>('idle');
   const [planName, setPlanName] = useState('');
   const [days, setDays] = useState(0);
+  const [posterOpen, setPosterOpen] = useState(false);
 
   const reset = () => {
     setCode('');
@@ -79,8 +82,17 @@ export default function CdkeyModal({ open, onClose }: Props) {
               您已获得 <Text className="cdkey-sheet__result-plan">{planName}</Text>
             </Text>
             <Text className="cdkey-sheet__result-sub">有效期 {days} 天</Text>
-            <View className="cdkey-sheet__action cdkey-sheet__action--light" onClick={close}>
-              <Text className="cdkey-sheet__action-text cdkey-sheet__action-text--dark">开始享受</Text>
+            <View
+              className="cdkey-sheet__action cdkey-sheet__action--light"
+              onClick={() => setPosterOpen(true)}
+            >
+              <Icon name="share2" size={28} color="#0a0e1a" strokeWidth={2} />
+              <Text className="cdkey-sheet__action-text cdkey-sheet__action-text--dark">
+                送朋友一起听
+              </Text>
+            </View>
+            <View className="cdkey-sheet__action cdkey-sheet__action--ghost" onClick={close}>
+              <Text className="cdkey-sheet__action-text">开始享受</Text>
             </View>
           </View>
         )}
@@ -155,6 +167,15 @@ export default function CdkeyModal({ open, onClose }: Props) {
           </View>
         )}
       </View>
+
+      <PosterShare
+        open={posterOpen}
+        onClose={() => setPosterOpen(false)}
+        element={element}
+        title={planName || '五行律音会员'}
+        subtitle="我已开通会员，邀你一起听助眠音律"
+        scene={`inv=${useUserStore.getState().user?.id || ''}`}
+      />
     </View>
   );
 }

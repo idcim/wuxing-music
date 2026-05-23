@@ -564,14 +564,132 @@ async def mp_pay_callback(request: Request, db: Session = Depends(get_db)):
     if not plan:
         return fail
 
-    user = db.query(User).filter(User.id == order.user_id).first()
-    if user:
-        _grant_membership(db, user, plan)
+    # 礼物订单：支付后生成 CDKEY，不直接给买家开通会员
+    if order.is_gift:
+        if not order.gift_code:
+            order.gift_code = _issue_gift_cdkey(db, plan, order.order_no)
+    else:
+        user = db.query(User).filter(User.id == order.user_id).first()
+        if user:
+            _grant_membership(db, user, plan)
     order.status = "paid"
     order.transaction_id = data.get("transaction_id", "")
     order.paid_at = datetime.utcnow()
     db.commit()
     return JSONResponse(content={"code": "SUCCESS", "message": "成功"})
+
+
+# ── 买卡送人（礼物码）──
+_GIFT_CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+
+def _gen_gift_code() -> str:
+    seg = lambda: "".join(__import__("secrets").choice(_GIFT_CHARSET) for _ in range(4))
+    return f"GIFT-{datetime.utcnow().year}-{seg()}-{seg()}"
+
+
+def _issue_gift_cdkey(db: Session, plan: Plan, order_no: str) -> str:
+    """生成一个未使用的礼物 CDKEY（唯一），关联订单号写入 remark。"""
+    existing = {c.code for c in db.query(Cdkey.code).all()}
+    for _ in range(50):
+        code = _gen_gift_code()
+        if code in existing:
+            continue
+        db.add(Cdkey(
+            code=code,
+            batch_id="gift",
+            plan_type=plan.id,
+            duration_days=plan.duration_days,
+            plan_name=plan.name,
+            remark=f"礼物订单 {order_no}",
+        ))
+        db.commit()
+        return code
+    raise HTTPException(status_code=500, detail="生成礼物码失败，请重试")
+
+
+class GiftOrderIn(BaseModel):
+    planId: str
+
+
+@router.post("/gift/create-order")
+def mp_gift_create_order(
+    body: GiftOrderIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """买卡送人：创建礼物订单。支付完成后生成礼物 CDKEY。"""
+    plan = db.query(Plan).filter(Plan.id == body.planId).first()
+    if not plan or plan.id == "free":
+        raise HTTPException(status_code=404, detail="套餐不存在")
+
+    cfg = _pay_cfg(db)
+    pay_enabled = bool(cfg.get("enabled")) and bool(cfg.get("wx_mch_id")) and bool(cfg.get("wx_key_pem"))
+
+    order = Order(
+        order_no=_gen_order_no(),
+        user_id=user.id,
+        plan_id=plan.id,
+        plan_name=plan.name,
+        amount=plan.price,
+        status="pending",
+        is_gift=True,
+    )
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+
+    if not pay_enabled:
+        # 开发期：直接生成礼物码
+        order.gift_code = _issue_gift_cdkey(db, plan, order.order_no)
+        order.status = "paid"
+        order.paid_at = datetime.utcnow()
+        db.commit()
+        return ok({
+            "dev_opened": True,
+            "orderNo": order.order_no,
+            "giftCode": order.gift_code,
+            "planName": plan.name,
+        })
+
+    try:
+        pay_params = wxpay.create_jsapi_order(
+            cfg,
+            openid=user.openid,
+            order_no=order.order_no,
+            amount_fen=int(round(plan.price * 100)),
+            description=f"五行律音礼物卡 · {plan.name}",
+        )
+    except wxpay.WxPayError as e:
+        order.status = "failed"
+        db.commit()
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return ok({
+        "dev_opened": False,
+        "orderNo": order.order_no,
+        "payParams": pay_params,
+        "planName": plan.name,
+    })
+
+
+@router.get("/gift/code")
+def mp_gift_code(
+    orderNo: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """支付完成后查询礼物码（前端轮询用）。"""
+    order = db.query(Order).filter(
+        Order.order_no == orderNo, Order.user_id == user.id, Order.is_gift == True  # noqa: E712
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    return ok({
+        "status": order.status,
+        "giftCode": order.gift_code,
+        "planName": order.plan_name,
+    })
 
 
 # ── 聆听历史 ──
@@ -673,3 +791,83 @@ def stats_weekly(
         "totalMinutes": round(total_sec / 60),
         "totalHours": round(total_sec / 3600, 1),
     })
+
+
+# ── 小程序码（海报二维码用）──
+_access_token_cache = {"token": "", "exp": 0.0}
+
+
+def _get_access_token(db: Session) -> str:
+    """获取并缓存微信 access_token（有效期约 7200s，提前 5 分钟过期）。"""
+    import time as _t
+    if _access_token_cache["token"] and _access_token_cache["exp"] > _t.time():
+        return _access_token_cache["token"]
+
+    row = db.query(Setting).filter(Setting.key == "mp_config").first()
+    cfg = json.loads(row.value) if row and row.value else {}
+    app_id = cfg.get("app_id")
+    app_secret = cfg.get("app_secret")
+    if not (app_id and app_secret):
+        raise HTTPException(status_code=400, detail="未配置小程序 AppID/AppSecret")
+
+    import httpx
+    try:
+        resp = httpx.get(
+            "https://api.weixin.qq.com/cgi-bin/token",
+            params={"grant_type": "client_credential", "appid": app_id, "secret": app_secret},
+            timeout=10,
+        )
+        data = resp.json()
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"获取 access_token 失败：{e}")
+
+    token = data.get("access_token")
+    if not token:
+        raise HTTPException(status_code=502, detail=f"获取 access_token 失败：{data}")
+    _access_token_cache["token"] = token
+    _access_token_cache["exp"] = _t.time() + int(data.get("expires_in", 7200)) - 300
+    return token
+
+
+class QrcodeIn(BaseModel):
+    scene: str = ""           # 携带参数（如邀请人/礼物码），<=32 字符
+    page: str = "pages/home/index"
+
+
+@router.post("/qrcode")
+def mp_qrcode(
+    body: QrcodeIn,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """生成无限量小程序码（getUnlimited），存储后返回可访问 URL。"""
+    token = _get_access_token(db)
+    scene = (body.scene or f"u={user.id}")[:32]
+
+    import httpx
+    try:
+        resp = httpx.post(
+            f"https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token={token}",
+            json={
+                "scene": scene,
+                "page": body.page or "pages/home/index",
+                "check_path": False,        # 开发期页面可能未发布
+                "env_version": "release",
+                "width": 280,
+            },
+            timeout=15,
+        )
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"生成小程序码失败：{e}")
+
+    ctype = resp.headers.get("content-type", "")
+    if "image" not in ctype:
+        # 返回的是 JSON 错误
+        raise HTTPException(status_code=400, detail=f"生成小程序码失败：{resp.text}")
+
+    try:
+        result = storage.save_bytes(db, resp.content, ".png", base_url=str(request.base_url))
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return ok(result)

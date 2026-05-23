@@ -151,6 +151,8 @@ class Order(Base):
     # pending/paid/refunding/refunded/failed/closed
     status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
     transaction_id: Mapped[str] = mapped_column(String(64), default="")  # 微信支付单号
+    is_gift: Mapped[bool] = mapped_column(Boolean, default=False)        # 是否买卡送人
+    gift_code: Mapped[str] = mapped_column(String(32), default="")       # 礼物 CDKEY（支付后生成）
     paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     # 退款相关

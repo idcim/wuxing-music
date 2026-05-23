@@ -107,3 +107,77 @@ export async function purchasePlan(planId: PlanId): Promise<PayOutcome> {
     return { ok: false, reason: 'fail' };
   }
 }
+
+// ── 买卡送人（礼物码）──
+interface GiftOrderResult {
+  dev_opened?: boolean;
+  orderNo?: string;
+  giftCode?: string;
+  planName?: string;
+  payParams?: PayParams;
+}
+
+export type GiftOutcome =
+  | { ok: true; giftCode: string; planName: string }
+  | { ok: false; reason: 'cancel' | 'fail' | 'platform' };
+
+// 轮询礼物码（支付回调异步生成）
+async function pollGiftCode(orderNo: string): Promise<{ giftCode: string; planName: string } | null> {
+  for (let i = 0; i < 6; i++) {
+    try {
+      const r = await request<{ status: string; giftCode: string; planName: string }>(
+        `/api/mp/gift/code?orderNo=${orderNo}`
+      );
+      if (r.status === 'paid' && r.giftCode) {
+        return { giftCode: r.giftCode, planName: r.planName };
+      }
+    } catch {
+      // 忽略
+    }
+    await new Promise((rs) => setTimeout(rs, 1000));
+  }
+  return null;
+}
+
+// 购买礼物卡：成功返回礼物码（调用方用海报展示分享）。
+export async function purchaseGift(planId: PlanId): Promise<GiftOutcome> {
+  if (!isWeapp) return { ok: false, reason: 'platform' };
+
+  if (USE_MOCK) {
+    await new Promise((r) => setTimeout(r, 600));
+    return { ok: true, giftCode: 'GIFT-2026-DEMO-CODE', planName: PLAN_NAMES[planId] };
+  }
+
+  try {
+    const res = await request<GiftOrderResult>('/api/mp/gift/create-order', {
+      method: 'POST',
+      data: { planId }
+    });
+
+    // 开发期：直接返回礼物码
+    if (res.dev_opened && res.giftCode) {
+      return { ok: true, giftCode: res.giftCode, planName: res.planName || PLAN_NAMES[planId] };
+    }
+
+    // 生产：拉起支付 → 轮询礼物码
+    if (res.payParams && res.orderNo) {
+      await Taro.requestPayment({
+        timeStamp: res.payParams.timeStamp,
+        nonceStr: res.payParams.nonceStr,
+        package: res.payParams.package,
+        signType: res.payParams.signType,
+        paySign: res.payParams.paySign
+      });
+      const r = await pollGiftCode(res.orderNo);
+      if (r) return { ok: true, giftCode: r.giftCode, planName: r.planName };
+      return { ok: false, reason: 'fail' };
+    }
+
+    return { ok: false, reason: 'fail' };
+  } catch (err: any) {
+    if (err?.errMsg && String(err.errMsg).includes('cancel')) {
+      return { ok: false, reason: 'cancel' };
+    }
+    return { ok: false, reason: 'fail' };
+  }
+}

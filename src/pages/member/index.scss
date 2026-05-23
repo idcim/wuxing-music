@@ -243,6 +243,24 @@
         opacity: 0.55;
       }
     }
+
+    &-gift {
+      margin-top: 16rpx;
+      height: 72rpx;
+      border-radius: 24rpx;
+      border: 2rpx solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.03);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12rpx;
+
+      &-text {
+        color: #94a3b8;
+        font-size: 24rpx;
+        letter-spacing: 2rpx;
+      }
+    }
   }
 
   // ── 五音疗愈说明 ──

@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { View, Text, ScrollView } from '@tarojs/components';
-import Taro from '@tarojs/taro';
+import { View, Text, ScrollView, Button } from '@tarojs/components';
+import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro';
 import { WUXING, ELEMENT_LIST } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
 import { usePlayerStore } from '@/stores/player';
@@ -32,6 +32,17 @@ export default function Home() {
   const setTimer = usePlayerStore((s) => s.setTimer);
 
   const [cdkeyOpen, setCdkeyOpen] = useState(false);
+
+  // 转发给好友
+  useShareAppMessage(() => ({
+    title: `我的本命是${el.id}型·${el.note}音，来五行律音找你的助眠音律`,
+    path: '/pages/home/index'
+  }));
+  // 分享到朋友圈
+  useShareTimeline(() => ({
+    title: '五行律音 · 按体质定制的助眠音律',
+    query: ''
+  }));
 
   const onTrack = (id: number) => {
     const track = el.tracks.find((t) => t.id === id)!;
@@ -67,8 +78,13 @@ export default function Home() {
           <Text className="home__greeting cormorant italic">Good evening</Text>
           <Text className="home__el">{el.id}型 · {el.note}音</Text>
         </View>
-        <View className="home__gift" onClick={() => setCdkeyOpen(true)}>
-          <Icon name="gift" size={32} color="#cbd5e1" strokeWidth={1.5} />
+        <View className="home__actions">
+          <Button className="home__icon-btn" openType="share">
+            <Icon name="share2" size={30} color="#cbd5e1" strokeWidth={1.5} />
+          </Button>
+          <View className="home__gift" onClick={() => setCdkeyOpen(true)}>
+            <Icon name="gift" size={32} color="#cbd5e1" strokeWidth={1.5} />
+          </View>
         </View>
       </View>
 

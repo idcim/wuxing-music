@@ -1,0 +1,109 @@
+@import '../../styles/variables.scss';
+
+.poster-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 60rpx;
+}
+
+.poster {
+  width: 100%;
+  max-width: 640rpx;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  &__close {
+    position: absolute;
+    top: -72rpx;
+    right: 0;
+    width: 56rpx;
+    height: 56rpx;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  // 离屏画布：渲染但不显示
+  &__canvas {
+    position: fixed;
+    left: -9999px;
+    top: 0;
+  }
+
+  &__img {
+    width: 100%;
+    border-radius: 28rpx;
+    box-shadow: 0 20rpx 80rpx rgba(0, 0, 0, 0.6);
+  }
+
+  &__loading {
+    width: 100%;
+    height: 760rpx;
+    border-radius: 28rpx;
+    background: rgba(255, 255, 255, 0.03);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24rpx;
+  }
+
+  &__spinner {
+    width: 56rpx;
+    height: 56rpx;
+    border-radius: 50%;
+    border: 6rpx solid rgba(255, 255, 255, 0.1);
+    border-top-color: #94a3b8;
+    animation: rotate-slow 0.8s linear infinite;
+  }
+
+  &__loading-text {
+    font-size: 24rpx;
+    color: $text-tertiary;
+  }
+
+  &__actions {
+    width: 100%;
+    margin-top: 36rpx;
+  }
+
+  &__btn {
+    width: 100%;
+    border-radius: 56rpx;
+    padding: 26rpx 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14rpx;
+
+    &--save {
+      background: linear-gradient(135deg, #f8fafc, #cbd5e1);
+    }
+  }
+
+  &__btn-text {
+    font-size: 28rpx;
+    font-weight: 600;
+    letter-spacing: 2rpx;
+
+    &--dark {
+      color: #0a0e1a;
+    }
+  }
+
+  &__tip {
+    margin-top: 20rpx;
+    font-size: 22rpx;
+    color: $text-tertiary;
+    letter-spacing: 1rpx;
+  }
+}

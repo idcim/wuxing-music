@@ -3,12 +3,13 @@ import { View, Text } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { PLANS } from '@/constants/plans';
 import { ELEMENT_LIST } from '@/constants/wuxing';
-import { purchasePlan } from '@/services/pay';
+import { purchasePlan, purchaseGift } from '@/services/pay';
 import { useUserStore } from '@/stores/user';
 import Icon from '@/components/Icon';
 import { getNavTop } from '@/utils/nav';
 import MiniPlayer from '@/components/MiniPlayer';
 import CdkeyModal from '@/components/CdkeyModal';
+import PosterShare from '@/components/PosterShare';
 import TabBar from '@/components/TabBar';
 import type { PlanId } from '@/types';
 import type { IconName } from '@/components/Icon/paths';
@@ -17,8 +18,14 @@ import './index.scss';
 export default function Member() {
   const [cdkeyOpen, setCdkeyOpen] = useState(false);
   const [buying, setBuying] = useState<PlanId | null>(null);
+  const [gifting, setGifting] = useState<PlanId | null>(null);
+  const [posterOpen, setPosterOpen] = useState(false);
+  const [posterTitle, setPosterTitle] = useState('');
+  const [posterSub, setPosterSub] = useState('我已开通会员，邀你一起听助眠音律');
+  const [giftCode, setGiftCode] = useState('');
   const isPremium = useUserStore((s) => s.isPremium);
   const currentType = useUserStore((s) => s.user?.membership.type);
+  const element = useUserStore((s) => s.element);
   const updateMembership = useUserStore((s) => s.updateMembership);
 
   const buy = async (planId: PlanId) => {
@@ -30,6 +37,11 @@ export default function Member() {
     if (res.ok) {
       updateMembership(res.membership);
       Taro.showToast({ title: '开通成功', icon: 'success' });
+      // 开通成功 → 弹海报，鼓励分享给好友
+      setGiftCode('');
+      setPosterTitle(res.membership.name || '律音会员');
+      setPosterSub('我已开通会员，邀你一起听助眠音律');
+      setTimeout(() => setPosterOpen(true), 800);
     } else if (res.reason === 'cancel') {
       // 用户主动取消，不提示
     } else if (res.reason === 'platform') {
@@ -40,6 +52,32 @@ export default function Member() {
       });
     } else {
       Taro.showToast({ title: '支付失败，请重试', icon: 'none' });
+    }
+  };
+
+  // 买卡送朋友：支付后拿到礼物码，用海报展示分享
+  const giftBuy = async (planId: PlanId) => {
+    if (planId === 'free' || gifting) return;
+    setGifting(planId);
+    const res = await purchaseGift(planId);
+    setGifting(null);
+
+    if (res.ok) {
+      Taro.showToast({ title: '礼物卡已生成', icon: 'success' });
+      setGiftCode(res.giftCode);
+      setPosterTitle(`${res.planName}礼物卡`);
+      setPosterSub('送你一张律音会员礼物卡，扫码兑换');
+      setTimeout(() => setPosterOpen(true), 600);
+    } else if (res.reason === 'cancel') {
+      // 取消，不提示
+    } else if (res.reason === 'platform') {
+      Taro.showModal({
+        title: '请前往小程序购买',
+        content: 'iOS App 端需通过 Apple 内购',
+        showCancel: false
+      });
+    } else {
+      Taro.showToast({ title: '购买失败，请重试', icon: 'none' });
     }
   };
 
@@ -158,6 +196,15 @@ export default function Member() {
                 >
                   <Text className="member__plan-btn-text">{btnLabel(p.id)}</Text>
                 </View>
+
+                {p.id !== 'free' && (
+                  <View className="member__plan-gift" onClick={() => giftBuy(p.id)}>
+                    <Icon name="gift" size={26} color="#94a3b8" strokeWidth={1.5} />
+                    <Text className="member__plan-gift-text">
+                      {gifting === p.id ? '生成中…' : '买卡送朋友'}
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
           );
@@ -182,6 +229,15 @@ export default function Member() {
       </View>
 
       <CdkeyModal open={cdkeyOpen} onClose={() => setCdkeyOpen(false)} />
+      <PosterShare
+        open={posterOpen}
+        onClose={() => setPosterOpen(false)}
+        element={element}
+        title={posterTitle}
+        subtitle={posterSub}
+        cdkey={giftCode || undefined}
+        scene={`inv=${useUserStore.getState().user?.id || ''}`}
+      />
       <MiniPlayer />
       <TabBar active="member" />
     </View>
