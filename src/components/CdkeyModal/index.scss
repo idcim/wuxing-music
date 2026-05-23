@@ -1,0 +1,104 @@
+@import '../../styles/variables.scss';
+
+.cdkey-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+}
+
+.cdkey-sheet {
+  width: 100%;
+  background: $bg-mid;
+  border-top-left-radius: $radius-xl;
+  border-top-right-radius: $radius-xl;
+  border-top: 2rpx solid $border;
+  padding: 28rpx $pad-outer 80rpx;
+
+  &__handle {
+    width: 80rpx;
+    height: 8rpx;
+    border-radius: 8rpx;
+    background: $text-quaternary;
+    margin: 0 auto 36rpx;
+  }
+
+  &__title {
+    display: block;
+    font-size: 40rpx;
+    color: $text-primary;
+  }
+
+  &__sub {
+    display: block;
+    margin: 12rpx 0 40rpx;
+    font-size: 26rpx;
+    color: $text-tertiary;
+  }
+
+  &__input {
+    height: 96rpx;
+    padding: 0 32rpx;
+    border: 2rpx solid $border;
+    border-radius: $radius-sm;
+    background: rgba(0, 0, 0, 0.25);
+    color: $text-primary;
+    font-size: 28rpx;
+    letter-spacing: 2rpx;
+  }
+
+  &__hint {
+    display: block;
+    margin-top: 20rpx;
+    font-size: 24rpx;
+
+    &--error,
+    &--used { color: #f97316; }
+  }
+
+  &__btn {
+    margin-top: 40rpx;
+    height: 96rpx;
+    border-radius: $radius-pill;
+    background: $text-primary;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &--disabled {
+      opacity: 0.4;
+    }
+
+    &-text {
+      color: $bg-deep;
+      font-size: 30rpx;
+      letter-spacing: 4rpx;
+    }
+  }
+
+  &__result {
+    text-align: center;
+    padding: 40rpx 0 0;
+
+    &-icon {
+      display: block;
+      font-size: 80rpx;
+      color: #84cc16;
+    }
+
+    &-title {
+      display: block;
+      margin: 24rpx 0 12rpx;
+      font-size: 34rpx;
+      color: $text-primary;
+    }
+
+    &-msg {
+      display: block;
+      font-size: 28rpx;
+      color: $text-secondary;
+    }
+  }
+}

@@ -1,12 +1,17 @@
 import { View, Text } from '@tarojs/components';
+import Taro from '@tarojs/taro';
 import { WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
 import { usePlayerStore } from '@/stores/player';
+import TrackCard from '@/components/TrackCard';
+import MiniPlayer from '@/components/MiniPlayer';
+import TabBar from '@/components/TabBar';
 import type { ElementId } from '@/types';
 import './index.scss';
 
 export default function Home() {
   const element = useUserStore((s) => s.element) || ('木' as ElementId);
+  const isPremium = useUserStore((s) => s.isPremium);
   const el = WUXING[element];
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
@@ -23,6 +28,8 @@ export default function Home() {
     }
   };
 
+  const goMember = () => Taro.redirectTo({ url: '/pages/member/index' });
+
   return (
     <View className="home" style={{ background: el.bg }}>
       <View className="home__header fade-up">
@@ -35,21 +42,23 @@ export default function Home() {
 
       <View className="home__list">
         {el.tracks.map((t) => {
-          const active = currentTrack?.id === t.id;
+          const locked = !isPremium && t.isPremium;
           return (
-            <View key={t.id} className="track" onClick={() => onTrack(t.id)}>
-              <View className="track__dot" style={{ background: el.primary }} />
-              <View className="track__info">
-                <Text className="track__title">{t.title}</Text>
-                <Text className="track__meta">{t.hz} · {t.tag} · {t.duration}</Text>
-              </View>
-              <Text className="track__state" style={{ color: el.primary }}>
-                {active && isPlaying ? '‖' : '▶'}
-              </Text>
-            </View>
+            <TrackCard
+              key={t.id}
+              track={t}
+              element={el}
+              isActive={currentTrack?.id === t.id}
+              isPlaying={isPlaying}
+              locked={locked}
+              onPlay={() => (locked ? goMember() : onTrack(t.id))}
+            />
           );
         })}
       </View>
+
+      <MiniPlayer />
+      <TabBar active="home" />
     </View>
   );
 }

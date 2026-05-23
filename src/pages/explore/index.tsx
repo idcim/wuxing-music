@@ -1,5 +1,7 @@
 import { View, Text } from '@tarojs/components';
 import { ELEMENT_LIST } from '@/constants/wuxing';
+import MiniPlayer from '@/components/MiniPlayer';
+import TabBar from '@/components/TabBar';
 import './index.scss';
 
 export default function Explore() {
@@ -20,6 +22,8 @@ export default function Explore() {
           </View>
         ))}
       </View>
+      <MiniPlayer />
+      <TabBar active="explore" />
     </View>
   );
 }

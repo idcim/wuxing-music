@@ -1,0 +1,74 @@
+@import '../../styles/variables.scss';
+
+.track-card {
+  display: flex;
+  align-items: center;
+  gap: 28rpx;
+  padding: 28rpx 32rpx;
+  border: 2rpx solid $border;
+  border-radius: $radius-sm;
+  background: rgba(255, 255, 255, 0.02);
+  transition: all 0.25s;
+
+  &__btn {
+    width: 92rpx;
+    height: 92rpx;
+    border-radius: 26rpx;
+    flex-shrink: 0;
+    border: 2rpx solid;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &__icon {
+    font-size: 30rpx;
+  }
+
+  &__info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__title {
+    display: block;
+    font-size: 28rpx;
+    color: #cbd5e1;
+    margin-bottom: 8rpx;
+    letter-spacing: 1rpx;
+  }
+
+  &--active &__title {
+    color: $text-primary;
+    font-weight: 500;
+  }
+
+  &__meta {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+  }
+
+  &__hz {
+    font-size: 22rpx;
+    letter-spacing: 2rpx;
+  }
+
+  &__dot {
+    color: #334155;
+    font-size: 20rpx;
+  }
+
+  &__sub {
+    font-size: 22rpx;
+    color: $text-tertiary;
+  }
+
+  &__tag {
+    flex-shrink: 0;
+    border-radius: 20rpx;
+    padding: 8rpx 20rpx;
+    font-size: 20rpx;
+    letter-spacing: 2rpx;
+  }
+}

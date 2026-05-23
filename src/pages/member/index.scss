@@ -76,4 +76,17 @@
       color: $text-secondary;
     }
   }
+
+  &__cdkey-entry {
+    margin-top: 36rpx;
+    padding: 32rpx;
+    border: 2rpx dashed $border;
+    border-radius: $radius-md;
+    text-align: center;
+
+    &-text {
+      font-size: 26rpx;
+      color: $text-secondary;
+    }
+  }
 }

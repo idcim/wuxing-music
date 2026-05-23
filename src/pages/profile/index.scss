@@ -38,58 +38,23 @@
     }
   }
 
-  &__cdkey {
-    padding: 44rpx $pad-card;
+  &__entry {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 40rpx $pad-card;
     border: 2rpx solid $border;
     border-radius: $radius-lg;
     background: $surface;
 
-    &-title {
-      display: block;
+    &-text {
       font-size: 30rpx;
       color: $text-primary;
-      margin-bottom: 24rpx;
     }
 
-    &-row {
-      display: flex;
-      gap: 16rpx;
-    }
-
-    &-input {
-      flex: 1;
-      height: 80rpx;
-      padding: 0 24rpx;
-      border: 2rpx solid $border;
-      border-radius: $radius-sm;
-      background: rgba(0, 0, 0, 0.2);
-      color: $text-primary;
-      font-size: 26rpx;
-    }
-
-    &-btn {
-      padding: 0 40rpx;
-      height: 80rpx;
-      border-radius: $radius-sm;
-      background: $text-primary;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-
-      &-text {
-        color: $bg-deep;
-        font-size: 26rpx;
-      }
-    }
-
-    &-msg {
-      display: block;
-      margin-top: 20rpx;
-      font-size: 24rpx;
-
-      &--success { color: #84cc16; }
-      &--error,
-      &--used { color: #f97316; }
+    &-arrow {
+      font-size: 36rpx;
+      color: $text-tertiary;
     }
   }
 }

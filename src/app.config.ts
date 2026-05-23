@@ -16,17 +16,5 @@ export default defineAppConfig({
     navigationBarTextStyle: 'white',
     backgroundColor: '#03050a'
   },
-  tabBar: {
-    custom: true,
-    color: '#64748b',
-    selectedColor: '#e2e8f0',
-    backgroundColor: '#03050a',
-    list: [
-      { pagePath: 'pages/home/index', text: '归处' },
-      { pagePath: 'pages/explore/index', text: '探律' },
-      { pagePath: 'pages/member/index', text: '会员' },
-      { pagePath: 'pages/profile/index', text: '我的' }
-    ]
-  },
   requiredBackgroundModes: ['audio']
 });

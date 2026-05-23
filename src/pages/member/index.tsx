@@ -1,8 +1,13 @@
+import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import { PLANS } from '@/constants/plans';
+import MiniPlayer from '@/components/MiniPlayer';
+import CdkeyModal from '@/components/CdkeyModal';
+import TabBar from '@/components/TabBar';
 import './index.scss';
 
 export default function Member() {
+  const [cdkeyOpen, setCdkeyOpen] = useState(false);
   return (
     <View className="member">
       <Text className="member__title serif">会员</Text>
@@ -27,6 +32,14 @@ export default function Member() {
           </View>
         ))}
       </View>
+
+      <View className="member__cdkey-entry" onClick={() => setCdkeyOpen(true)}>
+        <Text className="member__cdkey-entry-text">有兑换码？立即兑换 ›</Text>
+      </View>
+
+      <CdkeyModal open={cdkeyOpen} onClose={() => setCdkeyOpen(false)} />
+      <MiniPlayer />
+      <TabBar active="member" />
     </View>
   );
 }
