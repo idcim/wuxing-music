@@ -1,0 +1,52 @@
+services:
+  api:
+    build: .
+    image: wuxing-backend:latest
+    container_name: wuxing-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # 默认 SQLite，持久化到 db_data 卷。切 MySQL 见下方注释。
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////data/wuxing.db}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-please}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:5173","http://127.0.0.1:5173"]}
+    volumes:
+      - db_data:/data
+    # 启用 MySQL 时取消注释，让 api 等数据库就绪
+    # depends_on:
+    #   db:
+    #     condition: service_healthy
+
+  # ── 可选 MySQL（生产）──────────────────────────────
+  # 启用方式：
+  #   1. 取消下面 db 服务与 api 的 depends_on 注释
+  #   2. 在 .env 设置：
+  #      DATABASE_URL=mysql+pymysql://wuxing:wuxingpass@db:3306/wuxing?charset=utf8mb4
+  #   3. docker compose --profile mysql up -d
+  db:
+    image: mysql:8.0
+    container_name: wuxing-mysql
+    restart: unless-stopped
+    profiles: ["mysql"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-wuxing}
+      MYSQL_USER: ${MYSQL_USER:-wuxing}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-wuxingpass}
+    command: --default-authentication-plugin=mysql_native_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD:-rootpass}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  db_data:
+  mysql_data:

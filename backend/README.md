@@ -2,7 +2,32 @@
 
 为小程序与管理后台提供 API。开发期数据库用 SQLite，生产可切 MySQL（改 `DATABASE_URL`）。
 
-## 运行
+## 部署方式一：Docker（推荐）
+
+```bash
+cd backend
+cp .env.example .env        # 修改 JWT_SECRET / ADMIN_PASSWORD 等
+docker compose up -d --build
+```
+
+- 默认用 SQLite，数据持久化到命名卷 `db_data`（容器内 `/data/wuxing.db`），重建容器数据不丢。
+- 健康检查已内置（`/api/health`），`docker compose ps` 可看 healthy 状态。
+- 查看日志：`docker compose logs -f api`；停止：`docker compose down`。
+
+### 切换 MySQL（生产）
+
+```bash
+# .env 中设置：
+# DATABASE_URL=mysql+pymysql://wuxing:wuxingpass@db:3306/wuxing?charset=utf8mb4
+# 并取消 docker-compose.yml 里 api 的 depends_on 注释
+docker compose --profile mysql up -d --build
+```
+
+MySQL 数据持久化到 `mysql_data` 卷。
+
+## 部署方式二：本地 venv（开发）
+
+需 **Python 3.13**（3.14 缺 pydantic-core 预编译 wheel）。
 
 ```bash
 cd backend
@@ -12,6 +37,8 @@ python -m venv .venv
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
+
+## 通用
 
 启动时自动建表 + 写入种子数据（五行/曲目/套餐/测评题/测试兑换码/管理员）。
 
