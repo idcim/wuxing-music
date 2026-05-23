@@ -10,6 +10,7 @@
         <el-menu-item index="/plans"><el-icon><Goods /></el-icon><span>套餐管理</span></el-menu-item>
         <el-menu-item index="/cdkeys"><el-icon><Ticket /></el-icon><span>兑换码</span></el-menu-item>
         <el-menu-item index="/quiz"><el-icon><EditPen /></el-icon><span>测评管理</span></el-menu-item>
+        <el-menu-item index="/orders"><el-icon><List /></el-icon><span>订单管理</span></el-menu-item>
         <el-menu-item index="/users"><el-icon><User /></el-icon><span>用户</span></el-menu-item>
         <el-menu-item index="/site"><el-icon><HomeFilled /></el-icon><span>站点设置</span></el-menu-item>
         <el-menu-item index="/storage"><el-icon><FolderOpened /></el-icon><span>存储设置</span></el-menu-item>

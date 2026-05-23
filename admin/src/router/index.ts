@@ -15,6 +15,7 @@ const router = createRouter({
         { path: 'tracks', component: () => import('@/views/Tracks.vue'), meta: { title: '歌曲管理' } },
         { path: 'cdkeys', component: () => import('@/views/Cdkeys.vue'), meta: { title: '兑换码' } },
         { path: 'quiz', component: () => import('@/views/Quiz.vue'), meta: { title: '测评管理' } },
+        { path: 'orders', component: () => import('@/views/Orders.vue'), meta: { title: '订单管理' } },
         { path: 'users', component: () => import('@/views/Users.vue'), meta: { title: '用户' } },
         { path: 'site', component: () => import('@/views/Site.vue'), meta: { title: '站点设置' } },
         { path: 'storage', component: () => import('@/views/Storage.vue'), meta: { title: '存储设置' } },

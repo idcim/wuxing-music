@@ -9,6 +9,12 @@ export const getDashboard = () => req.get('/api/admin/dashboard');
 // ── 用户 ──
 export const listUsers = (params: any) => req.get('/api/admin/users', { params });
 
+// ── 订单 ──
+export const listOrders = (params: any) => req.get('/api/admin/orders', { params });
+export const getOrder = (id: number) => req.get(`/api/admin/orders/${id}`);
+export const refundOrder = (id: number, data: any) => req.post(`/api/admin/orders/${id}/refund`, data);
+export const confirmRefund = (id: number) => req.post(`/api/admin/orders/${id}/refund/confirm`);
+
 // ── 套餐 ──
 export const listPlans = () => req.get('/api/admin/plans');
 export const upsertPlan = (data: any) => req.post('/api/admin/plans', data);
