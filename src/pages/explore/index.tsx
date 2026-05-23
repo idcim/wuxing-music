@@ -15,7 +15,11 @@ import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
 
 export default function Explore() {
-  const [selected, setSelected] = useState<ElementId | null>(null);
+  const userElement = useUserStore((s) => s.element);
+  // 默认选中用户本命体质（未测评则默认木），切换会更新
+  const [selected, setSelected] = useState<ElementId>(
+    (userElement as ElementId) || '木'
+  );
   const isPremium = useUserStore((s) => s.isPremium);
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
@@ -23,12 +27,11 @@ export default function Explore() {
   const pause = usePlayerStore((s) => s.pause);
   const resume = usePlayerStore((s) => s.resume);
 
-  const we = selected ? WUXING[selected] : null;
+  const we = WUXING[selected];
 
   const goMember = () => Taro.redirectTo({ url: '/pages/member/index' });
 
   const onTrack = (id: number) => {
-    if (!we) return;
     const track = we.tracks.find((t) => t.id === id)!;
     if (currentTrack?.id === id) {
       isPlaying ? pause() : resume();
@@ -38,7 +41,7 @@ export default function Explore() {
   };
 
   return (
-    <View className="explore">
+    <View className="explore" style={{ background: we.bg }}>
       {/* 标题 */}
       <View className="explore__header fade-up" style={{ paddingTop: `${getNavTop()}px` }}>
         <Text className="explore__eyebrow cormorant italic">Explore Sounds</Text>
@@ -76,16 +79,15 @@ export default function Explore() {
         })}
       </ScrollView>
 
-      {/* 选中元素信息卡 + 曲目列表 */}
-      {we ? (
-        <View>
-          <View
-            className="explore__el fade-up"
-            style={{
-              background: `linear-gradient(135deg, ${A.a15(we.primary)}, transparent)`,
-              borderColor: A.a25(we.primary)
-            }}
-          >
+      {/* 选中元素信息卡 + 曲目列表（背景跟随选中元素） */}
+      <View key={we.id}>
+        <View
+          className="explore__el fade-up"
+          style={{
+            background: `linear-gradient(135deg, ${A.a15(we.primary)}, transparent)`,
+            borderColor: A.a25(we.primary)
+          }}
+        >
             <View
               className="explore__el-glow"
               style={{ background: `radial-gradient(circle, ${we.glow}, transparent 70%)` }}
@@ -129,13 +131,7 @@ export default function Explore() {
               );
             })}
           </View>
-        </View>
-      ) : (
-        <View className="explore__empty">
-          <Icon name="compass" size={64} color="#334155" strokeWidth={1} />
-          <Text className="explore__empty-text">选择五行分类，探索专属律音</Text>
-        </View>
-      )}
+      </View>
 
       <MiniPlayer />
       <TabBar active="explore" />

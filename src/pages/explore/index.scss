@@ -3,6 +3,7 @@
 .explore {
   min-height: 100vh;
   padding: 0 44rpx 280rpx;
+  transition: background 0.5s ease;
 
   // ── 标题 ──
   &__header {
