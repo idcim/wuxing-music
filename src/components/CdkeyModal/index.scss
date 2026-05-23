@@ -168,10 +168,12 @@
   &__input {
     width: 100%;
     box-sizing: border-box;
+    height: 96rpx;
+    line-height: 96rpx;
     background: rgba(255, 255, 255, 0.04);
     border: 2rpx solid rgba(255, 255, 255, 0.1);
     border-radius: 28rpx;
-    padding: 28rpx 32rpx;
+    padding: 0 32rpx;
     color: $text-primary;
     font-size: 28rpx;
     letter-spacing: 2rpx;
