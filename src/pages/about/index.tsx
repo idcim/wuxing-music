@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { View, Text, Image } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { getSiteInfo, type SiteInfo } from '@/services/site';
+import { resolveUrl } from '@/utils/url';
 import './index.scss';
 
 export default function About() {
@@ -23,7 +24,7 @@ export default function About() {
 
       <View className="about__head fade-up">
         {info?.logo_url ? (
-          <Image className="about__logo" src={info.logo_url} mode="aspectFit" />
+          <Image className="about__logo" src={resolveUrl(info.logo_url)} mode="aspectFit" />
         ) : (
           <Text className="about__logo-text serif">律</Text>
         )}

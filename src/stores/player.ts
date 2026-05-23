@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Track } from '@/types';
 import audioService from '@/services/audio';
 import { USE_MOCK, MOCK_AUDIO_URL } from '@/constants/env';
+import { resolveUrl } from '@/utils/url';
 import { useUserStore } from './user';
 
 let timerId: ReturnType<typeof setTimeout> | null = null;
@@ -34,7 +35,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   play: (track) => {
     const { isPremium } = useUserStore.getState();
-    const url = track.audioUrl || (USE_MOCK ? MOCK_AUDIO_URL : '');
+    // 相对路径(/uploads/...)补成完整 URL；空则回退 mock 测试音频
+    const url = resolveUrl(track.audioUrl) || (USE_MOCK ? MOCK_AUDIO_URL : '');
     if (!url) {
       console.warn('[player] 曲目无音频地址', track.id);
       return;
