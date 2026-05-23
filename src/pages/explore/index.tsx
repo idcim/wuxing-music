@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { View, Text, ScrollView } from '@tarojs/components';
-import Taro from '@tarojs/taro';
+import Taro, { useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/taro';
 import { ELEMENT_LIST, WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
 import { usePlayerStore } from '@/stores/player';
-import { useShare } from '@/utils/share';
+import { openShareMenu } from '@/utils/share';
 import Icon from '@/components/Icon';
 import { A } from '@/utils/color';
 import { getNavTop } from '@/utils/nav';
@@ -30,9 +30,14 @@ export default function Explore() {
 
   const we = WUXING[selected];
 
-  useShare(() => ({
+  useDidShow(() => openShareMenu());
+  useShareAppMessage(() => ({
     title: `${we.id}音 · ${we.desc}，来五行律音听听`,
     path: '/pages/home/index'
+  }));
+  useShareTimeline(() => ({
+    title: '五行律音 · 按体质定制的助眠音律',
+    query: ''
   }));
 
   const goMember = () => Taro.redirectTo({ url: '/pages/member/index' });

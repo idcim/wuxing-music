@@ -1,9 +1,9 @@
 import { View, Text } from '@tarojs/components';
-import Taro, { useRouter } from '@tarojs/taro';
+import Taro, { useRouter, useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/taro';
 import { WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
 import { usePlayerStore } from '@/stores/player';
-import { useShare } from '@/utils/share';
+import { openShareMenu } from '@/utils/share';
 import TrackCard from '@/components/TrackCard';
 import MiniPlayer from '@/components/MiniPlayer';
 import type { ElementId } from '@/types';
@@ -21,9 +21,14 @@ export default function ElementDetail() {
   const pause = usePlayerStore((s) => s.pause);
   const resume = usePlayerStore((s) => s.resume);
 
-  useShare(() => ({
+  useDidShow(() => openShareMenu());
+  useShareAppMessage(() => ({
     title: `${el.id}音 · ${el.desc}`,
     path: '/pages/home/index'
+  }));
+  useShareTimeline(() => ({
+    title: '五行律音 · 按体质定制的助眠音律',
+    query: ''
   }));
 
   const back = () => Taro.navigateBack();
