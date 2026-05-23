@@ -12,6 +12,7 @@ interface UserStore {
   setUser: (u: User) => void;
   setElement: (el: ElementId, scores: ElementScores) => void;
   updateMembership: (m: Membership) => void;
+  setPhone: (phone: string) => void;
   login: () => Promise<User>;
   initFromCache: () => Promise<void>;
   logout: () => void;
@@ -60,6 +61,13 @@ export const useUserStore = create<UserStore>((set, get) => ({
       const user = state.user ? { ...state.user, membership } : null;
       if (user) persistUser(user);
       return { user, isPremium: computePremium(membership) };
+    }),
+
+  setPhone: (phone) =>
+    set((state) => {
+      const user = state.user ? { ...state.user, phone } : null;
+      if (user) persistUser(user);
+      return { user };
     }),
 
   login: async () => {

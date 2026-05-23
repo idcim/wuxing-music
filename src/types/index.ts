@@ -75,6 +75,7 @@ export interface User {
   id: string;
   openid: string;
   unionid?: string;
+  phone?: string;
   nickname: string;
   avatar: string;
   element: ElementId | null;

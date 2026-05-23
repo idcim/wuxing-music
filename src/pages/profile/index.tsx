@@ -3,6 +3,7 @@ import { View, Text } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
+import { bindPhone } from '@/services/user';
 import CdkeyModal from '@/components/CdkeyModal';
 import MiniPlayer from '@/components/MiniPlayer';
 import TabBar from '@/components/TabBar';
@@ -16,12 +17,41 @@ export default function Profile() {
   const loggingIn = useUserStore((s) => s.loggingIn);
   const login = useUserStore((s) => s.login);
   const logout = useUserStore((s) => s.logout);
+  const setPhone = useUserStore((s) => s.setPhone);
   const el = element ? WUXING[element as ElementId] : null;
 
   const [cdkeyOpen, setCdkeyOpen] = useState(false);
 
   const retakeQuiz = () => Taro.navigateTo({ url: '/pages/quiz/index' });
   const goAbout = () => Taro.navigateTo({ url: '/pages/about/index' });
+
+  // 绑定手机号：真实环境用 getPhoneNumber 授权按钮拿加密数据；此处弹窗输入模拟。
+  const onBindPhone = () => {
+    if (!user) {
+      Taro.showToast({ title: '请先登录', icon: 'none' });
+      return;
+    }
+    Taro.showModal({
+      title: '绑定手机号',
+      editable: true,
+      placeholderText: '请输入手机号',
+      success: async (res: any) => {
+        if (!res.confirm || !res.content) return;
+        const phone = String(res.content).trim();
+        if (!/^1\d{10}$/.test(phone)) {
+          Taro.showToast({ title: '手机号格式不对', icon: 'none' });
+          return;
+        }
+        try {
+          const bound = await bindPhone(Number(user.id), phone);
+          setPhone(bound);
+          Taro.showToast({ title: '绑定成功', icon: 'success' });
+        } catch {
+          Taro.showToast({ title: '绑定失败', icon: 'none' });
+        }
+      }
+    } as any);
+  };
 
   const onLogin = async () => {
     try {
@@ -81,6 +111,13 @@ export default function Profile() {
             {new Date(user.membership.expireAt).toLocaleDateString()} 到期
           </Text>
         )}
+      </View>
+
+      <View className="profile__entry fade-up" onClick={onBindPhone}>
+        <Text className="profile__entry-text">手机号</Text>
+        <Text className="profile__entry-arrow">
+          {user?.phone ? `${user.phone} ›` : '去绑定 ›'}
+        </Text>
       </View>
 
       <View className="profile__entry fade-up" onClick={() => setCdkeyOpen(true)}>

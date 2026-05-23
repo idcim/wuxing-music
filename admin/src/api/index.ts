@@ -8,6 +8,7 @@ export const getDashboard = () => req.get('/api/admin/dashboard');
 
 // ── 用户 ──
 export const listUsers = (params: any) => req.get('/api/admin/users', { params });
+export const grantMembership = (id: number, data: any) => req.post(`/api/admin/users/${id}/grant`, data);
 
 // ── 订单 ──
 export const listOrders = (params: any) => req.get('/api/admin/orders', { params });
