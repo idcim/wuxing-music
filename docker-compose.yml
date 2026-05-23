@@ -1,0 +1,28 @@
+# 五行律音 · 一键启动后端 API + 管理后台
+# 用法：docker compose up -d --build
+# 数据库连接、JWT、管理员账号等配置读取 backend/.env
+
+services:
+  api:
+    build: ./backend
+    image: wuxing-backend:latest
+    container_name: wuxing-backend
+    restart: unless-stopped
+    # 全部配置（DATABASE_URL / JWT_SECRET / ADMIN_* / CORS_ORIGINS）由此文件注入
+    env_file:
+      - ./backend/.env
+    ports:
+      - "8000:8000"
+    # 让容器能用 host.docker.internal 访问宿主机上的 MySQL
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  admin:
+    build: ./admin
+    image: wuxing-admin:latest
+    container_name: wuxing-admin
+    restart: unless-stopped
+    ports:
+      - "8080:80"          # 后台访问入口：http://localhost:8080
+    depends_on:
+      - api

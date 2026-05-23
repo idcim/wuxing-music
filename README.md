@@ -54,20 +54,29 @@ npm run type-check       # 类型检查
 
 ---
 
-## 管理后端
+## 一键启动（后端 + 后台，Docker）
 
-技术栈：FastAPI + SQLAlchemy + 外部 MySQL（开发可切 SQLite），Docker 部署。
-为小程序与管理后台提供 API。详见 [backend/README.md](backend/README.md)。
+根目录 `docker-compose.yml` 同时构建并启动 **后端 API** 与 **管理后台**，连接外部 MySQL。
 
 ```bash
-cd backend
-cp .env.example .env     # 填外部 MySQL 连接串、JWT 密钥、管理员密码
+cp backend/.env.example backend/.env   # 填外部 MySQL 连接串、JWT 密钥、管理员密码
 docker compose up -d --build
 ```
 
-- API 文档：http://localhost:8000/docs ｜ 健康检查：`/api/health`
-- 默认管理员：`admin` / `admin123`（由 `.env` 覆盖）
-- 启动自动建表 + 种子数据（五行/曲目/套餐/测评/测试兑换码）
+- **管理后台**：http://localhost:8080 （Nginx 托管，`/api` 已反代到后端，同源无跨域）
+- **后端 API 文档**：http://localhost:8000/docs ｜ 健康检查：`/api/health`
+- 默认管理员：`admin` / `admin123`（由 `backend/.env` 覆盖）
+- 后端启动自动建表 + 种子数据（五行/曲目/套餐/测评/测试兑换码）
+- 前提：外部 MySQL 已建好库（utf8mb4），账号允许从容器登录
+
+查看日志 `docker compose logs -f`；停止 `docker compose down`。
+
+---
+
+## 管理后端
+
+技术栈：FastAPI + SQLAlchemy + 外部 MySQL（开发可切 SQLite）。详见 [backend/README.md](backend/README.md)。
+本地非 Docker 调试见 backend/README。
 
 ### 已实现接口（管理端，需 Bearer token）
 
@@ -78,11 +87,10 @@ docker compose up -d --build
 ## 管理后台
 
 技术栈：Vue3 + Vite + Element Plus + Pinia。详见 [admin/README.md](admin/README.md)。
+生产用上面的一键启动；本地热更新开发：
 
 ```bash
-cd admin
-npm install
-npm run dev          # http://localhost:5173（/api 已代理到后端 8000）
+cd admin && npm install && npm run dev   # http://localhost:5173（/api 代理到后端 8000）
 ```
 
 页面：登录、仪表盘、歌曲管理（分页/筛选）、五行、套餐、兑换码（批量生成/导出/禁用）、测评、用户、支付设置。
