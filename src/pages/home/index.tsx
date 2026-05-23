@@ -6,6 +6,7 @@ import { useUserStore } from '@/stores/user';
 import { usePlayerStore } from '@/stores/player';
 import Icon from '@/components/Icon';
 import { A } from '@/utils/color';
+import { getNavTop } from '@/utils/nav';
 import TrackCard from '@/components/TrackCard';
 import MiniPlayer from '@/components/MiniPlayer';
 import TabBar from '@/components/TabBar';
@@ -60,8 +61,8 @@ export default function Home() {
 
   return (
     <View className="home" style={{ background: el.bg }}>
-      {/* Header */}
-      <View className="home__header fade-up">
+      {/* Header（顶部留出胶囊按钮安全高度，避免礼物按钮被遮挡） */}
+      <View className="home__header fade-up" style={{ paddingTop: `${getNavTop()}px` }}>
         <View>
           <Text className="home__greeting cormorant italic">Good evening</Text>
           <Text className="home__el">{el.id}型 · {el.note}音</Text>

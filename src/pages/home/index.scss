@@ -4,9 +4,9 @@
   min-height: 100vh;
   padding: 0 44rpx 280rpx;
 
-  // ── Header ──
+  // ── Header ──（顶部 paddingTop 由 JS 动态注入，避让胶囊按钮）
   &__header {
-    padding: 88rpx 0 56rpx;
+    padding: 24rpx 0 56rpx;
     display: flex;
     justify-content: space-between;
     align-items: flex-start;

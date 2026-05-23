@@ -6,6 +6,7 @@ import { useUserStore } from '@/stores/user';
 import { usePlayerStore } from '@/stores/player';
 import Icon from '@/components/Icon';
 import { A } from '@/utils/color';
+import { getNavTop } from '@/utils/nav';
 import TrackCard from '@/components/TrackCard';
 import MiniPlayer from '@/components/MiniPlayer';
 import TabBar from '@/components/TabBar';
@@ -39,7 +40,7 @@ export default function Explore() {
   return (
     <View className="explore">
       {/* 标题 */}
-      <View className="explore__header fade-up">
+      <View className="explore__header fade-up" style={{ paddingTop: `${getNavTop()}px` }}>
         <Text className="explore__eyebrow cormorant italic">Explore Sounds</Text>
         <Text className="explore__title">探索律音</Text>
       </View>

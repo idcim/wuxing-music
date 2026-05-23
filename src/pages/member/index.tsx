@@ -6,6 +6,7 @@ import { ELEMENT_LIST } from '@/constants/wuxing';
 import { purchasePlan } from '@/services/pay';
 import { useUserStore } from '@/stores/user';
 import Icon from '@/components/Icon';
+import { getNavTop } from '@/utils/nav';
 import MiniPlayer from '@/components/MiniPlayer';
 import CdkeyModal from '@/components/CdkeyModal';
 import TabBar from '@/components/TabBar';
@@ -57,7 +58,7 @@ export default function Member() {
   return (
     <View className="member">
       {/* 标题 */}
-      <View className="member__header fade-up">
+      <View className="member__header fade-up" style={{ paddingTop: `${getNavTop()}px` }}>
         <Text className="member__eyebrow cormorant italic">Membership</Text>
         <Text className="member__title">律音会员</Text>
         <Text className="member__sub">以音养身，以律养神</Text>
