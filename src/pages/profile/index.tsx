@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text } from '@tarojs/components';
+import { View, Text, Image, Button } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
@@ -25,6 +25,7 @@ export default function Profile() {
   const login = useUserStore((s) => s.login);
   const logout = useUserStore((s) => s.logout);
   const setPhone = useUserStore((s) => s.setPhone);
+  const setProfile = useUserStore((s) => s.setProfile);
   const el = WUXING[(element as ElementId) || '木'];
 
   const [cdkeyOpen, setCdkeyOpen] = useState(false);
@@ -86,13 +87,43 @@ export default function Profile() {
     });
   };
 
+  // 微信头像授权（open-type=chooseAvatar 的回调里 e.detail.avatarUrl）
+  const onChooseAvatar = (e: any) => {
+    const url = e?.detail?.avatarUrl;
+    if (url) {
+      setProfile({ avatar: url });
+      Taro.showToast({ title: '头像已更新', icon: 'success' });
+    }
+  };
+
+  // 修改昵称（弹窗输入）
+  const onEditNickname = () => {
+    if (!user) {
+      Taro.showToast({ title: '请先登录', icon: 'none' });
+      return;
+    }
+    Taro.showModal({
+      title: '修改昵称',
+      editable: true,
+      placeholderText: '输入新昵称',
+      content: user.nickname || '',
+      success: (res: any) => {
+        const name = String(res?.content || '').trim();
+        if (res.confirm && name) {
+          setProfile({ nickname: name });
+          Taro.showToast({ title: '已更新', icon: 'success' });
+        }
+      }
+    } as any);
+  };
+
   // 功能菜单
   const menu: { icon: IconName; text: string; onClick: () => void; highlight?: boolean }[] = [
+    { icon: 'user', text: '修改昵称', onClick: onEditNickname },
+    { icon: 'circleDot', text: user?.phone ? `手机号 ${user.phone}` : '绑定手机号', onClick: onBindPhone },
     { icon: 'keyRound', text: '兑换码 / CDKEY', onClick: () => setCdkeyOpen(true), highlight: true },
     { icon: 'user', text: element ? '重新测评体质' : '立即测评体质', onClick: retakeQuiz },
-    { icon: 'circleDot', text: user?.phone ? `手机号 ${user.phone}` : '绑定手机号', onClick: onBindPhone },
     { icon: 'history', text: '聆听历史', onClick: () => {} },
-    { icon: 'download', text: '下载管理', onClick: () => {} },
     { icon: 'settings', text: '设置', onClick: () => {} },
     { icon: 'messageCircle', text: '关于我们', onClick: goAbout },
     user
@@ -116,21 +147,48 @@ export default function Profile() {
           borderColor: A.a25(el.primary)
         }}
       >
-        <View
-          className="profile__avatar"
-          style={{
-            background: `radial-gradient(circle, ${A.a25(el.primary)}, transparent)`,
-            borderColor: A.a50(el.primary)
-          }}
-        >
-          <Icon name={el.icon as IconName} size={52} color={el.primary} strokeWidth={1.2} />
-        </View>
+        {/* 头像：已登录可点按钮换微信头像；未登录显示元素图标 */}
+        {user ? (
+          <Button
+            className="profile__avatar-btn"
+            openType="chooseAvatar"
+            onChooseAvatar={onChooseAvatar}
+          >
+            <View
+              className="profile__avatar"
+              style={{
+                background: `radial-gradient(circle, ${A.a25(el.primary)}, transparent)`,
+                borderColor: A.a50(el.primary)
+              }}
+            >
+              {user.avatar ? (
+                <Image className="profile__avatar-img" src={user.avatar} mode="aspectFill" />
+              ) : (
+                <Icon name={el.icon as IconName} size={52} color={el.primary} strokeWidth={1.2} />
+              )}
+            </View>
+          </Button>
+        ) : (
+          <View
+            className="profile__avatar"
+            style={{
+              background: `radial-gradient(circle, ${A.a25(el.primary)}, transparent)`,
+              borderColor: A.a50(el.primary)
+            }}
+          >
+            <Icon name={el.icon as IconName} size={52} color={el.primary} strokeWidth={1.2} />
+          </View>
+        )}
+
         <View className="profile__user-info">
-          <Text className="profile__user-name">
-            {user ? user.membership.name : '未登录'}
-          </Text>
+          {user ? (
+            <Text className="profile__user-name">{user.nickname || '律音用户'}</Text>
+          ) : (
+            <Text className="profile__user-name">未登录</Text>
+          )}
           <Text className="profile__user-meta" style={{ color: el.accent }}>
-            {el.id}型 · {el.note}音{expireDays !== null ? ` · ${expireDays}天到期` : ''}
+            {el.id}型 · {el.note}音 · {user ? user.membership.name : '听闻'}
+            {expireDays !== null ? ` · ${expireDays}天到期` : ''}
           </Text>
           {user ? (
             <Text className="profile__user-sub">

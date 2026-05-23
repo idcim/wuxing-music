@@ -94,7 +94,7 @@ PLANS = [
     {
         "id": "month", "name": "月悦", "en": "MONTHLY", "price": 18, "unit": "/ 月",
         "badge": "热门", "duration_days": 30,
-        "features": ["无限曲目播放", "完整五行测评报告", "个性化推荐算法", "离线下载 30首", "睡眠质量追踪"],
+        "features": ["无限曲目播放", "完整五行测评报告", "个性化推荐算法", "睡眠质量追踪"],
         "featured": False, "sort": 1,
     },
     {

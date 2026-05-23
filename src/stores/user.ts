@@ -13,6 +13,7 @@ interface UserStore {
   setElement: (el: ElementId, scores: ElementScores) => void;
   updateMembership: (m: Membership) => void;
   setPhone: (phone: string) => void;
+  setProfile: (p: { nickname?: string; avatar?: string }) => void;
   login: () => Promise<User>;
   initFromCache: () => Promise<void>;
   logout: () => void;
@@ -66,6 +67,13 @@ export const useUserStore = create<UserStore>((set, get) => ({
   setPhone: (phone) =>
     set((state) => {
       const user = state.user ? { ...state.user, phone } : null;
+      if (user) persistUser(user);
+      return { user };
+    }),
+
+  setProfile: (p) =>
+    set((state) => {
+      const user = state.user ? { ...state.user, ...p } : null;
       if (user) persistUser(user);
       return { user };
     }),

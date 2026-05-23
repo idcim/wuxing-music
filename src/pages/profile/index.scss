@@ -36,15 +36,34 @@
     gap: 32rpx;
   }
 
+  &__avatar-btn {
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    line-height: 1;
+    flex-shrink: 0;
+
+    &::after {
+      border: none;
+    }
+  }
+
   &__avatar {
     width: 120rpx;
     height: 120rpx;
     border-radius: 50%;
     border: 2rpx solid;
     flex-shrink: 0;
+    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  &__avatar-img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
   }
 
   &__user-info {
