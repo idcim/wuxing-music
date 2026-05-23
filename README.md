@@ -1,0 +1,91 @@
+# 五行律音 · 安神助眠音乐小程序
+
+基于中医五行学说的会员制助眠音乐小程序。通过 4 题体质测评为用户匹配专属音律方案，结合古传五音疗愈（角徵宫商羽）与现代频率疗法（174/396/528/741Hz 等），提供个性化安神、助眠、冥想音乐。
+
+> 详细产品/设计/数据规范见 [CLAUDE.md](CLAUDE.md)。
+
+---
+
+## 仓库结构
+
+```
+wuxing-music/
+├── src/                 # 小程序前端（Taro 4 + React 18 + TS）
+│   ├── pages/           #   8 页：splash/onboard/quiz/result/home/explore/member/profile/element/player
+│   ├── components/      #   TrackCard / MiniPlayer / CdkeyModal / SleepTimer / TabBar
+│   ├── stores/          #   zustand：user / player / content
+│   ├── services/        #   api / auth / pay / cdkey / audio(分端) / storage
+│   ├── constants/       #   五行配置 / 测评题库 / 套餐 / env(USE_MOCK 开关)
+│   └── ...
+├── backend/             # 管理后端（FastAPI + SQLAlchemy + 外部 MySQL，Docker 部署）
+├── prototype/           # 原型参考（React Web 版）
+└── CLAUDE.md            # 项目规范与协作约定
+```
+
+---
+
+## 小程序前端
+
+技术栈：Taro 4.2 + React 18 + TypeScript + Sass + Zustand。
+
+```bash
+npm install
+npm run dev:weapp        # 微信小程序（产物在 dist/，用微信开发者工具打开）
+npm run dev:h5           # H5 预览
+npm run type-check       # 类型检查
+```
+
+**Mock 模式**：后端就绪前，`src/constants/env.ts` 的 `USE_MOCK=true` 让登录 / 支付 / 兑换 / 音频全链路本地跑通。后端上线后置 `false` 并填 `API_BASE` 即切真实接口。
+
+### 已实现
+
+- 启动页 / 引导页 / 五行测评（4 题算分）/ 测评结果
+- 首页（本命曲目）/ 探律（五行卡 → 元素详情下钻）/ 会员 / 我的
+- 音频播放：`BackgroundAudioManager` 后台/锁屏播放、loading 态、30 秒试听限制
+- 迷你播放器 + 全屏播放器（旋转罗盘、进度拖动 seek）
+- 睡眠定时器（15/30/45/60 分钟）
+- 微信登录、微信支付开通会员、CDKEY 兑换（均含 mock）
+
+### 已知约束
+
+- 自定义 tabBar 在 Taro4+vite 下不编译（官方 bug #18415），改用页内 `TabBar` 组件 + `redirectTo`。
+- 音频 `audioUrl` 当前为占位，真机需在微信后台配 `downloadFile` 合法域名；mock 下回退测试音频。
+
+---
+
+## 管理后端
+
+技术栈：FastAPI + SQLAlchemy + 外部 MySQL（开发可切 SQLite），Docker 部署。
+为小程序与管理后台提供 API。详见 [backend/README.md](backend/README.md)。
+
+```bash
+cd backend
+cp .env.example .env     # 填外部 MySQL 连接串、JWT 密钥、管理员密码
+docker compose up -d --build
+```
+
+- API 文档：http://localhost:8000/docs ｜ 健康检查：`/api/health`
+- 默认管理员：`admin` / `admin123`（由 `.env` 覆盖）
+- 启动自动建表 + 种子数据（五行/曲目/套餐/测评/测试兑换码）
+
+### 已实现接口（管理端，需 Bearer token）
+
+登录鉴权、仪表盘统计、用户列表、套餐 / 五行 / 歌曲 / 测评题 CRUD、CDKEY 批量生成与禁用、支付参数设置。
+
+---
+
+## 路线图
+
+- [x] 小程序前端主流程 + 播放体验
+- [x] FastAPI 管理后端骨架 + 核心 CRUD + Docker（外部 MySQL）
+- [ ] 管理后台界面（Vue3 + Element Plus）
+- [ ] 小程序公开接口（让 `USE_MOCK=false` 真连后端）
+- [ ] 微信支付统一下单 + 回调验签
+- [ ] 离线下载 / 周聆听统计 / 分享卡片
+
+---
+
+## 备案与合规
+
+- 小程序需主体备案；音乐版权需授权或自制。
+- UI 文案避免「治疗/治愈」等违反《广告法》的医疗宣称，标注「音乐为放松辅助，不替代医疗诊断」。
