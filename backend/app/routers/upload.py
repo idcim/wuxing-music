@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/admin/upload", tags=["upload"])
 STORAGE_KEY = "storage_config"
 UPLOAD_DIR = "uploads"
 ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".mp3", ".m4a", ".wav"}
-MAX_BYTES = 20 * 1024 * 1024  # 20MB
+MAX_BYTES = 50 * 1024 * 1024  # 50MB（音频文件较大）
 
 
 def _storage_cfg(db: Session) -> dict:
