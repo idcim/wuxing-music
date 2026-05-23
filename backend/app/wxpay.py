@@ -121,6 +121,46 @@ def _build_pay_params(cfg: dict, prepay_id: str) -> dict:
     }
 
 
+def refund(
+    cfg: dict,
+    *,
+    transaction_id: str,
+    out_refund_no: str,
+    refund_fen: int,
+    total_fen: int,
+    reason: str = "",
+) -> dict:
+    """申请退款（v3 /refund/domestic/refunds）。
+    refund_fen 退款金额，total_fen 原订单金额（分）。成功返回微信响应 dict。"""
+    _require(cfg, "wx_mch_id", "wx_key_pem", "wx_cert_serial")
+    if not transaction_id:
+        raise WxPayError("缺少微信支付单号(transaction_id)，无法退款")
+
+    url_path = "/v3/refund/domestic/refunds"
+    payload = {
+        "transaction_id": transaction_id,
+        "out_refund_no": out_refund_no,
+        "amount": {"refund": refund_fen, "total": total_fen, "currency": "CNY"},
+    }
+    if reason:
+        payload["reason"] = reason
+    body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    headers = {
+        "Authorization": _authorization(cfg, "POST", url_path, body),
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+    try:
+        resp = httpx.post(
+            f"{WXPAY_BASE}{url_path}", content=body.encode("utf-8"), headers=headers, timeout=15
+        )
+    except httpx.HTTPError as e:
+        raise WxPayError(f"调用微信退款失败：{e}")
+    if resp.status_code not in (200, 201):
+        raise WxPayError(f"微信退款返回 {resp.status_code}：{resp.text}")
+    return resp.json()
+
+
 def decrypt_callback_resource(api_v3_key: str, resource: dict) -> dict:
     """AEAD_AES_256_GCM 解密回调 resource，返回明文 dict。"""
     if not api_v3_key:

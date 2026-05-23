@@ -296,7 +296,46 @@ def mp_quiz(
 
 
 # ── 五行 + 曲目（公开，免登录）──
-def _track_dict(t: Track) -> dict:
+def _parse_plays(s: str) -> int:
+    """把后台填的 '12.4k' / '900' 解析为整数基数。"""
+    s = (s or "").strip().lower()
+    if not s:
+        return 0
+    try:
+        if s.endswith("k"):
+            return int(float(s[:-1]) * 1000)
+        if s.endswith("w"):
+            return int(float(s[:-1]) * 10000)
+        return int(float(s))
+    except ValueError:
+        return 0
+
+
+def _format_plays(n: int) -> str:
+    """整数播放量格式化为 '12.4k' 展示。"""
+    if n >= 10000:
+        return f"{n / 1000:.1f}k"
+    if n >= 1000:
+        return f"{n / 1000:.1f}k"
+    return str(n)
+
+
+def _play_counts(db: Session) -> dict:
+    """每首曲目的真实聆听次数 {track_id: count}。"""
+    from sqlalchemy import func
+    rows = (
+        db.query(PlayHistory.track_id, func.count(PlayHistory.id))
+        .group_by(PlayHistory.track_id)
+        .all()
+    )
+    return {tid: cnt for tid, cnt in rows}
+
+
+def _track_dict(t: Track, counts: dict | None = None) -> dict:
+    # 真实播放量 = 后台基数 + 实际聆听次数（提供 counts 时）
+    plays = t.plays
+    if counts is not None:
+        plays = _format_plays(_parse_plays(t.plays) + counts.get(t.id, 0))
     return {
         "id": t.id,
         "title": t.title,
@@ -304,7 +343,7 @@ def _track_dict(t: Track) -> dict:
         "durationSec": t.duration_sec,
         "hz": t.hz,
         "tag": t.tag,
-        "plays": t.plays,
+        "plays": plays,
         "audioUrl": t.audio_url,
         "coverUrl": t.cover_url,
         "isPremium": t.is_premium,
@@ -315,6 +354,7 @@ def _track_dict(t: Track) -> dict:
 @router.get("/elements")
 def mp_elements(db: Session = Depends(get_db)):
     els = db.query(Element).order_by(Element.sort).all()
+    counts = _play_counts(db)
     result = []
     for e in els:
         tracks = (
@@ -338,7 +378,7 @@ def mp_elements(db: Session = Depends(get_db)):
             "quality": e.quality,
             "desc": e.desc,
             "sleepTip": e.sleep_tip,
-            "tracks": [_track_dict(t) for t in tracks],
+            "tracks": [_track_dict(t, counts) for t in tracks],
         })
     return ok(result)
 
@@ -579,3 +619,57 @@ def list_history(
         if len(items) >= 50:
             break
     return ok(items)
+
+
+# ── 本周聆听统计 ──
+@router.get("/stats/weekly")
+def stats_weekly(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """近 7 天聆听统计：每天聆听次数与估算分钟（按曲目时长累加）。
+    返回 days[]（从 6 天前到今天）+ 本周总时长。"""
+    from datetime import date, time as dtime
+
+    today = datetime.utcnow().date()
+    start = today - timedelta(days=6)
+    start_dt = datetime.combine(start, dtime.min)
+
+    rows = (
+        db.query(PlayHistory.played_at, Track.duration_sec)
+        .join(Track, Track.id == PlayHistory.track_id)
+        .filter(PlayHistory.user_id == user.id, PlayHistory.played_at >= start_dt)
+        .all()
+    )
+
+    # 初始化 7 天桶
+    buckets: dict[date, dict] = {
+        start + timedelta(days=i): {"count": 0, "seconds": 0} for i in range(7)
+    }
+    for played_at, dur_sec in rows:
+        d = played_at.date()
+        if d in buckets:
+            buckets[d]["count"] += 1
+            buckets[d]["seconds"] += int(dur_sec or 0)
+
+    week_labels = ["一", "二", "三", "四", "五", "六", "日"]
+    days = []
+    total_sec = 0
+    for i in range(7):
+        d = start + timedelta(days=i)
+        b = buckets[d]
+        total_sec += b["seconds"]
+        is_today = d == today
+        days.append({
+            "date": d.isoformat(),
+            "label": "今" if is_today else week_labels[d.weekday()],
+            "count": b["count"],
+            "minutes": round(b["seconds"] / 60),
+            "isToday": is_today,
+        })
+
+    return ok({
+        "days": days,
+        "totalMinutes": round(total_sec / 60),
+        "totalHours": round(total_sec / 3600, 1),
+    })

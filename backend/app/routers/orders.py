@@ -1,14 +1,24 @@
+import json
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app import wxpay
 from app.database import get_db
-from app.models import Admin, Order, User
+from app.models import Admin, Order, Setting, User
 from app.schemas import RefundIn, ok
 from app.security import get_current_admin
 
+logger = logging.getLogger("uvicorn.error")
+
 router = APIRouter(prefix="/api/admin/orders", tags=["orders"])
+
+
+def _pay_cfg(db: Session) -> dict:
+    row = db.query(Setting).filter(Setting.key == "pay_config").first()
+    return json.loads(row.value) if row and row.value else {}
 
 
 def _to_dict(o: Order) -> dict:
@@ -120,6 +130,24 @@ def confirm_refund(
         raise HTTPException(status_code=404, detail="订单不存在")
     if o.status != "refunding":
         raise HTTPException(status_code=400, detail="仅退款中订单可确认")
+
+    # 真实退款：支付已配置且有微信支付单号时，调微信退款 API；
+    # 否则视为开发期/线下退款，仅改状态（兜底）。
+    cfg = _pay_cfg(db)
+    pay_enabled = bool(cfg.get("enabled")) and bool(cfg.get("wx_mch_id")) and bool(cfg.get("wx_key_pem"))
+    if pay_enabled and o.transaction_id:
+        try:
+            wxpay.refund(
+                cfg,
+                transaction_id=o.transaction_id,
+                out_refund_no="RF" + o.order_no,
+                refund_fen=int(round((o.refund_amount or o.amount) * 100)),
+                total_fen=int(round(o.amount * 100)),
+                reason=o.refund_reason or "",
+            )
+        except wxpay.WxPayError as e:
+            logger.warning("微信退款失败 订单 %s：%s", o.order_no, e)
+            raise HTTPException(status_code=400, detail=f"微信退款失败：{e}")
 
     o.status = "refunded"
     o.refund_at = datetime.utcnow()

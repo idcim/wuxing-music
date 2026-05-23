@@ -6,6 +6,13 @@
     </div>
     <el-table :data="rows" v-loading="loading" border>
       <el-table-column prop="id" label="ID" width="70" />
+      <el-table-column label="头像" width="72">
+        <template #default="{ row }">
+          <el-avatar :size="40" :src="row.avatar || undefined">
+            {{ (row.nickname || '律').slice(0, 1) }}
+          </el-avatar>
+        </template>
+      </el-table-column>
       <el-table-column prop="nickname" label="昵称" min-width="110" />
       <el-table-column prop="phone" label="手机号" width="130">
         <template #default="{ row }">{{ row.phone || '-' }}</template>
@@ -38,6 +45,15 @@
 
     <!-- 用户详情 -->
     <el-dialog v-model="detailDialog" title="用户详情" width="560px">
+      <div class="detail-head">
+        <el-avatar :size="64" :src="detail.avatar || undefined">
+          {{ (detail.nickname || '律').slice(0, 1) }}
+        </el-avatar>
+        <div class="detail-head-info">
+          <div class="detail-head-name">{{ detail.nickname }}</div>
+          <div class="detail-head-sub">ID {{ detail.id }}</div>
+        </div>
+      </div>
       <el-descriptions :column="2" border>
         <el-descriptions-item label="昵称">{{ detail.nickname }}</el-descriptions-item>
         <el-descriptions-item label="ID">{{ detail.id }}</el-descriptions-item>
@@ -194,6 +210,9 @@ onMounted(async () => {
 .pager { margin-top: 16px; justify-content: flex-end; }
 .src { margin-left: 4px; }
 .hint { margin-left: 10px; color: #999; font-size: 12px; }
+.detail-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+.detail-head-name { font-size: 16px; font-weight: 600; }
+.detail-head-sub { font-size: 12px; color: #999; margin-top: 2px; }
 .detail-block { margin-top: 16px; }
 .detail-title { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
 .score-tag { margin: 0 8px 8px 0; }

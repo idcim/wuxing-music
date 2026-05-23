@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { View, Text, Image } from '@tarojs/components';
-import Taro from '@tarojs/taro';
+import Taro, { useDidShow } from '@tarojs/taro';
 import { WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
+import { getWeeklyStats, emptyWeekly, type WeeklyStats } from '@/services/stats';
 import Icon from '@/components/Icon';
 import { A } from '@/utils/color';
 import { resolveUrl } from '@/utils/url';
@@ -13,9 +14,6 @@ import TabBar from '@/components/TabBar';
 import type { ElementId } from '@/types';
 import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
-
-const BARS = [40, 65, 30, 80, 55, 70, 45];
-const WEEK_LABELS = ['一', '二', '三', '四', '五', '六', '今'];
 
 interface MenuItem {
   icon: IconName;
@@ -33,9 +31,22 @@ export default function Profile() {
   const el = WUXING[(element as ElementId) || '木'];
 
   const [cdkeyOpen, setCdkeyOpen] = useState(false);
+  const [weekly, setWeekly] = useState<WeeklyStats>(emptyWeekly());
+
+  useDidShow(() => {
+    if (useUserStore.getState().user) {
+      getWeeklyStats().then(setWeekly).catch(() => {});
+    } else {
+      setWeekly(emptyWeekly());
+    }
+  });
+
+  // 柱状图高度：按本周最大分钟归一化（最低 6% 让空柱也可见）
+  const maxMin = Math.max(1, ...weekly.days.map((d) => d.minutes));
 
   const retakeQuiz = () => Taro.navigateTo({ url: '/pages/quiz/index' });
   const goAbout = () => Taro.navigateTo({ url: '/pages/about/index' });
+  const goSettings = () => Taro.navigateTo({ url: '/pages/settings/index' });
   const goLogin = () => Taro.navigateTo({ url: '/pages/login/index' });
   const goHistory = () => Taro.navigateTo({ url: '/pages/history/index' });
   const goMember = () => Taro.redirectTo({ url: '/pages/member/index' });
@@ -86,7 +97,7 @@ export default function Profile() {
     { icon: 'keyRound', text: '兑换码 / CDKEY', onClick: () => setCdkeyOpen(true), highlight: true },
     { icon: 'sparkles', text: element ? '重新测评体质' : '立即测评体质', onClick: retakeQuiz },
     { icon: 'messageCircle', text: '关于我们', onClick: goAbout },
-    { icon: 'settings', text: '设置', onClick: () => Taro.showToast({ title: '敬请期待', icon: 'none' }) }
+    { icon: 'settings', text: '设置', onClick: goSettings }
   ];
 
   const renderMenu = (items: MenuItem[]) => (
@@ -198,12 +209,13 @@ export default function Profile() {
             <Text className="profile__stats-en cormorant italic">This Week</Text>
           </View>
           <Text className="profile__stats-val cormorant" style={{ color: el.accent }}>
-            5.2<Text className="profile__stats-unit">hrs</Text>
+            {weekly.totalHours}<Text className="profile__stats-unit">hrs</Text>
           </Text>
         </View>
         <View className="profile__stats-bars">
-          {BARS.map((h, i) => {
-            const today = i === BARS.length - 1;
+          {weekly.days.map((d, i) => {
+            const today = d.isToday;
+            const h = Math.max(6, Math.round((d.minutes / maxMin) * 100));
             return (
               <View key={i} className="profile__stats-col">
                 <View
@@ -219,7 +231,7 @@ export default function Profile() {
                   className="profile__stats-day"
                   style={{ color: today ? el.accent : '#475569' }}
                 >
-                  {WEEK_LABELS[i]}
+                  {d.label}
                 </Text>
               </View>
             );

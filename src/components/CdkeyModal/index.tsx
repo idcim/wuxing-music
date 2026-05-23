@@ -131,6 +131,7 @@ export default function CdkeyModal({ open, onClose }: Props) {
               className="cdkey-sheet__input"
               placeholder="例如：WUXING-XXXX-XXXX-XXX"
               placeholderStyle="color:#475569"
+              maxlength={32}
               value={code}
               onInput={(e) => setCode(e.detail.value.toUpperCase())}
             />

@@ -1,0 +1,79 @@
+@import '../../styles/variables.scss';
+
+.settings {
+  min-height: 100vh;
+  padding: 0 $pad-outer 80rpx;
+  background: $bg-deep;
+
+  &__nav {
+    display: flex;
+    align-items: center;
+    padding: 88rpx 0 24rpx;
+  }
+
+  &__back {
+    font-size: 56rpx;
+    color: $text-primary;
+    line-height: 1;
+    width: 80rpx;
+  }
+
+  &__nav-title {
+    flex: 1;
+    text-align: center;
+    font-size: 30rpx;
+    color: $text-primary;
+  }
+
+  &__nav-spacer {
+    width: 80rpx;
+  }
+
+  &__list {
+    margin-top: 28rpx;
+    background: rgba(255, 255, 255, 0.02);
+    border: 2rpx solid rgba(255, 255, 255, 0.04);
+    border-radius: 32rpx;
+    overflow: hidden;
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 32rpx 36rpx;
+    min-height: 100rpx;
+    box-sizing: border-box;
+
+    &--divider {
+      border-bottom: 2rpx solid rgba(255, 255, 255, 0.04);
+    }
+  }
+
+  &__label {
+    color: #cbd5e1;
+    font-size: 28rpx;
+    letter-spacing: 1rpx;
+  }
+
+  &__row-right {
+    display: flex;
+    align-items: center;
+    gap: 16rpx;
+  }
+
+  &__value {
+    color: $text-tertiary;
+    font-size: 26rpx;
+  }
+
+  &__version {
+    margin-top: 60rpx;
+    text-align: center;
+
+    &-text {
+      font-size: 22rpx;
+      color: $text-quaternary;
+    }
+  }
+}

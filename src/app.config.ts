@@ -11,6 +11,7 @@ export default defineAppConfig({
     'pages/member/index',
     'pages/profile/index',
     'pages/userinfo/index',
+    'pages/settings/index',
     'pages/history/index',
     'pages/player/index',
     'pages/about/index'
