@@ -10,10 +10,12 @@ interface LoginResult {
 }
 
 function mockUser(openid: string): User {
+  // 默认昵称带随机后缀，便于区分（与后端一致）
+  const suffix = openid.slice(-4).toUpperCase();
   return {
     id: openid,
     openid,
-    nickname: '律音用户',
+    nickname: `律音用户·${suffix}`,
     avatar: '',
     element: storage.get(STORAGE_KEYS.ELEMENT),
     elementScores: storage.get(STORAGE_KEYS.SCORES) || { 木: 0, 火: 0, 土: 0, 金: 0, 水: 0 },
@@ -31,16 +33,9 @@ function mockUser(openid: string): User {
 
 const GUEST_OPENID_KEY = 'wx_guest_openid';
 
-// 获取登录标识（code/openid）。Taro.login() 在开发者工具游客模式下会抛
-// webapi_getwxaasyncsecinfo:fail，此处兜底为本地持久化的稳定游客 openid，
-// 保证登录链路不依赖 wx.login 也能跑通（联调/真机降级都安全）。
-async function resolveLoginId(): Promise<string> {
-  try {
-    const { code } = await Taro.login();
-    if (code) return code;
-  } catch {
-    // 游客模式 / login 受限：走本地游客标识
-  }
+// 稳定的本地游客标识（仅作兜底：游客模式 / 未配置小程序密钥时使用）。
+// 一次生成、长期复用，保证没有 code 换取时身份也不漂移。
+function getGuestOpenid(): string {
   let guest = storage.get<string>(GUEST_OPENID_KEY);
   if (!guest) {
     guest = `guest-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -49,23 +44,34 @@ async function resolveLoginId(): Promise<string> {
   return guest;
 }
 
-// 拿登录标识 → 后端换 token + 用户信息。
-// 注意：真实环境后端用 code 调微信接口换 openid/unionid；当前后端 /api/mp/login
-// 直接接收 openid，故此处以 code/游客标识 充当 openid（联调用）。生产应改为后端 code 换取。
+// 取 wx.login 的临时 code（一次性、每次不同，仅供后端换 openid 用）。
+// 游客模式 / login 受限时返回空串，由后端走 openid 兜底。
+async function getLoginCode(): Promise<string> {
+  try {
+    const { code } = await Taro.login();
+    return code || '';
+  } catch {
+    return '';
+  }
+}
+
+// 登录：把 code（后端用它换稳定 openid）+ 稳定游客 openid 一起传给后端。
+// 关键：绝不能把每次都变的 code 当 openid 用，否则后端每次都建新用户、openid 漂移。
 export async function wxLogin(): Promise<LoginResult> {
-  const code = await resolveLoginId();
+  const guest = getGuestOpenid();
 
   if (USE_MOCK) {
-    const token = `mock-token-${code.slice(0, 8)}`;
-    const user = mockUser(`mock-openid-${code.slice(0, 8)}`);
+    const token = `mock-token-${guest.slice(0, 12)}`;
+    const user = mockUser(`mock-openid-${guest.slice(0, 12)}`);
     storage.set(TOKEN_KEY, token);
     storage.set(STORAGE_KEYS.USER, user);
     return { token, user };
   }
 
+  const code = await getLoginCode();
   const result = await request<LoginResult>('/api/mp/login', {
     method: 'POST',
-    data: { openid: code },
+    data: { code, openid: guest },
     auth: false
   });
   storage.set(TOKEN_KEY, result.token);

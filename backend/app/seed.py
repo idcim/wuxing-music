@@ -222,4 +222,12 @@ def seed(db: Session) -> None:
             status="pending",
         ))
 
+    # 存量用户补昵称后缀：把恰好叫「律音用户」（无后缀）的老用户改成可区分的名字
+    import random
+    _ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    legacy = db.query(User).filter(User.nickname == "律音用户").all()
+    for u in legacy:
+        suffix = "".join(random.choice(_ALPHABET) for _ in range(4))
+        u.nickname = f"律音用户·{suffix}"
+
     db.commit()

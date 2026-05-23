@@ -119,12 +119,44 @@
     }
   }
 
-  // ── 控制区 ──
+  // ── 工具行：模式 / 定时 / 列表 ──
+  &__tools {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    margin-bottom: 48rpx;
+  }
+
+  &__tool {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8rpx;
+
+    &-text {
+      font-size: 22rpx;
+      letter-spacing: 1rpx;
+    }
+  }
+
+  // ── 主控制区 ──
   &__controls {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 80rpx;
+    gap: 72rpx;
+  }
+
+  &__skip {
+    width: 88rpx;
+    height: 88rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &--off {
+      opacity: 0.3;
+    }
   }
 
   &__play {
@@ -134,11 +166,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-
-    &-icon {
-      color: #0a0e1a;
-      font-size: 56rpx;
-    }
   }
 
   &__spinner {
@@ -148,30 +175,5 @@
     border: 6rpx solid rgba(10, 14, 26, 0.3);
     border-top-color: #0a0e1a;
     animation: rotate-slow 0.8s linear infinite;
-  }
-
-  &__timer {
-    width: 88rpx;
-    height: 88rpx;
-    border-radius: 50%;
-    border: 2rpx solid $border;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: $text-tertiary;
-
-    &--on {
-      font-weight: 600;
-    }
-
-    &--placeholder {
-      border-color: transparent;
-      visibility: hidden;
-    }
-
-    &-text {
-      font-size: 28rpx;
-      color: inherit;
-    }
   }
 }

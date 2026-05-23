@@ -92,26 +92,80 @@ def _user_dict(u: User) -> dict:
 
 # ── 登录 ──
 class LoginIn(BaseModel):
-    openid: str
+    code: str = ""          # wx.login() 的临时凭证，后端用它换稳定 openid
+    openid: str = ""        # 兜底：游客态/无小程序配置时前端直传的稳定标识
     unionid: str = ""
     nickname: str = ""
     avatar: str = ""
 
 
+def _default_nickname() -> str:
+    """未设置昵称的新用户给一个带随机后缀的默认名，便于后台区分。
+    形如「律音用户·A3K9」；字符集去除易混的 0/O/1/I。"""
+    import random
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    suffix = "".join(random.choice(alphabet) for _ in range(4))
+    return f"律音用户·{suffix}"
+
+
+def _jscode2session(db: Session, code: str) -> dict:
+    """用 code + 小程序 AppID/Secret 调微信换取 openid/unionid。
+    返回 {"openid":..., "unionid":...}；未配置或失败返回 {}。"""
+    row = db.query(Setting).filter(Setting.key == "mp_config").first()
+    cfg = json.loads(row.value) if row and row.value else {}
+    app_id = cfg.get("app_id")
+    app_secret = cfg.get("app_secret")
+    if not (app_id and app_secret and code):
+        return {}
+    try:
+        import httpx
+        resp = httpx.get(
+            "https://api.weixin.qq.com/sns/jscode2session",
+            params={
+                "appid": app_id,
+                "secret": app_secret,
+                "js_code": code,
+                "grant_type": "authorization_code",
+            },
+            timeout=10,
+        )
+        data = resp.json()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("jscode2session 调用失败：%s", e)
+        return {}
+    if data.get("openid"):
+        return {"openid": data["openid"], "unionid": data.get("unionid", "")}
+    logger.warning("jscode2session 返回异常：%s", data)
+    return {}
+
+
 @router.post("/login")
 def mp_login(body: LoginIn, db: Session = Depends(get_db)):
-    """登录：优先按 unionid 识别（跨小程序/APP 同账号），无则按 openid。"""
+    """登录：用 code 换稳定 openid（配置了小程序密钥时）；否则回退前端直传的 openid。
+    识别优先级：unionid > openid。"""
+    openid = body.openid
+    unionid = body.unionid
+
+    # 优先用 code 换取真实、稳定的 openid/unionid
+    sess = _jscode2session(db, body.code)
+    if sess:
+        openid = sess["openid"]
+        unionid = sess.get("unionid") or unionid
+
+    if not openid:
+        raise HTTPException(status_code=400, detail="缺少登录凭证")
+
     user = None
-    if body.unionid:
-        user = db.query(User).filter(User.unionid == body.unionid).first()
+    if unionid:
+        user = db.query(User).filter(User.unionid == unionid).first()
     if not user:
-        user = db.query(User).filter(User.openid == body.openid).first()
+        user = db.query(User).filter(User.openid == openid).first()
 
     if not user:
         user = User(
-            openid=body.openid,
-            unionid=body.unionid,
-            nickname=body.nickname or "律音用户",
+            openid=openid,
+            unionid=unionid,
+            nickname=body.nickname or _default_nickname(),
             avatar=body.avatar,
         )
         db.add(user)
@@ -119,8 +173,8 @@ def mp_login(body: LoginIn, db: Session = Depends(get_db)):
         db.refresh(user)
     else:
         changed = False
-        if body.unionid and not user.unionid:
-            user.unionid = body.unionid
+        if unionid and not user.unionid:
+            user.unionid = unionid
             changed = True
         if body.avatar and not user.avatar:
             user.avatar = body.avatar

@@ -23,7 +23,7 @@ export default function Explore() {
   const isPremium = useUserStore((s) => s.isPremium);
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
-  const play = usePlayerStore((s) => s.play);
+  const playWithQueue = usePlayerStore((s) => s.playWithQueue);
   const pause = usePlayerStore((s) => s.pause);
   const resume = usePlayerStore((s) => s.resume);
 
@@ -36,7 +36,8 @@ export default function Explore() {
     if (currentTrack?.id === id) {
       isPlaying ? pause() : resume();
     } else {
-      play(track);
+      // 以当前元素曲目列表作为播放队列
+      playWithQueue(track, we.tracks);
     }
   };
 

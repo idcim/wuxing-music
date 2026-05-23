@@ -25,7 +25,7 @@ export default function Home() {
 
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
-  const play = usePlayerStore((s) => s.play);
+  const playWithQueue = usePlayerStore((s) => s.playWithQueue);
   const pause = usePlayerStore((s) => s.pause);
   const resume = usePlayerStore((s) => s.resume);
   const timerVal = usePlayerStore((s) => s.timerVal);
@@ -38,7 +38,7 @@ export default function Home() {
     if (currentTrack?.id === id) {
       isPlaying ? pause() : resume();
     } else {
-      play(track);
+      playWithQueue(track, el.tracks);
     }
   };
 

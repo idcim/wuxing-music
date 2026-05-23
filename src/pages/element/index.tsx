@@ -16,7 +16,7 @@ export default function ElementDetail() {
   const isPremium = useUserStore((s) => s.isPremium);
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
-  const play = usePlayerStore((s) => s.play);
+  const playWithQueue = usePlayerStore((s) => s.playWithQueue);
   const pause = usePlayerStore((s) => s.pause);
   const resume = usePlayerStore((s) => s.resume);
 
@@ -28,7 +28,7 @@ export default function ElementDetail() {
     if (currentTrack?.id === trackId) {
       isPlaying ? pause() : resume();
     } else {
-      play(track);
+      playWithQueue(track, el.tracks);
     }
   };
 

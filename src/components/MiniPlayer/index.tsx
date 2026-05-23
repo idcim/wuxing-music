@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { usePlayerStore } from '@/stores/player';
@@ -52,6 +52,7 @@ export default function MiniPlayer() {
   const curSec = String(Math.floor((progress * 21.6) % 60)).padStart(2, '0');
 
   return (
+    <Fragment>
     <View
       className="mini-player"
       style={{
@@ -125,8 +126,10 @@ export default function MiniPlayer() {
           )}
         </View>
       </View>
-
-      <SleepTimer open={timerOpen} onClose={() => setTimerOpen(false)} />
     </View>
+
+    {/* 抽屉放到 .mini-player(fixed) 之外，否则 fixed 嵌套 fixed 会相对父级定位、被导航栏遮挡 */}
+    <SleepTimer open={timerOpen} onClose={() => setTimerOpen(false)} />
+    </Fragment>
   );
 }

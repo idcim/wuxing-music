@@ -60,7 +60,7 @@ export default function History() {
 
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
-  const play = usePlayerStore((s) => s.play);
+  const playWithQueue = usePlayerStore((s) => s.playWithQueue);
   const pause = usePlayerStore((s) => s.pause);
   const resume = usePlayerStore((s) => s.resume);
 
@@ -77,7 +77,8 @@ export default function History() {
     if (currentTrack?.id === it.id) {
       isPlaying ? pause() : resume();
     } else {
-      play(toTrack(it));
+      // 以整个历史列表作为队列
+      playWithQueue(toTrack(it), list.map(toTrack));
     }
   };
 

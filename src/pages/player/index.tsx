@@ -7,8 +7,21 @@ import { WUXING } from '@/constants/wuxing';
 import { fmtTime } from '@/utils/format';
 import Icon from '@/components/Icon';
 import SleepTimer from '@/components/SleepTimer';
+import Playlist from '@/components/Playlist';
 import type { ElementId } from '@/types';
+import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
+
+const MODE_ICON: Record<string, IconName> = {
+  order: 'repeat',
+  shuffle: 'shuffle',
+  pulse: 'heart'
+};
+const MODE_LABEL: Record<string, string> = {
+  order: '顺序',
+  shuffle: '随机',
+  pulse: '悦动'
+};
 
 export default function Player() {
   const currentTrack = usePlayerStore((s) => s.currentTrack);
@@ -16,13 +29,20 @@ export default function Player() {
   const isLoading = usePlayerStore((s) => s.isLoading);
   const currentTime = usePlayerStore((s) => s.currentTime);
   const timerVal = usePlayerStore((s) => s.timerVal);
+  const playMode = usePlayerStore((s) => s.playMode);
+  const queue = usePlayerStore((s) => s.queue);
   const pause = usePlayerStore((s) => s.pause);
   const resume = usePlayerStore((s) => s.resume);
   const seek = usePlayerStore((s) => s.seek);
+  const next = usePlayerStore((s) => s.next);
+  const prev = usePlayerStore((s) => s.prev);
+  const cyclePlayMode = usePlayerStore((s) => s.cyclePlayMode);
   const element = useUserStore((s) => s.element) || ('木' as ElementId);
   const el = WUXING[element];
 
   const [timerOpen, setTimerOpen] = useState(false);
+  const [listOpen, setListOpen] = useState(false);
+  const hasQueue = queue.length > 1;
 
   const back = () => Taro.navigateBack();
 
@@ -94,17 +114,42 @@ export default function Player() {
         </View>
       </View>
 
-      <View className="player__controls">
+      {/* 顶部小工具：播放模式 / 睡眠定时 / 播放列表 */}
+      <View className="player__tools">
+        <View className="player__tool" onClick={cyclePlayMode}>
+          <Icon name={MODE_ICON[playMode]} size={30} color={el.accent} strokeWidth={1.6} />
+          <Text className="player__tool-text" style={{ color: el.accent }}>
+            {MODE_LABEL[playMode]}
+          </Text>
+        </View>
+
         <View
-          className={`player__timer ${timerVal ? 'player__timer--on' : ''}`}
+          className="player__tool"
           style={timerVal ? { color: el.primary } : undefined}
           onClick={() => setTimerOpen(true)}
         >
-          {timerVal ? (
-            <Text className="player__timer-text">{timerVal}'</Text>
-          ) : (
-            <Icon name="timer" size={32} color="#94a3b8" strokeWidth={1.6} />
-          )}
+          <Icon name="timer" size={30} color={timerVal ? el.primary : '#94a3b8'} strokeWidth={1.6} />
+          <Text
+            className="player__tool-text"
+            style={{ color: timerVal ? el.primary : '#94a3b8' }}
+          >
+            {timerVal ? `${timerVal}分钟` : '定时'}
+          </Text>
+        </View>
+
+        <View className="player__tool" onClick={() => setListOpen(true)}>
+          <Icon name="listMusic" size={30} color="#94a3b8" strokeWidth={1.6} />
+          <Text className="player__tool-text" style={{ color: '#94a3b8' }}>列表</Text>
+        </View>
+      </View>
+
+      {/* 主控制：上一首 / 播放 / 下一首 */}
+      <View className="player__controls">
+        <View
+          className={`player__skip ${hasQueue ? '' : 'player__skip--off'}`}
+          onClick={() => hasQueue && prev()}
+        >
+          <Icon name="skipBack" size={40} fill="#e2e8f0" color="#e2e8f0" strokeWidth={0} />
         </View>
 
         <View className="player__play" style={{ background: el.primary }} onClick={toggle}>
@@ -121,10 +166,16 @@ export default function Player() {
           )}
         </View>
 
-        <View className="player__timer player__timer--placeholder" />
+        <View
+          className={`player__skip ${hasQueue ? '' : 'player__skip--off'}`}
+          onClick={() => hasQueue && next()}
+        >
+          <Icon name="skipForward" size={40} fill="#e2e8f0" color="#e2e8f0" strokeWidth={0} />
+        </View>
       </View>
 
       <SleepTimer open={timerOpen} onClose={() => setTimerOpen(false)} />
+      <Playlist open={listOpen} onClose={() => setListOpen(false)} />
     </View>
   );
 }
