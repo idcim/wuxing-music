@@ -54,7 +54,10 @@ export default function MiniPlayer() {
       </View>
       <View className="mini-player__body">
         <View className="mini-player__dot" style={{ background: el.primary }} />
-        <View className="mini-player__info">
+        <View
+          className="mini-player__info"
+          onClick={() => Taro.navigateTo({ url: '/pages/player/index' })}
+        >
           <Text className="mini-player__title">{currentTrack.title}</Text>
           <Text className="mini-player__hz serif" style={{ color: el.accent }}>
             {currentTrack.hz} · {currentTrack.tag}

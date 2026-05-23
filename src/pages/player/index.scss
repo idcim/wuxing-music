@@ -1,0 +1,174 @@
+@import '../../styles/variables.scss';
+
+.player {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0 $pad-outer 100rpx;
+
+  &--empty {
+    align-items: center;
+    justify-content: center;
+  }
+
+  &__empty-text {
+    font-size: 28rpx;
+    color: $text-tertiary;
+  }
+
+  &__nav {
+    display: flex;
+    align-items: center;
+    padding: 88rpx 0 24rpx;
+  }
+
+  &__back {
+    font-size: 56rpx;
+    color: $text-primary;
+    line-height: 1;
+    width: 80rpx;
+  }
+
+  &__nav-title {
+    flex: 1;
+    text-align: center;
+    font-size: 26rpx;
+    letter-spacing: 4rpx;
+    color: $text-secondary;
+  }
+
+  &__nav-spacer {
+    width: 80rpx;
+  }
+
+  // ── 旋转罗盘 ──
+  &__disc-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &__disc {
+    width: 480rpx;
+    height: 480rpx;
+    border-radius: 50%;
+    border: 2rpx solid;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: rotate-slow 30s linear infinite;
+  }
+
+  &__disc-core {
+    width: 320rpx;
+    height: 320rpx;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &__disc-el {
+    font-size: 160rpx;
+    line-height: 1;
+  }
+
+  // ── 曲目信息 ──
+  &__meta {
+    text-align: center;
+    margin: 56rpx 0 48rpx;
+  }
+
+  &__title {
+    display: block;
+    font-size: 48rpx;
+    color: $text-primary;
+    letter-spacing: 2rpx;
+  }
+
+  &__sub {
+    display: block;
+    margin-top: 16rpx;
+    font-size: 24rpx;
+    letter-spacing: 2rpx;
+  }
+
+  // ── 进度 ──
+  &__progress {
+    margin-bottom: 56rpx;
+  }
+
+  &__slider {
+    margin: 0;
+  }
+
+  &__time {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4rpx;
+
+    &-cur,
+    &-dur {
+      font-size: 22rpx;
+      color: $text-tertiary;
+      letter-spacing: 1rpx;
+    }
+  }
+
+  // ── 控制区 ──
+  &__controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 80rpx;
+  }
+
+  &__play {
+    width: 140rpx;
+    height: 140rpx;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &-icon {
+      color: #0a0e1a;
+      font-size: 56rpx;
+    }
+  }
+
+  &__spinner {
+    width: 48rpx;
+    height: 48rpx;
+    border-radius: 50%;
+    border: 6rpx solid rgba(10, 14, 26, 0.3);
+    border-top-color: #0a0e1a;
+    animation: rotate-slow 0.8s linear infinite;
+  }
+
+  &__timer {
+    width: 88rpx;
+    height: 88rpx;
+    border-radius: 50%;
+    border: 2rpx solid $border;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: $text-tertiary;
+
+    &--on {
+      font-weight: 600;
+    }
+
+    &--placeholder {
+      border-color: transparent;
+      visibility: hidden;
+    }
+
+    &-text {
+      font-size: 28rpx;
+      color: inherit;
+    }
+  }
+}

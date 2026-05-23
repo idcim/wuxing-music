@@ -18,6 +18,7 @@ interface PlayerStore {
   pause: () => void;
   resume: () => void;
   stop: () => void;
+  seek: (sec: number) => void;
   setTimer: (min: number | null) => void;
   dismissUpgrade: () => void;
 }
@@ -75,6 +76,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   resume: () => {
     audioService.play();
     set({ isPlaying: true });
+  },
+
+  seek: (sec) => {
+    audioService.seek(sec);
+    set({ currentTime: sec });
   },
 
   stop: () => {
