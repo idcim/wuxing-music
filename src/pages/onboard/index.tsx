@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import Icon from '@/components/Icon';
@@ -7,29 +6,26 @@ import { A } from '@/utils/color';
 import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
 
-function makeStars(n: number) {
-  return Array.from({ length: n }).map(() => ({
-    top: Math.random() * 100,
-    left: Math.random() * 100,
-    dur: Math.random() * 3 + 2,
-    delay: Math.random() * 3
-  }));
-}
+// 模块级常量（一次性计算）。避免组件内 useMemo——小程序端会触发
+// Cannot read 'useMemo' of undefined。
+const STARS = Array.from({ length: 30 }).map(() => ({
+  top: Math.random() * 100,
+  left: Math.random() * 100,
+  dur: Math.random() * 3 + 2,
+  delay: Math.random() * 3
+}));
+
+// 罗盘节点位置：半径 95（px）→ rpx，圆心在 240rpx 容器中心
+const NODES = ELEMENT_LIST.map((el, i) => {
+  const angle = ((i * 72 - 90) * Math.PI) / 180;
+  const x = Math.cos(angle) * 190 + 240; // 95*2=190, 圆心 120*2=240
+  const y = Math.sin(angle) * 190 + 240;
+  return { el, x, y };
+});
 
 export default function Onboard() {
-  const stars = useMemo(() => makeStars(30), []);
-
-  // 罗盘节点位置：半径 95（px）→ rpx，圆心在 240rpx 容器中心
-  const nodes = useMemo(
-    () =>
-      ELEMENT_LIST.map((el, i) => {
-        const angle = ((i * 72 - 90) * Math.PI) / 180;
-        const x = Math.cos(angle) * 190 + 240; // 95*2=190, 圆心 120*2=240
-        const y = Math.sin(angle) * 190 + 240;
-        return { el, x, y };
-      }),
-    []
-  );
+  const stars = STARS;
+  const nodes = NODES;
 
   const startQuiz = () => Taro.navigateTo({ url: '/pages/quiz/index' });
   const skip = () => Taro.reLaunch({ url: '/pages/home/index' });

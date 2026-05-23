@@ -1,23 +1,21 @@
-import { useMemo } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import Icon from '@/components/Icon';
 import { useUserStore } from '@/stores/user';
 import './index.scss';
 
-// 预生成星点（固定，避免重渲染抖动）
-function makeStars(n: number) {
-  return Array.from({ length: n }).map(() => ({
-    size: Math.random() * 1.5 + 0.5,
-    top: Math.random() * 100,
-    left: Math.random() * 100,
-    dur: Math.random() * 3 + 2,
-    delay: Math.random() * 3
-  }));
-}
+// 模块级预生成星点（一次性，固定）。避免在组件内用 useMemo——
+// 小程序端 Taro+React 对 useMemo 解析存在问题，会触发 Cannot read 'useMemo'。
+const STARS = Array.from({ length: 50 }).map(() => ({
+  size: Math.random() * 1.5 + 0.5,
+  top: Math.random() * 100,
+  left: Math.random() * 100,
+  dur: Math.random() * 3 + 2,
+  delay: Math.random() * 3
+}));
 
 export default function Splash() {
-  const stars = useMemo(() => makeStars(50), []);
+  const stars = STARS;
 
   useDidShow(() => {
     const { element } = useUserStore.getState();
