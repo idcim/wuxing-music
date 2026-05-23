@@ -46,6 +46,7 @@
     "@types/webpack-env": "^1.18.4",
     "@vitejs/plugin-react": "^4.2.0",
     "babel-preset-taro": "4.2.0",
+    "lucide-static": "^1.16.0",
     "react-refresh": "^0.14.0",
     "sass": "^1.72.0",
     "typescript": "^5.4.0",

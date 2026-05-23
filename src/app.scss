@@ -14,15 +14,49 @@ button {
   box-sizing: border-box;
 }
 
-// 衬线标题（系统降级，约等于 Noto Serif SC）
+// 中文衬线（约等于 Noto Serif SC）
 .serif {
-  font-family: 'STSong', 'SimSun', serif;
+  font-family: 'STSong', 'Songti SC', 'SimSun', serif;
 }
 
-// ─── 通用动效 ───────────────────────────────────────
+// 装饰性英文/数字（约等于 Cormorant Garamond），常配 italic
+.cormorant {
+  font-family: 'Georgia', 'STSong', 'Times New Roman', serif;
+}
+
+.italic {
+  font-style: italic;
+}
+
+// ─── 动画（对齐原型 keyframes）───────────────────────
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(24rpx); }
+  from { opacity: 0; transform: translateY(32rpx); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-20rpx); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); opacity: 1; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+
+@keyframes wave {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
 }
 
 @keyframes rotate-slow {
@@ -31,10 +65,20 @@ button {
 }
 
 @keyframes star-twinkle {
-  0%, 100% { opacity: 0.2; }
-  50% { opacity: 1; }
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes progress-fill {
+  from { width: 0; }
+  to { width: 100%; }
 }
 
 .fade-up {
-  animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  opacity: 0;
+  animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.float {
+  animation: float 4s ease-in-out infinite;
 }
