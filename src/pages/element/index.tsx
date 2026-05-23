@@ -3,6 +3,7 @@ import Taro, { useRouter } from '@tarojs/taro';
 import { WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
 import { usePlayerStore } from '@/stores/player';
+import { useShare } from '@/utils/share';
 import TrackCard from '@/components/TrackCard';
 import MiniPlayer from '@/components/MiniPlayer';
 import type { ElementId } from '@/types';
@@ -19,6 +20,11 @@ export default function ElementDetail() {
   const playWithQueue = usePlayerStore((s) => s.playWithQueue);
   const pause = usePlayerStore((s) => s.pause);
   const resume = usePlayerStore((s) => s.resume);
+
+  useShare(() => ({
+    title: `${el.id}音 · ${el.desc}`,
+    path: '/pages/home/index'
+  }));
 
   const back = () => Taro.navigateBack();
   const goMember = () => Taro.redirectTo({ url: '/pages/member/index' });

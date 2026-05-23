@@ -4,6 +4,7 @@ import Taro from '@tarojs/taro';
 import { ELEMENT_LIST, WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
 import { usePlayerStore } from '@/stores/player';
+import { useShare } from '@/utils/share';
 import Icon from '@/components/Icon';
 import { A } from '@/utils/color';
 import { getNavTop } from '@/utils/nav';
@@ -28,6 +29,11 @@ export default function Explore() {
   const resume = usePlayerStore((s) => s.resume);
 
   const we = WUXING[selected];
+
+  useShare(() => ({
+    title: `${we.id}音 · ${we.desc}，来五行律音听听`,
+    path: '/pages/home/index'
+  }));
 
   const goMember = () => Taro.redirectTo({ url: '/pages/member/index' });
 

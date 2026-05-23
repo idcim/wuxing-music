@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, ScrollView, Button } from '@tarojs/components';
-import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro';
+import Taro from '@tarojs/taro';
+import { useShare } from '@/utils/share';
 import { WUXING, ELEMENT_LIST } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
 import { usePlayerStore } from '@/stores/player';
@@ -33,15 +34,10 @@ export default function Home() {
 
   const [cdkeyOpen, setCdkeyOpen] = useState(false);
 
-  // 转发给好友
-  useShareAppMessage(() => ({
+  // 转发好友 + 朋友圈
+  useShare(() => ({
     title: `我的本命是${el.id}型·${el.note}音，来五行律音找你的助眠音律`,
-    path: '/pages/home/index'
-  }));
-  // 分享到朋友圈
-  useShareTimeline(() => ({
-    title: '五行律音 · 按体质定制的助眠音律',
-    query: ''
+    timelineTitle: '五行律音 · 按体质定制的助眠音律'
   }));
 
   const onTrack = (id: number) => {

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, Slider } from '@tarojs/components';
-import Taro, { useShareAppMessage } from '@tarojs/taro';
+import Taro from '@tarojs/taro';
+import { useShare } from '@/utils/share';
 import { usePlayerStore } from '@/stores/player';
 import { useUserStore } from '@/stores/user';
 import { WUXING } from '@/constants/wuxing';
@@ -44,11 +45,10 @@ export default function Player() {
   const [listOpen, setListOpen] = useState(false);
   const hasQueue = queue.length > 1;
 
-  useShareAppMessage(() => ({
+  useShare(() => ({
     title: currentTrack
       ? `我在听《${currentTrack.title}》· ${el.note}音助眠`
-      : '五行律音 · 按体质定制的助眠音律',
-    path: '/pages/home/index'
+      : '五行律音 · 按体质定制的助眠音律'
   }));
 
   const back = () => Taro.navigateBack();

@@ -5,6 +5,7 @@ import { PLANS } from '@/constants/plans';
 import { ELEMENT_LIST } from '@/constants/wuxing';
 import { purchasePlan, purchaseGift } from '@/services/pay';
 import { useUserStore } from '@/stores/user';
+import { useShare } from '@/utils/share';
 import Icon from '@/components/Icon';
 import { getNavTop } from '@/utils/nav';
 import MiniPlayer from '@/components/MiniPlayer';
@@ -27,6 +28,11 @@ export default function Member() {
   const currentType = useUserStore((s) => s.user?.membership.type);
   const element = useUserStore((s) => s.element);
   const updateMembership = useUserStore((s) => s.updateMembership);
+
+  useShare(() => ({
+    title: '五行律音会员 · 解锁全部助眠音律',
+    path: '/pages/member/index'
+  }));
 
   const buy = async (planId: PlanId) => {
     if (planId === 'free' || buying) return;
