@@ -1,42 +1,53 @@
 import Taro from '@tarojs/taro';
-import type { AudioService, AudioCallbacks } from './types';
+import type { AudioService, AudioCallbacks, AudioMeta } from './types';
 
-// 小程序音频实现：用 InnerAudioContext（前台），后台/锁屏阶段二切 BackgroundAudioManager
-let ctx: Taro.InnerAudioContext | null = null;
+// BackgroundAudioManager 为全局单例，支持锁屏/后台继续播放。
+// 注意：title 必填，否则 src 赋值会报错。
+let mgr: Taro.BackgroundAudioManager | null = null;
+
+function getMgr(): Taro.BackgroundAudioManager {
+  if (!mgr) mgr = Taro.getBackgroundAudioManager();
+  return mgr;
+}
 
 const service: AudioService = {
-  load(url, callbacks: AudioCallbacks = {}) {
-    if (ctx) ctx.destroy();
-    ctx = Taro.createInnerAudioContext();
-    ctx.src = url;
-    ctx.obeyMuteSwitch = false; // iOS 静音模式下仍可播放
+  load(url, meta: AudioMeta, callbacks: AudioCallbacks = {}) {
+    const m = getMgr();
 
-    if (callbacks.onPlay) ctx.onPlay(callbacks.onPlay);
-    if (callbacks.onPause) ctx.onPause(callbacks.onPause);
-    if (callbacks.onStop) ctx.onStop(callbacks.onStop);
-    if (callbacks.onEnded) ctx.onEnded(callbacks.onEnded);
-    if (callbacks.onError) ctx.onError((err) => callbacks.onError!(err));
+    // 重新绑定回调（off* 在部分基础库不可用，直接覆盖式 on*）
+    if (callbacks.onPlay) m.onPlay(callbacks.onPlay);
+    if (callbacks.onPause) m.onPause(callbacks.onPause);
+    if (callbacks.onStop) m.onStop(callbacks.onStop);
+    if (callbacks.onEnded) m.onEnded(callbacks.onEnded);
+    if (callbacks.onError) m.onError(() => callbacks.onError!(undefined));
+    if (callbacks.onWaiting) m.onWaiting(callbacks.onWaiting);
+    if (callbacks.onCanplay) m.onCanplay(callbacks.onCanplay);
     if (callbacks.onTimeUpdate) {
-      ctx.onTimeUpdate(() => {
-        callbacks.onTimeUpdate!(ctx!.currentTime, ctx!.duration);
-      });
+      m.onTimeUpdate(() => callbacks.onTimeUpdate!(m.currentTime, m.duration));
     }
+
+    // title 必须先于 src 设置
+    m.title = meta.title;
+    m.epname = meta.epname || '五行律音';
+    m.singer = meta.singer || '五行律音';
+    if (meta.coverImgUrl) m.coverImgUrl = meta.coverImgUrl;
+    m.src = url; // 赋值即开始加载并自动播放
   },
   play() {
-    ctx?.play();
+    getMgr().play();
   },
   pause() {
-    ctx?.pause();
+    getMgr().pause();
   },
   stop() {
-    ctx?.stop();
+    getMgr().stop();
   },
   seek(sec) {
-    ctx?.seek(sec);
+    getMgr().seek(sec);
   },
   destroy() {
-    ctx?.destroy();
-    ctx = null;
+    mgr?.stop();
+    mgr = null;
   }
 };
 

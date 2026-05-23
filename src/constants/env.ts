@@ -5,3 +5,8 @@ export const USE_MOCK = true;
 export const API_BASE = 'https://api.wuxingmusic.com';
 
 export const TOKEN_KEY = 'wx_token';
+
+// MOCK 模式下曲目 audioUrl 为空时，用此公开测试音频联调播放。
+// 微信小程序需在「开发设置 → 服务器域名 → downloadFile 合法域名」加入该域名。
+export const MOCK_AUDIO_URL =
+  'https://web-ext-storage.dcloud.net.cn/uni-app/ForElise.mp3';

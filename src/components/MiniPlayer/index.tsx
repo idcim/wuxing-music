@@ -10,6 +10,7 @@ import './index.scss';
 export default function MiniPlayer() {
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const isLoading = usePlayerStore((s) => s.isLoading);
   const progress = usePlayerStore((s) => s.progress);
   const pause = usePlayerStore((s) => s.pause);
   const resume = usePlayerStore((s) => s.resume);
@@ -34,7 +35,10 @@ export default function MiniPlayer() {
   if (!currentTrack) return null;
 
   const el = WUXING[element];
-  const toggle = () => (isPlaying ? pause() : resume());
+  const toggle = () => {
+    if (isLoading) return;
+    isPlaying ? pause() : resume();
+  };
 
   return (
     <View className="mini-player">
@@ -57,7 +61,11 @@ export default function MiniPlayer() {
           style={{ background: el.primary }}
           onClick={toggle}
         >
-          <Text className="mini-player__toggle-icon">{isPlaying ? '‖' : '▶'}</Text>
+          {isLoading ? (
+            <View className="mini-player__spinner" />
+          ) : (
+            <Text className="mini-player__toggle-icon">{isPlaying ? '‖' : '▶'}</Text>
+          )}
         </View>
       </View>
     </View>

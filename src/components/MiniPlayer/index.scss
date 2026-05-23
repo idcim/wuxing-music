@@ -67,4 +67,13 @@
       font-size: 26rpx;
     }
   }
+
+  &__spinner {
+    width: 28rpx;
+    height: 28rpx;
+    border-radius: 50%;
+    border: 4rpx solid rgba(10, 14, 26, 0.3);
+    border-top-color: #0a0e1a;
+    animation: rotate-slow 0.8s linear infinite;
+  }
 }
