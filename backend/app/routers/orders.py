@@ -29,6 +29,24 @@ def _to_dict(o: Order) -> dict:
     }
 
 
+def _user_brief(u: User | None) -> dict | None:
+    if not u:
+        return None
+    return {
+        "id": u.id,
+        "nickname": u.nickname,
+        "avatar": u.avatar,
+        "phone": u.phone,
+        "openid": u.openid,
+        "element": u.element,
+        "membership_type": u.membership_type,
+        "membership_name": u.membership_name,
+        "membership_expire_at": (
+            u.membership_expire_at.isoformat() if u.membership_expire_at else None
+        ),
+    }
+
+
 @router.get("")
 def list_orders(
     status: str | None = Query(None),
@@ -57,7 +75,10 @@ def get_order(
     o = db.query(Order).filter(Order.id == order_id).first()
     if not o:
         raise HTTPException(status_code=404, detail="订单不存在")
-    return ok(_to_dict(o))
+    user = db.query(User).filter(User.id == o.user_id).first()
+    data = _to_dict(o)
+    data["user"] = _user_brief(user)
+    return ok(data)
 
 
 @router.post("/{order_id}/refund")

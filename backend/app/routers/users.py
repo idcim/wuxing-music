@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -19,6 +20,7 @@ def _user_dict(u: User) -> dict:
         "unionid": u.unionid,
         "phone": u.phone,
         "nickname": u.nickname,
+        "avatar": u.avatar,
         "element": u.element,
         "membership_type": u.membership_type,
         "membership_name": u.membership_name,
@@ -44,6 +46,41 @@ def list_users(
     total = q.count()
     rows = q.order_by(User.id.desc()).offset((page - 1) * size).limit(size).all()
     return ok({"total": total, "items": [_user_dict(u) for u in rows]})
+
+
+@router.get("/users/{user_id}")
+def get_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    _: Admin = Depends(get_current_admin),
+):
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    data = _user_dict(u)
+    data["element_scores"] = json.loads(u.element_scores or "{}")
+    data["quiz_completed_at"] = (
+        u.quiz_completed_at.isoformat() if u.quiz_completed_at else None
+    )
+    # 该用户的订单
+    orders = (
+        db.query(Order)
+        .filter(Order.user_id == user_id)
+        .order_by(Order.id.desc())
+        .all()
+    )
+    data["orders"] = [
+        {
+            "id": o.id,
+            "order_no": o.order_no,
+            "plan_name": o.plan_name,
+            "amount": o.amount,
+            "status": o.status,
+            "created_at": o.created_at.isoformat() if o.created_at else None,
+        }
+        for o in orders
+    ]
+    return ok(data)
 
 
 class GrantIn(BaseModel):

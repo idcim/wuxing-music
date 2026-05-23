@@ -60,8 +60,38 @@
         <el-form-item label="频率"><el-input v-model="form.hz" placeholder="324Hz / 角调" /></el-form-item>
         <el-form-item label="标签"><el-input v-model="form.tag" /></el-form-item>
         <el-form-item label="播放量"><el-input v-model="form.plays" placeholder="12.4k" /></el-form-item>
-        <el-form-item label="音频URL"><el-input v-model="form.audio_url" placeholder="CDN 地址" /></el-form-item>
-        <el-form-item label="封面URL"><el-input v-model="form.cover_url" /></el-form-item>
+        <el-form-item label="音频">
+          <div class="up-row">
+            <el-upload
+              :action="UPLOAD_URL"
+              :headers="uploadHeaders"
+              :show-file-list="false"
+              accept="audio/*,.mp3,.m4a,.wav"
+              :on-success="onAudioSuccess"
+              :on-error="onUploadError"
+            >
+              <el-button :icon="Upload">上传音频</el-button>
+            </el-upload>
+            <el-input v-model="form.audio_url" placeholder="或填 CDN 地址" />
+          </div>
+          <audio v-if="form.audio_url" :src="form.audio_url" controls class="up-audio" />
+        </el-form-item>
+        <el-form-item label="封面">
+          <div class="up-row">
+            <el-upload
+              :action="UPLOAD_URL"
+              :headers="uploadHeaders"
+              :show-file-list="false"
+              accept="image/*"
+              :on-success="onCoverSuccess"
+              :on-error="onUploadError"
+            >
+              <img v-if="form.cover_url" :src="form.cover_url" class="up-cover" />
+              <el-button v-else :icon="Upload">上传封面</el-button>
+            </el-upload>
+            <el-input v-model="form.cover_url" placeholder="或填 CDN 地址" />
+          </div>
+        </el-form-item>
         <el-form-item label="会员专属"><el-switch v-model="form.is_premium" /></el-form-item>
         <el-form-item label="试听(秒)"><el-input-number v-model="form.preview_sec" :min="0" /></el-form-item>
         <el-form-item label="上架"><el-switch v-model="form.is_online" /></el-form-item>
@@ -76,10 +106,14 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
-import { Plus } from '@element-plus/icons-vue';
+import { computed, onMounted, ref } from 'vue';
+import { Plus, Upload } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { listTracks, createTrack, updateTrack, deleteTrack, listElements } from '@/api';
+import { listTracks, createTrack, updateTrack, deleteTrack, listElements, UPLOAD_URL } from '@/api';
+
+const uploadHeaders = computed(() => ({
+  Authorization: `Bearer ${localStorage.getItem('admin_token')}`
+}));
 
 const rows = ref<any[]>([]);
 const elements = ref<any[]>([]);
@@ -90,6 +124,26 @@ const loading = ref(false);
 const filterElement = ref('');
 const dialog = ref(false);
 const form = ref<any>({});
+
+function onAudioSuccess(res: any) {
+  if (res?.code === 0) {
+    form.value.audio_url = res.data.url;
+    ElMessage.success('音频已上传');
+  } else {
+    ElMessage.error(res?.msg || '上传失败');
+  }
+}
+function onCoverSuccess(res: any) {
+  if (res?.code === 0) {
+    form.value.cover_url = res.data.url;
+    ElMessage.success('封面已上传');
+  } else {
+    ElMessage.error(res?.msg || '上传失败');
+  }
+}
+function onUploadError() {
+  ElMessage.error('上传失败');
+}
 
 async function load() {
   loading.value = true;
@@ -157,4 +211,7 @@ onMounted(async () => {
 .toolbar { margin-bottom: 16px; display: flex; gap: 12px; }
 .pager { margin-top: 16px; justify-content: flex-end; }
 .hint { margin-left: 10px; color: #999; font-size: 12px; }
+.up-row { display: flex; gap: 12px; align-items: center; width: 100%; }
+.up-audio { display: block; margin-top: 10px; width: 100%; height: 36px; }
+.up-cover { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; }
 </style>

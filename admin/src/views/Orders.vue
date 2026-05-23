@@ -32,8 +32,9 @@
       <el-table-column label="支付时间" width="170">
         <template #default="{ row }">{{ fmt(row.paid_at) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="150" fixed="right">
+      <el-table-column label="操作" width="210" fixed="right">
         <template #default="{ row }">
+          <el-button size="small" @click="openDetail(row)">详情</el-button>
           <el-button v-if="row.status === 'paid'" size="small" type="warning" @click="openRefund(row)">退款</el-button>
           <el-button v-else-if="row.status === 'refunding'" size="small" type="danger" @click="onConfirm(row)">确认退款</el-button>
         </template>
@@ -42,6 +43,39 @@
 
     <el-pagination class="pager" layout="total, prev, pager, next" :total="total"
       :page-size="size" :current-page="page" @current-change="onPage" />
+
+    <!-- 订单详情 -->
+    <el-dialog v-model="detailDialog" title="订单详情" width="520px">
+      <el-descriptions :column="1" border title="订单信息">
+        <el-descriptions-item label="订单号">{{ detail.order_no }}</el-descriptions-item>
+        <el-descriptions-item label="套餐">{{ detail.plan_name }}（{{ detail.plan_id }}）</el-descriptions-item>
+        <el-descriptions-item label="金额">¥{{ detail.amount }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="statusType(detail.status)" size="small">{{ statusText(detail.status) }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="下单时间">{{ fmt(detail.created_at) }}</el-descriptions-item>
+        <el-descriptions-item label="支付时间">{{ fmt(detail.paid_at) }}</el-descriptions-item>
+        <el-descriptions-item v-if="detail.refund_amount" label="退款">
+          ¥{{ detail.refund_amount }} · {{ detail.refund_reason || '无原因' }}（{{ fmt(detail.refund_at) }}，{{ detail.refund_by }}）
+        </el-descriptions-item>
+      </el-descriptions>
+
+      <el-descriptions v-if="detail.user" :column="1" border title="用户信息" style="margin-top: 16px">
+        <el-descriptions-item label="用户">
+          {{ detail.user.nickname }}（ID {{ detail.user.id }}）
+        </el-descriptions-item>
+        <el-descriptions-item label="手机号">{{ detail.user.phone || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="体质">{{ detail.user.element || '未测评' }}</el-descriptions-item>
+        <el-descriptions-item label="会员">
+          {{ detail.user.membership_name }}
+          <span v-if="detail.user.membership_expire_at">（{{ fmt(detail.user.membership_expire_at) }} 到期）</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="openid">{{ detail.user.openid }}</el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <el-button type="primary" @click="detailDialog = false">关闭</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="refundDialog" title="发起退款" width="460px">
       <el-form label-width="90px">
@@ -68,7 +102,7 @@
 import { onMounted, reactive, ref } from 'vue';
 import { Search } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { listOrders, refundOrder, confirmRefund } from '@/api';
+import { listOrders, refundOrder, confirmRefund, getOrder } from '@/api';
 
 const rows = ref<any[]>([]);
 const total = ref(0);
@@ -82,6 +116,14 @@ const refundDialog = ref(false);
 const submitting = ref(false);
 const current = ref<any>({});
 const refundForm = reactive({ amount: 0, reason: '' });
+
+const detailDialog = ref(false);
+const detail = ref<any>({});
+
+async function openDetail(row: any) {
+  detail.value = await getOrder(row.id);
+  detailDialog.value = true;
+}
 
 function statusText(s: string) {
   return { pending: '待支付', paid: '已支付', refunding: '退款中', refunded: '已退款', failed: '失败', closed: '已关闭' }[s] || s;

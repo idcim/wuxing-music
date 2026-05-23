@@ -26,14 +26,54 @@
       <el-table-column label="注册时间" width="170">
         <template #default="{ row }">{{ fmt(row.created_at) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="120" fixed="right">
+      <el-table-column label="操作" width="180" fixed="right">
         <template #default="{ row }">
+          <el-button size="small" @click="openDetail(row)">详情</el-button>
           <el-button size="small" type="primary" @click="openGrant(row)">开通会员</el-button>
         </template>
       </el-table-column>
     </el-table>
     <el-pagination class="pager" layout="total, prev, pager, next" :total="total"
       :page-size="size" :current-page="page" @current-change="onPage" />
+
+    <!-- 用户详情 -->
+    <el-dialog v-model="detailDialog" title="用户详情" width="560px">
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="昵称">{{ detail.nickname }}</el-descriptions-item>
+        <el-descriptions-item label="ID">{{ detail.id }}</el-descriptions-item>
+        <el-descriptions-item label="手机号">{{ detail.phone || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="体质">{{ detail.element || '未测评' }}</el-descriptions-item>
+        <el-descriptions-item label="会员">{{ detail.membership_name }}</el-descriptions-item>
+        <el-descriptions-item label="来源">{{ srcText(detail.membership_source) }}</el-descriptions-item>
+        <el-descriptions-item label="到期">{{ fmt(detail.membership_expire_at) }}</el-descriptions-item>
+        <el-descriptions-item label="注册">{{ fmt(detail.created_at) }}</el-descriptions-item>
+        <el-descriptions-item label="openid" :span="2">{{ detail.openid }}</el-descriptions-item>
+        <el-descriptions-item v-if="detail.unionid" label="unionid" :span="2">{{ detail.unionid }}</el-descriptions-item>
+      </el-descriptions>
+
+      <div v-if="scoreList.length" class="detail-block">
+        <div class="detail-title">五行测评分布</div>
+        <el-tag v-for="s in scoreList" :key="s.k" class="score-tag">{{ s.k }} {{ s.v }}</el-tag>
+      </div>
+
+      <div class="detail-block">
+        <div class="detail-title">订单（{{ (detail.orders || []).length }}）</div>
+        <el-table v-if="detail.orders && detail.orders.length" :data="detail.orders" size="small" border>
+          <el-table-column prop="order_no" label="订单号" min-width="160" />
+          <el-table-column prop="plan_name" label="套餐" width="80" />
+          <el-table-column label="金额" width="80">
+            <template #default="{ row }">¥{{ row.amount }}</template>
+          </el-table-column>
+          <el-table-column label="状态" width="90">
+            <template #default="{ row }">{{ statusText(row.status) }}</template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-else description="暂无订单" :image-size="60" />
+      </div>
+      <template #footer>
+        <el-button type="primary" @click="detailDialog = false">关闭</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="grantDialog" title="开通 / 赠送会员" width="440px">
       <el-form label-width="90px">
@@ -64,7 +104,7 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
-import { listUsers, grantMembership, listPlans } from '@/api';
+import { listUsers, grantMembership, listPlans, getUser } from '@/api';
 
 const rows = ref<any[]>([]);
 const total = ref(0);
@@ -73,6 +113,24 @@ const size = ref(20);
 const loading = ref(false);
 const keyword = ref('');
 const plans = ref<any[]>([]);
+
+const detailDialog = ref(false);
+const detail = ref<any>({});
+const scoreList = computed(() =>
+  Object.entries(detail.value.element_scores || {}).map(([k, v]) => ({ k, v }))
+);
+
+async function openDetail(row: any) {
+  detail.value = await getUser(row.id);
+  detailDialog.value = true;
+}
+
+function srcText(s?: string) {
+  return { purchase: '购买', cdkey: '兑换', gift: '赠送', '': '免费' }[s || ''] || s;
+}
+function statusText(s: string) {
+  return { pending: '待支付', paid: '已支付', refunding: '退款中', refunded: '已退款', failed: '失败', closed: '已关闭' }[s] || s;
+}
 
 const grantDialog = ref(false);
 const submitting = ref(false);
@@ -136,4 +194,7 @@ onMounted(async () => {
 .pager { margin-top: 16px; justify-content: flex-end; }
 .src { margin-left: 4px; }
 .hint { margin-left: 10px; color: #999; font-size: 12px; }
+.detail-block { margin-top: 16px; }
+.detail-title { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
+.score-tag { margin: 0 8px 8px 0; }
 </style>
