@@ -5,11 +5,12 @@
   left: 0;
   right: 0;
   bottom: 0;
-  height: 136rpx;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   background: rgba(5, 8, 15, 0.95);
   border-top: 2rpx solid rgba(255, 255, 255, 0.04);
+  // 安全区垫在内容之外，导航本体高度由内容决定，避免被压扁/溢出
+  padding-bottom: constant(safe-area-inset-bottom);
   padding-bottom: env(safe-area-inset-bottom);
   z-index: 60;
 
@@ -20,8 +21,8 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8rpx;
-    padding: 20rpx 0;
+    gap: 6rpx;
+    padding: 14rpx 0;
   }
 
   &__indicator {
