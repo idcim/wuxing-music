@@ -55,5 +55,9 @@ export const updateSiteSetting = (data: any) => req.put('/api/admin/settings/sit
 export const getStorageSetting = () => req.get('/api/admin/settings/storage');
 export const updateStorageSetting = (data: any) => req.put('/api/admin/settings/storage', data);
 
+// ── 小程序配置 ──
+export const getMpSetting = () => req.get('/api/admin/settings/mp');
+export const updateMpSetting = (data: any) => req.put('/api/admin/settings/mp', data);
+
 // 上传接口地址（el-upload 直传用）
 export const UPLOAD_URL = '/api/admin/upload';

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Admin, Setting
-from app.schemas import PaySettingIn, SiteSettingIn, StorageSettingIn, ok
+from app.schemas import MpSettingIn, PaySettingIn, SiteSettingIn, StorageSettingIn, ok
 from app.security import get_current_admin
 
 router = APIRouter(prefix="/api/admin/settings", tags=["settings"])
@@ -13,10 +13,12 @@ router = APIRouter(prefix="/api/admin/settings", tags=["settings"])
 PAY_KEY = "pay_config"
 SITE_KEY = "site_config"
 STORAGE_KEY = "storage_config"
+MP_KEY = "mp_config"
 
 # 敏感字段：不回传明文，仅返回 {field}_set 表示是否已配置
 PAY_SECRETS = {"wx_api_key", "wx_key_pem", "wx_cert_pem"}
 STORAGE_SECRETS = {"oss_access_key_secret"}
+MP_SECRETS = {"app_secret"}
 
 
 def _get_setting(db: Session, key: str) -> dict:
@@ -99,4 +101,22 @@ def update_storage(
     current = _get_setting(db, STORAGE_KEY)
     incoming = _merge_secrets(body.model_dump(), current, STORAGE_SECRETS)
     _save_setting(db, STORAGE_KEY, incoming)
+    return ok({"saved": True})
+
+
+# ── 小程序配置 ──
+@router.get("/mp")
+def get_mp(db: Session = Depends(get_db), _: Admin = Depends(get_current_admin)):
+    return ok(_mask(_get_setting(db, MP_KEY), MP_SECRETS))
+
+
+@router.put("/mp")
+def update_mp(
+    body: MpSettingIn,
+    db: Session = Depends(get_db),
+    _: Admin = Depends(get_current_admin),
+):
+    current = _get_setting(db, MP_KEY)
+    incoming = _merge_secrets(body.model_dump(), current, MP_SECRETS)
+    _save_setting(db, MP_KEY, incoming)
     return ok({"saved": True})

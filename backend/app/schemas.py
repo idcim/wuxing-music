@@ -138,6 +138,16 @@ class StorageSettingIn(BaseModel):
     oss_base_url: str = ""      # 自定义域名/CDN 前缀
 
 
+# ── 小程序配置 ──
+class MpSettingIn(BaseModel):
+    app_id: str = ""            # 小程序 AppID（公开）
+    app_secret: str = ""        # AppSecret（脱敏，后端 code→openid 用）
+    original_id: str = ""       # 原始 ID（gh_xxx）
+    mp_name: str = ""           # 小程序名称
+    customer_service: str = ""  # 客服号/方式
+    env_version: str = "release"  # release | trial | develop
+
+
 # ── 退款 ──
 class RefundIn(BaseModel):
     reason: str = ""

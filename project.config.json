@@ -2,9 +2,9 @@
   "miniprogramRoot": "dist/",
   "projectname": "wuxing-music",
   "description": "五行律音 · 安神助眠音乐小程序",
-  "appid": "touristappid",
+  "appid": "wx8afe04cf46b7ad14",
   "setting": {
-    "urlCheck": true,
+    "urlCheck": false,
     "es6": false,
     "enhance": false,
     "postcss": false,
