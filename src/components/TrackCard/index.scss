@@ -11,14 +11,29 @@
   transition: all 0.25s;
 
   &__btn {
+    position: relative;
     width: 92rpx;
     height: 92rpx;
     border-radius: 26rpx;
     flex-shrink: 0;
     border: 2rpx solid;
+    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  &__cover {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  &__cover-mask {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
   }
 
   &__lock {

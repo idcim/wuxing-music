@@ -1,6 +1,7 @@
-import { View, Text } from '@tarojs/components';
+import { View, Text, Image } from '@tarojs/components';
 import Icon from '@/components/Icon';
 import { A } from '@/utils/color';
+import { resolveUrl } from '@/utils/url';
 import type { Track, WuxingElement } from '@/types';
 import './index.scss';
 
@@ -34,12 +35,21 @@ export default function TrackCard({
           borderColor: isActive ? el.primary : A.a30(el.primary)
         }}
       >
+        {/* 有封面则铺底显示，播放图标叠在半透明蒙版上 */}
+        {track.coverUrl && (
+          <Image
+            className="track-card__cover"
+            src={resolveUrl(track.coverUrl)}
+            mode="aspectFill"
+          />
+        )}
+        {track.coverUrl && <View className="track-card__cover-mask" />}
         {locked ? (
-          <Icon name="lock" size={24} color={el.accent} strokeWidth={1.8} />
+          <Icon name="lock" size={24} color={track.coverUrl ? '#fff' : el.accent} strokeWidth={1.8} />
         ) : isActive ? (
-          <Icon name="pause" size={28} fill="#0a0e1a" strokeWidth={0} color="#0a0e1a" />
+          <Icon name="pause" size={28} fill={track.coverUrl ? '#fff' : '#0a0e1a'} strokeWidth={0} color={track.coverUrl ? '#fff' : '#0a0e1a'} />
         ) : (
-          <Icon name="play" size={26} fill={el.primary} strokeWidth={0} color={el.primary} />
+          <Icon name="play" size={26} fill={track.coverUrl ? '#fff' : el.primary} strokeWidth={0} color={track.coverUrl ? '#fff' : el.primary} />
         )}
       </View>
 

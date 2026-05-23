@@ -23,9 +23,15 @@
     border-radius: 24rpx;
     border: 2rpx solid;
     flex-shrink: 0;
+    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  &__cover-img {
+    width: 100%;
+    height: 100%;
   }
 
   &__info {

@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useState } from 'react';
-import { View, Text } from '@tarojs/components';
+import { View, Text, Image } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { usePlayerStore } from '@/stores/player';
 import { useUserStore } from '@/stores/user';
 import { WUXING } from '@/constants/wuxing';
 import { A } from '@/utils/color';
+import { resolveUrl } from '@/utils/url';
 import Icon from '@/components/Icon';
 import SleepTimer from '@/components/SleepTimer';
 import type { ElementId } from '@/types';
@@ -69,7 +70,11 @@ export default function MiniPlayer() {
           }}
           onClick={() => Taro.navigateTo({ url: '/pages/player/index' })}
         >
-          <Icon name={el.icon as IconName} size={36} color={el.primary} strokeWidth={1.5} />
+          {currentTrack.coverUrl ? (
+            <Image className="mini-player__cover-img" src={resolveUrl(currentTrack.coverUrl)} mode="aspectFill" />
+          ) : (
+            <Icon name={el.icon as IconName} size={36} color={el.primary} strokeWidth={1.5} />
+          )}
         </View>
 
         <View className="mini-player__info">

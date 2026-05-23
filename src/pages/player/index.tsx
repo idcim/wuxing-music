@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { View, Text, Slider } from '@tarojs/components';
+import { View, Text, Slider, Image } from '@tarojs/components';
 import Taro, { useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/taro';
 import { openShareMenu } from '@/utils/share';
 import { usePlayerStore } from '@/stores/player';
 import { useUserStore } from '@/stores/user';
 import { WUXING } from '@/constants/wuxing';
 import { fmtTime } from '@/utils/format';
+import { resolveUrl } from '@/utils/url';
 import Icon from '@/components/Icon';
 import SleepTimer from '@/components/SleepTimer';
 import Playlist from '@/components/Playlist';
@@ -97,7 +98,11 @@ export default function Player() {
             className="player__disc-core serif"
             style={{ color: el.primary, background: `radial-gradient(circle, ${el.primary}26, ${el.primary}0d)` }}
           >
-            <Text className="player__disc-el">{el.id}</Text>
+            {currentTrack.coverUrl ? (
+              <Image className="player__disc-cover" src={resolveUrl(currentTrack.coverUrl)} mode="aspectFill" />
+            ) : (
+              <Text className="player__disc-el">{el.id}</Text>
+            )}
           </View>
         </View>
       </View>
