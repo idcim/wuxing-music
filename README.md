@@ -18,6 +18,7 @@ wuxing-music/
 │   ├── constants/       #   五行配置 / 测评题库 / 套餐 / env(USE_MOCK 开关)
 │   └── ...
 ├── backend/             # 管理后端（FastAPI + SQLAlchemy + 外部 MySQL，Docker 部署）
+├── admin/               # 管理后台（Vue3 + Vite + Element Plus）
 ├── prototype/           # 原型参考（React Web 版）
 └── CLAUDE.md            # 项目规范与协作约定
 ```
@@ -74,11 +75,25 @@ docker compose up -d --build
 
 ---
 
+## 管理后台
+
+技术栈：Vue3 + Vite + Element Plus + Pinia。详见 [admin/README.md](admin/README.md)。
+
+```bash
+cd admin
+npm install
+npm run dev          # http://localhost:5173（/api 已代理到后端 8000）
+```
+
+页面：登录、仪表盘、歌曲管理（分页/筛选）、五行、套餐、兑换码（批量生成/导出/禁用）、测评、用户、支付设置。
+
+---
+
 ## 路线图
 
 - [x] 小程序前端主流程 + 播放体验
 - [x] FastAPI 管理后端骨架 + 核心 CRUD + Docker（外部 MySQL）
-- [ ] 管理后台界面（Vue3 + Element Plus）
+- [x] 管理后台界面（Vue3 + Element Plus）
 - [ ] 小程序公开接口（让 `USE_MOCK=false` 真连后端）
 - [ ] 微信支付统一下单 + 回调验签
 - [ ] 离线下载 / 周聆听统计 / 分享卡片
