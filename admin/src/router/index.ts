@@ -17,9 +17,10 @@ const router = createRouter({
         { path: 'quiz', component: () => import('@/views/Quiz.vue'), meta: { title: '测评管理' } },
         { path: 'orders', component: () => import('@/views/Orders.vue'), meta: { title: '订单管理' } },
         { path: 'users', component: () => import('@/views/Users.vue'), meta: { title: '用户' } },
-        { path: 'site', component: () => import('@/views/Site.vue'), meta: { title: '站点设置' } },
-        { path: 'storage', component: () => import('@/views/Storage.vue'), meta: { title: '存储设置' } },
-        { path: 'settings', component: () => import('@/views/Settings.vue'), meta: { title: '支付设置' } }
+        { path: 'settings', component: () => import('@/views/SettingsCenter.vue'), meta: { title: '站点设置' } },
+        // 旧路径重定向到合并后的设置中心
+        { path: 'site', redirect: '/settings' },
+        { path: 'storage', redirect: '/settings' }
       ]
     }
   ]

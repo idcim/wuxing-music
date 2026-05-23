@@ -1,7 +1,7 @@
 <template>
   <div>
     <el-card style="max-width: 720px" v-loading="loading">
-      <template #header>站点设置</template>
+      <template #header>站点信息</template>
       <el-form :model="form" label-width="110px">
         <el-form-item label="项目名称">
           <el-input v-model="form.site_name" placeholder="五行律音" />
