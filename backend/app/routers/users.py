@@ -49,4 +49,5 @@ def dashboard(db: Session = Depends(get_db), _: Admin = Depends(get_current_admi
         "cdkeys_total": db.query(Cdkey).count(),
         "cdkeys_used": db.query(Cdkey).filter(Cdkey.status == "used").count(),
         "orders_paid": db.query(Order).filter(Order.status == "paid").count(),
+        "orders_refunded": db.query(Order).filter(Order.status == "refunded").count(),
     })

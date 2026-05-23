@@ -17,6 +17,7 @@ from app.routers import (
     auth,
     cdkeys,
     elements,
+    orders,
     plans,
     quiz,
     settings as settings_router,
@@ -44,6 +45,39 @@ def _safe_db_url() -> str:
     return url
 
 
+def _auto_migrate() -> None:
+    """轻量自动迁移：为已存在的表补齐模型新增列（无 Alembic 的开发态用）。
+    仅做加列，不改类型/不删列，避免破坏数据。"""
+    from sqlalchemy import inspect
+
+    insp = inspect(engine)
+    for table in Base.metadata.sorted_tables:
+        if not insp.has_table(table.name):
+            continue
+        existing = {c["name"] for c in insp.get_columns(table.name)}
+        for col in table.columns:
+            if col.name in existing:
+                continue
+            try:
+                col_type = col.type.compile(dialect=engine.dialect)
+                default = ""
+                if col.default is not None and getattr(col.default, "arg", None) is not None:
+                    arg = col.default.arg
+                    if isinstance(arg, str):
+                        default = f" DEFAULT '{arg}'"
+                    elif isinstance(arg, (int, float)):
+                        default = f" DEFAULT {arg}"
+                    elif isinstance(arg, bool):
+                        default = f" DEFAULT {1 if arg else 0}"
+                with engine.begin() as conn:
+                    conn.exec_driver_sql(
+                        f"ALTER TABLE `{table.name}` ADD COLUMN `{col.name}` {col_type}{default}"
+                    )
+                logger.info("自动迁移：%s 加列 %s", table.name, col.name)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("自动迁移 %s.%s 失败（可忽略）：%s", table.name, col.name, e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 先探活数据库，连不上时给出清晰提示而非整篇 traceback
@@ -59,6 +93,7 @@ async def lifespan(app: FastAPI):
         raise SystemExit(1)
 
     Base.metadata.create_all(bind=engine)
+    _auto_migrate()
     db = SessionLocal()
     try:
         seed(db)
@@ -104,6 +139,7 @@ app.include_router(quiz.router)
 app.include_router(elements.router)
 app.include_router(settings_router.router)
 app.include_router(users.router)
+app.include_router(orders.router)
 app.include_router(upload.router)
 app.include_router(site.router)
 

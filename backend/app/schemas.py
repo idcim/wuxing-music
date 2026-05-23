@@ -138,6 +138,12 @@ class StorageSettingIn(BaseModel):
     oss_base_url: str = ""      # 自定义域名/CDN 前缀
 
 
+# ── 退款 ──
+class RefundIn(BaseModel):
+    reason: str = ""
+    amount: Optional[float] = None   # 不传则全额退
+
+
 # ── 分页 ──
 class PageOut(BaseModel):
     total: int

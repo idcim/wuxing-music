@@ -145,10 +145,17 @@ class Order(Base):
     order_no: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     user_id: Mapped[int] = mapped_column(Integer, index=True)
     plan_id: Mapped[str] = mapped_column(String(16))
+    plan_name: Mapped[str] = mapped_column(String(32), default="")
     amount: Mapped[float] = mapped_column(Float)
-    status: Mapped[str] = mapped_column(String(16), default="pending")  # pending/paid/failed/refunded
+    # pending/paid/refunding/refunded/failed/closed
+    status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    # 退款相关
+    refund_amount: Mapped[float] = mapped_column(Float, default=0)
+    refund_reason: Mapped[str] = mapped_column(String(255), default="")
+    refund_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    refund_by: Mapped[str] = mapped_column(String(64), default="")  # 操作管理员
 
 
 class QuizQuestion(Base):

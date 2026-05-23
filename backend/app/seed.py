@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -7,9 +8,11 @@ from app.models import (
     Admin,
     Cdkey,
     Element,
+    Order,
     Plan,
     QuizQuestion,
     Track,
+    User,
 )
 from app.security import hash_password
 
@@ -194,5 +197,29 @@ def seed(db: Session) -> None:
                 code=code, batch_id="seed", plan_type=ptype,
                 duration_days=days, plan_name=pname,
             ))
+
+    # 示例用户 + 订单（便于后台订单/退单演示）
+    if db.query(Order).count() == 0:
+        demo = db.query(User).filter(User.openid == "demo-openid").first()
+        if not demo:
+            demo = User(
+                openid="demo-openid", nickname="示例用户", element="水",
+                membership_type="year", membership_name="年藏",
+                membership_expire_at=datetime.utcnow() + timedelta(days=365),
+                membership_source="purchase",
+            )
+            db.add(demo)
+            db.flush()  # 拿到 demo.id
+        now_ = datetime.utcnow()
+        db.add(Order(
+            order_no="WX" + now_.strftime("%Y%m%d") + "0001", user_id=demo.id,
+            plan_id="year", plan_name="年藏", amount=128,
+            status="paid", paid_at=now_,
+        ))
+        db.add(Order(
+            order_no="WX" + now_.strftime("%Y%m%d") + "0002", user_id=demo.id,
+            plan_id="month", plan_name="月悦", amount=18,
+            status="pending",
+        ))
 
     db.commit()
