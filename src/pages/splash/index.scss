@@ -1,32 +1,81 @@
 @import '../../styles/variables.scss';
 
 .splash {
+  position: relative;
   height: 100vh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: $bg-deep;
+  background: radial-gradient(ellipse at 50% 40%, #0a0e1a 0%, #03050a 100%);
 
-  &__compass {
-    width: 240rpx;
-    height: 240rpx;
+  &__star {
+    position: absolute;
     border-radius: 50%;
-    border: 2rpx solid rgba(226, 232, 240, 0.15);
-    margin-bottom: 60rpx;
-    animation: rotate-slow 36s linear infinite;
+    background: #fff;
+    opacity: 0.4;
+    animation: star-twinkle ease-in-out infinite;
+  }
+
+  &__moon {
+    position: relative;
+    margin-bottom: 64rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &__moon-halo {
+    position: absolute;
+    left: -40rpx;
+    right: -40rpx;
+    top: -40rpx;
+    bottom: -40rpx;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(56, 189, 248, 0.15), transparent 70%);
+    animation: pulse-ring 3s ease-out infinite;
+  }
+
+  &__en {
+    font-size: 28rpx;
+    color: $text-secondary;
+    letter-spacing: 16rpx;
+    margin-bottom: 8rpx;
+    text-indent: 16rpx; // 补偿字距导致的整体偏移
   }
 
   &__title {
+    font-family: 'STSong', 'Songti SC', serif;
     font-size: 64rpx;
-    letter-spacing: 12rpx;
+    font-weight: 200;
     color: $text-primary;
+    letter-spacing: 24rpx;
+    margin-bottom: 48rpx;
+    text-indent: 24rpx;
   }
 
-  &__sub {
-    margin-top: 24rpx;
+  &__slogan {
     font-size: 24rpx;
-    letter-spacing: 4rpx;
-    color: $text-tertiary;
+    color: $text-quaternary;
+    letter-spacing: 8rpx;
+    text-indent: 8rpx;
+  }
+
+  &__loader {
+    position: absolute;
+    bottom: 160rpx;
+    width: 160rpx;
+    height: 2rpx;
+    overflow: hidden;
+    background: linear-gradient(90deg, transparent, #475569, transparent);
+  }
+
+  &__loader-bar {
+    height: 100%;
+    width: 30%;
+    background: linear-gradient(90deg, transparent, #cbd5e1, transparent);
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
   }
 }

@@ -1,51 +1,125 @@
 @import '../../styles/variables.scss';
 
 .onboard {
-  min-height: 100vh;
-  padding: 120rpx $pad-outer 80rpx;
+  position: relative;
+  height: 100vh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: $bg-deep;
+  align-items: center;
+  justify-content: center;
+  padding: 0 64rpx;
+  text-align: center;
+  background: radial-gradient(ellipse at 50% 30%, #0a0e1a 0%, #03050a 100%);
 
-  &__skip {
-    align-self: flex-end;
-    font-size: 26rpx;
-    color: $text-tertiary;
+  &__star {
+    position: absolute;
+    width: 2rpx;
+    height: 2rpx;
+    border-radius: 50%;
+    background: #fff;
+    opacity: 0.3;
+    animation: star-twinkle ease-in-out infinite;
   }
 
-  &__body {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
+  &__head {
+    margin-bottom: 8rpx;
+  }
+
+  &__tagline {
+    display: block;
+    font-size: 26rpx;
+    color: $text-tertiary;
+    letter-spacing: 8rpx;
+    margin-bottom: 32rpx;
   }
 
   &__title {
+    display: block;
+    font-family: 'STSong', 'Songti SC', serif;
     font-size: 56rpx;
-    letter-spacing: 8rpx;
+    font-weight: 200;
     color: $text-primary;
+    letter-spacing: 8rpx;
+    margin-bottom: 32rpx;
   }
 
   &__desc {
-    margin-top: 40rpx;
-    font-size: 28rpx;
-    line-height: 1.9;
-    color: $text-secondary;
+    display: block;
+    font-size: 26rpx;
+    color: $text-tertiary;
+    line-height: 2;
     white-space: pre-line;
   }
 
-  &__btn {
-    height: 96rpx;
-    border-radius: $radius-pill;
-    background: $text-primary;
+  // ── 罗盘 ──
+  &__compass {
+    position: relative;
+    width: 480rpx;
+    height: 480rpx;
+    margin: 112rpx 0;
+  }
+
+  &__ring {
+    position: absolute;
+    border-radius: 50%;
+
+    &--outer {
+      inset: 0;
+      border: 2rpx solid rgba(255, 255, 255, 0.06);
+    }
+
+    &--inner {
+      inset: 48rpx;
+      border: 2rpx dashed rgba(255, 255, 255, 0.04);
+    }
+  }
+
+  &__node {
+    position: absolute;
+    width: 112rpx;
+    height: 112rpx;
+    border-radius: 50%;
+    border: 2rpx solid;
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  &__center {
+    position: absolute;
+    inset: 180rpx;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.04), transparent);
+    border: 2rpx solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  // ── CTA ──
+  &__btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20rpx;
+    padding: 28rpx 88rpx;
+    border-radius: 80rpx;
+    background: linear-gradient(135deg, #f8fafc, #cbd5e1);
+    box-shadow: 0 20rpx 80rpx rgba(203, 213, 225, 0.15);
 
     &-text {
-      color: $bg-deep;
-      font-size: 30rpx;
-      letter-spacing: 4rpx;
+      color: #0a0e1a;
+      font-size: 28rpx;
+      font-weight: 500;
+      letter-spacing: 6rpx;
     }
+  }
+
+  &__skip {
+    margin-top: 36rpx;
+    font-size: 24rpx;
+    color: $text-quaternary;
+    letter-spacing: 4rpx;
   }
 }
