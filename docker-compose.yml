@@ -13,6 +13,9 @@ services:
       - ./backend/.env
     ports:
       - "8000:8000"
+    # 上传文件持久化（本地存储模式）
+    volumes:
+      - uploads_data:/app/uploads
     # 让容器能用 host.docker.internal 访问宿主机上的 MySQL
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -26,3 +29,6 @@ services:
       - "8080:80"          # 后台访问入口：http://localhost:8080
     depends_on:
       - api
+
+volumes:
+  uploads_data:

@@ -1,18 +1,35 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings
 from app.database import Base, SessionLocal, engine
+from app.routers import (
+    auth,
+    cdkeys,
+    elements,
+    plans,
+    quiz,
+    settings as settings_router,
+    site,
+    tracks,
+    upload,
+    users,
+)
+from app.seed import seed
 
 logger = logging.getLogger("uvicorn.error")
+
+UPLOAD_DIR = "uploads"
 
 
 def _safe_db_url() -> str:
@@ -25,17 +42,6 @@ def _safe_db_url() -> str:
             user = creds.split(":", 1)[0]
             return f"{scheme}://{user}:***@{host}"
     return url
-from app.routers import (
-    auth,
-    cdkeys,
-    elements,
-    plans,
-    quiz,
-    settings as settings_router,
-    tracks,
-    users,
-)
-from app.seed import seed
 
 
 @asynccontextmanager
@@ -98,6 +104,12 @@ app.include_router(quiz.router)
 app.include_router(elements.router)
 app.include_router(settings_router.router)
 app.include_router(users.router)
+app.include_router(upload.router)
+app.include_router(site.router)
+
+# 本地上传文件的静态托管
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
 @app.get("/api/health")

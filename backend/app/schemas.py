@@ -108,9 +108,34 @@ class QuizQuestionOut(QuizQuestionIn):
 class PaySettingIn(BaseModel):
     wx_app_id: str = ""
     wx_mch_id: str = ""
-    wx_api_key: str = ""
+    wx_api_key: str = ""          # APIv3 密钥（脱敏）
     notify_url: str = ""
     enabled: bool = False
+    # 微信支付 API 证书（商户私钥/证书 PEM 文本 + 证书序列号）
+    wx_cert_serial: str = ""
+    wx_cert_pem: str = ""         # apiclient_cert.pem（脱敏）
+    wx_key_pem: str = ""          # apiclient_key.pem（脱敏，敏感）
+
+
+# ── 站点设置 ──
+class SiteSettingIn(BaseModel):
+    site_name: str = "五行律音"
+    logo_url: str = ""
+    icp_no: str = ""             # 备案号
+    contact_email: str = ""
+    contact_phone: str = ""
+    about_us: str = ""          # 关于我们（富文本/纯文本）
+    service_terms: str = ""     # 服务条款
+
+
+# ── 存储设置 ──
+class StorageSettingIn(BaseModel):
+    provider: str = "local"     # local | oss
+    oss_endpoint: str = ""
+    oss_bucket: str = ""
+    oss_access_key_id: str = ""
+    oss_access_key_secret: str = ""  # 脱敏
+    oss_base_url: str = ""      # 自定义域名/CDN 前缀
 
 
 # ── 分页 ──
