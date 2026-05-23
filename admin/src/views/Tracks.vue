@@ -67,14 +67,24 @@
               :headers="uploadHeaders"
               :show-file-list="false"
               accept="audio/*,.mp3,.m4a,.wav"
+              :before-upload="() => { audioUploading = true; audioPct = 0; }"
+              :on-progress="(e: any) => { audioPct = Math.round(e.percent || 0); }"
               :on-success="onAudioSuccess"
               :on-error="onUploadError"
             >
-              <el-button :icon="Upload">上传音频</el-button>
+              <el-button :icon="Upload" :loading="audioUploading" :disabled="audioUploading">
+                {{ audioUploading ? `上传中 ${audioPct}%` : '上传音频' }}
+              </el-button>
             </el-upload>
             <el-input v-model="form.audio_url" placeholder="或填 CDN 地址" />
           </div>
-          <audio v-if="form.audio_url" :src="form.audio_url" controls class="up-audio" />
+          <el-progress
+            v-if="audioUploading"
+            :percentage="audioPct"
+            :stroke-width="6"
+            style="margin-top: 8px"
+          />
+          <audio v-if="form.audio_url && !audioUploading" :src="form.audio_url" controls class="up-audio" />
         </el-form-item>
         <el-form-item label="封面">
           <div class="up-row">
@@ -83,10 +93,16 @@
               :headers="uploadHeaders"
               :show-file-list="false"
               accept="image/*"
+              :before-upload="() => { coverUploading = true; coverPct = 0; }"
+              :on-progress="(e: any) => { coverPct = Math.round(e.percent || 0); }"
               :on-success="onCoverSuccess"
               :on-error="onUploadError"
             >
-              <img v-if="form.cover_url" :src="form.cover_url" class="up-cover" />
+              <div v-if="coverUploading" class="up-cover up-cover--loading">
+                <el-icon class="is-loading"><Loading /></el-icon>
+                <span class="up-cover-pct">{{ coverPct }}%</span>
+              </div>
+              <img v-else-if="form.cover_url" :src="form.cover_url" class="up-cover" />
               <el-button v-else :icon="Upload">上传封面</el-button>
             </el-upload>
             <el-input v-model="form.cover_url" placeholder="或填 CDN 地址" />
@@ -107,13 +123,19 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { Plus, Upload } from '@element-plus/icons-vue';
+import { Plus, Upload, Loading } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { listTracks, createTrack, updateTrack, deleteTrack, listElements, UPLOAD_URL } from '@/api';
 
 const uploadHeaders = computed(() => ({
   Authorization: `Bearer ${localStorage.getItem('admin_token')}`
 }));
+
+// 上传进度/状态
+const audioUploading = ref(false);
+const audioPct = ref(0);
+const coverUploading = ref(false);
+const coverPct = ref(0);
 
 const rows = ref<any[]>([]);
 const elements = ref<any[]>([]);
@@ -126,6 +148,7 @@ const dialog = ref(false);
 const form = ref<any>({});
 
 function onAudioSuccess(res: any) {
+  audioUploading.value = false;
   if (res?.code === 0) {
     form.value.audio_url = res.data.url;
     ElMessage.success('音频已上传');
@@ -134,6 +157,7 @@ function onAudioSuccess(res: any) {
   }
 }
 function onCoverSuccess(res: any) {
+  coverUploading.value = false;
   if (res?.code === 0) {
     form.value.cover_url = res.data.url;
     ElMessage.success('封面已上传');
@@ -142,6 +166,8 @@ function onCoverSuccess(res: any) {
   }
 }
 function onUploadError() {
+  audioUploading.value = false;
+  coverUploading.value = false;
   ElMessage.error('上传失败');
 }
 
@@ -214,4 +240,15 @@ onMounted(async () => {
 .up-row { display: flex; gap: 12px; align-items: center; width: 100%; }
 .up-audio { display: block; margin-top: 10px; width: 100%; height: 36px; }
 .up-cover { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; }
+.up-cover--loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px dashed #d9d9d9;
+  color: #999;
+  font-size: 12px;
+}
+.up-cover-pct { font-size: 12px; }
 </style>
