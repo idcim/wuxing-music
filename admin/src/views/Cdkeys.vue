@@ -7,7 +7,12 @@
         <el-option label="已禁用" value="disabled" />
         <el-option label="已过期" value="expired" />
       </el-select>
+      <el-input v-model="filterBatch" placeholder="按批次号筛选" clearable style="width: 180px" @keyup.enter="reload" />
+      <el-button :icon="Search" @click="reload">查询</el-button>
       <el-button type="primary" :icon="Plus" @click="genDialog = true">批量生成</el-button>
+      <el-button :icon="Download" :loading="exporting" @click="exportList">
+        导出{{ filterStatus || filterBatch ? '(当前筛选)' : '(全部)' }}
+      </el-button>
     </div>
 
     <el-table :data="rows" v-loading="loading" border>
@@ -67,7 +72,7 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
-import { Plus } from '@element-plus/icons-vue';
+import { Plus, Search, Download } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { listCdkeys, generateCdkeys, disableCdkey } from '@/api';
 
@@ -76,7 +81,9 @@ const total = ref(0);
 const page = ref(1);
 const size = ref(20);
 const loading = ref(false);
+const exporting = ref(false);
 const filterStatus = ref('');
+const filterBatch = ref('');
 
 const genDialog = ref(false);
 const generating = ref(false);
@@ -94,7 +101,12 @@ function statusType(s: string) {
 async function load() {
   loading.value = true;
   try {
-    const data = await listCdkeys({ page: page.value, size: size.value, status: filterStatus.value || undefined });
+    const data = await listCdkeys({
+      page: page.value,
+      size: size.value,
+      status: filterStatus.value || undefined,
+      batch_id: filterBatch.value || undefined
+    });
     rows.value = data.items;
     total.value = data.total;
   } finally {
@@ -103,6 +115,49 @@ async function load() {
 }
 function reload() { page.value = 1; load(); }
 function onPage(p: number) { page.value = p; load(); }
+
+// 导出当前筛选条件下的全部兑换码为 CSV（循环翻页拉全量）
+async function exportList() {
+  exporting.value = true;
+  try {
+    const pageSize = 100;
+    let p = 1;
+    const all: any[] = [];
+    while (true) {
+      const data = await listCdkeys({
+        page: p,
+        size: pageSize,
+        status: filterStatus.value || undefined,
+        batch_id: filterBatch.value || undefined
+      });
+      all.push(...data.items);
+      if (all.length >= data.total || data.items.length === 0) break;
+      p += 1;
+    }
+    if (!all.length) {
+      ElMessage.warning('没有可导出的兑换码');
+      return;
+    }
+    const header = ['兑换码', '卡名', '类型', '天数', '状态', '批次', '使用者ID', '备注'];
+    const lines = all.map((c) =>
+      [c.code, c.plan_name, c.plan_type, c.duration_days, statusText(c.status), c.batch_id, c.used_by ?? '', c.remark ?? '']
+        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+        .join(',')
+    );
+    // ﻿ BOM 让 Excel 正确识别 UTF-8 中文
+    const csv = '﻿' + [header.join(','), ...lines].join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const stamp = new Date().toISOString().slice(0, 10);
+    a.download = `cdkeys-${stamp}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    ElMessage.success(`已导出 ${all.length} 条`);
+  } finally {
+    exporting.value = false;
+  }
+}
 
 async function onGenerate() {
   if (!genForm.plan_name) { ElMessage.warning('请填卡名'); return; }
