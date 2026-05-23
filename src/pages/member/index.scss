@@ -69,11 +69,53 @@
       margin-left: 8rpx;
     }
 
+    &-original {
+      font-size: 24rpx;
+      color: $text-quaternary;
+      margin-left: 16rpx;
+      text-decoration: line-through;
+    }
+
     &-feat {
       display: block;
       font-size: 26rpx;
       line-height: 1.9;
       color: $text-secondary;
+    }
+
+    &-btn {
+      margin-top: 32rpx;
+      height: 88rpx;
+      border-radius: 28rpx;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #f8fafc, #cbd5e1);
+
+      &-text {
+        color: #0a0e1a;
+        font-size: 28rpx;
+        font-weight: 600;
+        letter-spacing: 4rpx;
+      }
+
+      &--featured {
+        background: linear-gradient(135deg, #fde047, #eab308);
+      }
+
+      &--free {
+        background: transparent;
+        border: 2rpx solid $border;
+
+        .member__plan-btn-text {
+          color: $text-quaternary;
+          font-weight: 400;
+        }
+      }
+
+      &--current {
+        opacity: 0.55;
+      }
     }
   }
 
