@@ -20,9 +20,7 @@ RUN pip install -r requirements.txt
 # 拷贝应用代码
 COPY app ./app
 
-# SQLite 数据目录（compose 挂载卷到此）
-RUN mkdir -p /data
-ENV DATABASE_URL=sqlite:////data/wuxing.db
+# 数据库连接由 compose / .env 的 DATABASE_URL 注入（外部 MySQL）
 
 EXPOSE 8000
 

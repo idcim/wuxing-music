@@ -1,29 +1,30 @@
 # 五行律音 · 管理后端 (FastAPI)
 
-为小程序与管理后台提供 API。开发期数据库用 SQLite，生产可切 MySQL（改 `DATABASE_URL`）。
+为小程序与管理后台提供 API。生产连接**外部 MySQL**（数据库不随容器，单独维护）；本地开发可改回 SQLite。
 
-## 部署方式一：Docker（推荐）
+## 部署方式一：Docker + 外部 MySQL（推荐）
+
+前提：已有一个可访问的 MySQL 实例，并建好库（如 `wuxing`，字符集 `utf8mb4`）。
+应用启动时会自动建表 + 写种子数据，无需手动建表。
 
 ```bash
 cd backend
-cp .env.example .env        # 修改 JWT_SECRET / ADMIN_PASSWORD 等
+cp .env.example .env        # 填入 DATABASE_URL（外部 MySQL）、JWT_SECRET、ADMIN_PASSWORD
 docker compose up -d --build
 ```
 
-- 默认用 SQLite，数据持久化到命名卷 `db_data`（容器内 `/data/wuxing.db`），重建容器数据不丢。
-- 健康检查已内置（`/api/health`），`docker compose ps` 可看 healthy 状态。
-- 查看日志：`docker compose logs -f api`；停止：`docker compose down`。
+`.env` 里的连接串示例：
 
-### 切换 MySQL（生产）
-
-```bash
-# .env 中设置：
-# DATABASE_URL=mysql+pymysql://wuxing:wuxingpass@db:3306/wuxing?charset=utf8mb4
-# 并取消 docker-compose.yml 里 api 的 depends_on 注释
-docker compose --profile mysql up -d --build
+```
+# MySQL 与 Docker 同机：
+DATABASE_URL=mysql+pymysql://用户名:密码@host.docker.internal:3306/wuxing?charset=utf8mb4
+# MySQL 在独立服务器：把 host.docker.internal 换成其 IP/域名
+DATABASE_URL=mysql+pymysql://用户名:密码@10.0.0.5:3306/wuxing?charset=utf8mb4
 ```
 
-MySQL 数据持久化到 `mysql_data` 卷。
+- compose 已配 `extra_hosts: host.docker.internal:host-gateway`，让容器能访问宿主机 MySQL。
+- 连接池启用 `pool_pre_ping` + `pool_recycle=3600`，避免外部库空闲断连。
+- 健康检查已内置（`/api/health`）；日志 `docker compose logs -f api`；停止 `docker compose down`。
 
 ## 部署方式二：本地 venv（开发）
 

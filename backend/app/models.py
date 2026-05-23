@@ -139,7 +139,7 @@ class CdkeyRedeemLog(Base):
 
 
 class Order(Base):
-    __tablename__ = "order"
+    __tablename__ = "app_order"  # order 是 MySQL 保留字，加前缀避免冲突
 
     id: Mapped[int] = mapped_column(primary_key=True)
     order_no: Mapped[str] = mapped_column(String(64), unique=True, index=True)

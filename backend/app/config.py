@@ -7,7 +7,13 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_name: str = "五行律音 · 管理后端"
-    database_url: str = "sqlite:///./wuxing.db"
+    # 生产连接外部 MySQL；本地开发可在 .env 改回 sqlite:///./wuxing.db
+    database_url: str = "mysql+pymysql://wuxing:wuxingpass@host.docker.internal:3306/wuxing?charset=utf8mb4"
+
+    # 数据库连接池（仅 MySQL 生效）
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
+    db_pool_recycle: int = 3600  # 秒，小于 MySQL wait_timeout
 
     # JWT
     jwt_secret: str = "change-me-in-production-please"
