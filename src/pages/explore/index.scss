@@ -26,6 +26,7 @@
   }
 
   &__card {
+    position: relative;
     padding: 40rpx $pad-card;
     border: 2rpx solid $border;
     border-radius: $radius-lg;
@@ -33,6 +34,14 @@
 
     &-el {
       font-size: 64rpx;
+    }
+
+    &-arrow {
+      position: absolute;
+      top: 40rpx;
+      right: $pad-card;
+      font-size: 40rpx;
+      color: $text-tertiary;
     }
 
     &-note {
