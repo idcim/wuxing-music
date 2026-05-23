@@ -9,3 +9,4 @@ lib/
 .idea/
 .vscode/
 deploy_versions/
+.codegraph/

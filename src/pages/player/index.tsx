@@ -5,6 +5,7 @@ import { usePlayerStore } from '@/stores/player';
 import { useUserStore } from '@/stores/user';
 import { WUXING } from '@/constants/wuxing';
 import { fmtTime } from '@/utils/format';
+import Icon from '@/components/Icon';
 import SleepTimer from '@/components/SleepTimer';
 import type { ElementId } from '@/types';
 import './index.scss';
@@ -99,14 +100,24 @@ export default function Player() {
           style={timerVal ? { color: el.primary } : undefined}
           onClick={() => setTimerOpen(true)}
         >
-          <Text className="player__timer-text">{timerVal ? `${timerVal}'` : '⏱'}</Text>
+          {timerVal ? (
+            <Text className="player__timer-text">{timerVal}'</Text>
+          ) : (
+            <Icon name="timer" size={32} color="#94a3b8" strokeWidth={1.6} />
+          )}
         </View>
 
         <View className="player__play" style={{ background: el.primary }} onClick={toggle}>
           {isLoading ? (
             <View className="player__spinner" />
           ) : (
-            <Text className="player__play-icon">{isPlaying ? '‖' : '▶'}</Text>
+            <Icon
+              name={isPlaying ? 'pause' : 'play'}
+              size={48}
+              fill="#0a0e1a"
+              color="#0a0e1a"
+              strokeWidth={0}
+            />
           )}
         </View>
 

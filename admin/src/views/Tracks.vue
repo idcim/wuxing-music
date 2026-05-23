@@ -152,9 +152,28 @@ function onAudioSuccess(res: any) {
   if (res?.code === 0) {
     form.value.audio_url = res.data.url;
     ElMessage.success('音频已上传');
+    readAudioDuration(res.data.full_url || res.data.url);
   } else {
     ElMessage.error(res?.msg || '上传失败');
   }
+}
+
+// 读取音频时长，自动填 duration_sec 与 duration(MM:SS)
+function readAudioDuration(url: string) {
+  const a = new Audio();
+  a.preload = 'metadata';
+  a.src = url;
+  a.addEventListener('loadedmetadata', () => {
+    const sec = Math.round(a.duration || 0);
+    if (sec > 0) {
+      form.value.duration_sec = sec;
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      form.value.duration = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+      ElMessage.success(`已识别时长 ${form.value.duration}`);
+    }
+  });
+  a.addEventListener('error', () => { /* 读不到则保持手填 */ });
 }
 function onCoverSuccess(res: any) {
   coverUploading.value = false;

@@ -100,17 +100,20 @@
   }
 
   &__slider {
-    margin: 0;
+    margin: 0 8rpx;
   }
 
   &__time {
     display: flex;
     justify-content: space-between;
-    margin-top: 4rpx;
+    align-items: center;
+    margin-top: 12rpx;
+    padding: 0 8rpx;
 
     &-cur,
     &-dur {
-      font-size: 22rpx;
+      font-size: 24rpx;
+      line-height: 1.6;
       color: $text-tertiary;
       letter-spacing: 1rpx;
     }

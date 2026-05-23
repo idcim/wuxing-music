@@ -91,7 +91,11 @@ export default function MiniPlayer() {
           style={timerVal ? { color: el.primary } : undefined}
           onClick={() => setTimerOpen(true)}
         >
-          <Text className="mini-player__timer-text">{timerVal ? `${timerVal}'` : '⏱'}</Text>
+          {timerVal ? (
+            <Text className="mini-player__timer-text">{timerVal}'</Text>
+          ) : (
+            <Icon name="timer" size={28} color="#94a3b8" strokeWidth={1.6} />
+          )}
         </View>
 
         <View className="mini-player__wave">

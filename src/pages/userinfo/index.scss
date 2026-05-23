@@ -1,0 +1,118 @@
+@import '../../styles/variables.scss';
+
+.userinfo {
+  min-height: 100vh;
+  padding: 0 $pad-outer 80rpx;
+  background: $bg-deep;
+
+  &__nav {
+    display: flex;
+    align-items: center;
+    padding: 88rpx 0 24rpx;
+  }
+
+  &__back {
+    font-size: 56rpx;
+    color: $text-primary;
+    line-height: 1;
+    width: 80rpx;
+  }
+
+  &__nav-title {
+    flex: 1;
+    text-align: center;
+    font-size: 30rpx;
+    color: $text-primary;
+  }
+
+  &__nav-spacer {
+    width: 80rpx;
+  }
+
+  // ── 信息分组 ──
+  &__list {
+    margin-top: 28rpx;
+    background: rgba(255, 255, 255, 0.02);
+    border: 2rpx solid rgba(255, 255, 255, 0.04);
+    border-radius: 32rpx;
+    overflow: hidden;
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 32rpx 36rpx;
+    min-height: 112rpx;
+    box-sizing: border-box;
+
+    &--divider {
+      border-bottom: 2rpx solid rgba(255, 255, 255, 0.04);
+    }
+
+    // Button 复位
+    &--btn {
+      width: 100%;
+      margin: 0;
+      background: transparent;
+      line-height: normal;
+      text-align: left;
+      border-bottom: 2rpx solid rgba(255, 255, 255, 0.04);
+
+      &::after {
+        border: none;
+      }
+    }
+  }
+
+  &__label {
+    color: #cbd5e1;
+    font-size: 28rpx;
+    letter-spacing: 1rpx;
+  }
+
+  &__row-right {
+    display: flex;
+    align-items: center;
+    gap: 16rpx;
+    min-width: 0;
+  }
+
+  &__value {
+    color: $text-secondary;
+    font-size: 28rpx;
+    letter-spacing: 1rpx;
+    max-width: 360rpx;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &--muted {
+      color: $text-quaternary;
+    }
+  }
+
+  &__avatar {
+    width: 80rpx;
+    height: 80rpx;
+    border-radius: 50%;
+    border: 2rpx solid;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  &__avatar-img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+  }
+
+  &__list--readonly {
+    .userinfo__value {
+      color: $text-tertiary;
+    }
+  }
+}

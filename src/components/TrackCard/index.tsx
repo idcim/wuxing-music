@@ -35,7 +35,7 @@ export default function TrackCard({
         }}
       >
         {locked ? (
-          <Text className="track-card__lock">🔒</Text>
+          <Icon name="lock" size={24} color={el.accent} strokeWidth={1.8} />
         ) : isActive ? (
           <Icon name="pause" size={28} fill="#0a0e1a" strokeWidth={0} color="#0a0e1a" />
         ) : (

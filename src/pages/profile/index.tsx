@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { View, Text, Image, Button } from '@tarojs/components';
+import { View, Text, Image } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
-import { bindPhone } from '@/services/user';
 import Icon from '@/components/Icon';
 import { A } from '@/utils/color';
 import { resolveUrl } from '@/utils/url';
@@ -31,8 +30,6 @@ export default function Profile() {
   const isPremium = useUserStore((s) => s.isPremium);
   const user = useUserStore((s) => s.user);
   const logout = useUserStore((s) => s.logout);
-  const setPhone = useUserStore((s) => s.setPhone);
-  const setProfile = useUserStore((s) => s.setProfile);
   const el = WUXING[(element as ElementId) || '木'];
 
   const [cdkeyOpen, setCdkeyOpen] = useState(false);
@@ -42,6 +39,10 @@ export default function Profile() {
   const goLogin = () => Taro.navigateTo({ url: '/pages/login/index' });
   const goHistory = () => Taro.navigateTo({ url: '/pages/history/index' });
   const goMember = () => Taro.redirectTo({ url: '/pages/member/index' });
+  const goUserInfo = () => {
+    if (!requireLogin()) return;
+    Taro.navigateTo({ url: '/pages/userinfo/index' });
+  };
 
   // 会员剩余天数
   const expireDays = user?.membership.expireAt
@@ -64,31 +65,6 @@ export default function Profile() {
     return false;
   };
 
-  // 绑定手机号：真实环境用 getPhoneNumber 授权按钮拿加密数据；此处弹窗输入模拟。
-  const onBindPhone = () => {
-    if (!requireLogin()) return;
-    Taro.showModal({
-      title: '绑定手机号',
-      editable: true,
-      placeholderText: '请输入手机号',
-      success: async (res: any) => {
-        if (!res.confirm || !res.content) return;
-        const phone = String(res.content).trim();
-        if (!/^1\d{10}$/.test(phone)) {
-          Taro.showToast({ title: '手机号格式不对', icon: 'none' });
-          return;
-        }
-        try {
-          const bound = await bindPhone(Number(user!.id), phone);
-          setPhone(bound);
-          Taro.showToast({ title: '绑定成功', icon: 'success' });
-        } catch {
-          Taro.showToast({ title: '绑定失败', icon: 'none' });
-        }
-      }
-    } as any);
-  };
-
   const onLogout = () => {
     Taro.showModal({
       title: '退出登录',
@@ -99,42 +75,10 @@ export default function Profile() {
     });
   };
 
-  // 微信头像授权（open-type=chooseAvatar 的回调里 e.detail.avatarUrl）
-  const onChooseAvatar = (e: any) => {
-    const url = e?.detail?.avatarUrl;
-    if (url) {
-      setProfile({ avatar: url });
-      Taro.showToast({ title: '头像已更新', icon: 'success' });
-    }
-  };
-
-  // 修改昵称（弹窗输入）
-  const onEditNickname = () => {
-    if (!requireLogin()) return;
-    Taro.showModal({
-      title: '修改昵称',
-      editable: true,
-      placeholderText: '输入新昵称',
-      content: user!.nickname || '',
-      success: (res: any) => {
-        const name = String(res?.content || '').trim();
-        if (res.confirm && name) {
-          setProfile({ nickname: name });
-          Taro.showToast({ title: '已更新', icon: 'success' });
-        }
-      }
-    } as any);
-  };
-
   // 账号类操作
   const accountMenu: MenuItem[] = [
-    { icon: 'history', text: '聆听历史', onClick: goHistory },
-    { icon: 'user', text: '修改昵称', onClick: onEditNickname },
-    {
-      icon: 'circleDot',
-      text: user?.phone ? `手机号 ${user.phone}` : '绑定手机号',
-      onClick: onBindPhone
-    }
+    { icon: 'user', text: '个人信息', onClick: goUserInfo },
+    { icon: 'history', text: '聆听历史', onClick: goHistory }
   ];
 
   // 功能类操作
@@ -184,40 +128,23 @@ export default function Profile() {
           borderColor: A.a25(el.primary)
         }}
       >
-        {/* 头像：已登录可点按钮换微信头像；未登录显示元素图标 */}
-        {user ? (
-          <Button
-            className="profile__avatar-btn"
-            openType="chooseAvatar"
-            onChooseAvatar={onChooseAvatar}
-          >
-            <View
-              className="profile__avatar"
-              style={{
-                background: `radial-gradient(circle, ${A.a25(el.primary)}, transparent)`,
-                borderColor: A.a50(el.primary)
-              }}
-            >
-              {user.avatar ? (
-                <Image className="profile__avatar-img" src={resolveUrl(user.avatar)} mode="aspectFill" />
-              ) : (
-                <Icon name={el.icon as IconName} size={52} color={el.primary} strokeWidth={1.2} />
-              )}
-            </View>
-          </Button>
-        ) : (
-          <View
-            className="profile__avatar"
-            style={{
-              background: `radial-gradient(circle, ${A.a25(el.primary)}, transparent)`,
-              borderColor: A.a50(el.primary)
-            }}
-          >
+        {/* 头像：已登录点整卡进个人信息页编辑；未登录显示元素图标 */}
+        <View
+          className="profile__avatar"
+          style={{
+            background: `radial-gradient(circle, ${A.a25(el.primary)}, transparent)`,
+            borderColor: A.a50(el.primary)
+          }}
+          onClick={user ? goUserInfo : undefined}
+        >
+          {user?.avatar ? (
+            <Image className="profile__avatar-img" src={resolveUrl(user.avatar)} mode="aspectFill" />
+          ) : (
             <Icon name={el.icon as IconName} size={52} color={el.primary} strokeWidth={1.2} />
-          </View>
-        )}
+          )}
+        </View>
 
-        <View className="profile__user-info">
+        <View className="profile__user-info" onClick={user ? goUserInfo : undefined}>
           {user ? (
             <>
               <Text className="profile__user-name">{user.nickname || '律音用户'}</Text>
@@ -235,8 +162,8 @@ export default function Profile() {
         </View>
 
         {user && (
-          <View className="profile__user-edit" onClick={onEditNickname}>
-            <Icon name="settings" size={30} color="#64748b" strokeWidth={1.5} />
+          <View className="profile__user-edit" onClick={goUserInfo}>
+            <Icon name="chevronRight" size={30} color="#64748b" strokeWidth={1.5} />
           </View>
         )}
       </View>
