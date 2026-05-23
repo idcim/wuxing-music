@@ -21,6 +21,7 @@ export default function Profile() {
   const [cdkeyOpen, setCdkeyOpen] = useState(false);
 
   const retakeQuiz = () => Taro.navigateTo({ url: '/pages/quiz/index' });
+  const goAbout = () => Taro.navigateTo({ url: '/pages/about/index' });
 
   const onLogin = async () => {
     try {
@@ -84,6 +85,11 @@ export default function Profile() {
 
       <View className="profile__entry fade-up" onClick={() => setCdkeyOpen(true)}>
         <Text className="profile__entry-text">兑换码</Text>
+        <Text className="profile__entry-arrow">›</Text>
+      </View>
+
+      <View className="profile__entry fade-up" onClick={goAbout}>
+        <Text className="profile__entry-text">关于我们</Text>
         <Text className="profile__entry-arrow">›</Text>
       </View>
 

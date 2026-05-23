@@ -1,0 +1,101 @@
+@import '../../styles/variables.scss';
+
+.about {
+  min-height: 100vh;
+  padding: 0 $pad-outer 80rpx;
+  background: $bg-deep;
+
+  &__nav {
+    display: flex;
+    align-items: center;
+    padding: 88rpx 0 24rpx;
+  }
+
+  &__back {
+    font-size: 56rpx;
+    color: $text-primary;
+    line-height: 1;
+    width: 80rpx;
+  }
+
+  &__nav-title {
+    flex: 1;
+    text-align: center;
+    font-size: 30rpx;
+    color: $text-primary;
+  }
+
+  &__nav-spacer {
+    width: 80rpx;
+  }
+
+  &__head {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40rpx 0 56rpx;
+  }
+
+  &__logo {
+    width: 140rpx;
+    height: 140rpx;
+    border-radius: 32rpx;
+  }
+
+  &__logo-text {
+    width: 140rpx;
+    height: 140rpx;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.06);
+    color: $text-primary;
+    font-size: 64rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &__name {
+    margin-top: 24rpx;
+    font-size: 40rpx;
+    letter-spacing: 4rpx;
+    color: $text-primary;
+  }
+
+  &__section {
+    padding: 32rpx 0;
+    border-top: 2rpx solid $border;
+
+    &-title {
+      display: block;
+      font-size: 26rpx;
+      color: $text-secondary;
+      margin-bottom: 16rpx;
+    }
+  }
+
+  &__text {
+    font-size: 28rpx;
+    line-height: 2;
+    color: $text-secondary;
+    white-space: pre-line;
+  }
+
+  &__footer {
+    margin-top: 60rpx;
+    text-align: center;
+  }
+
+  &__contact {
+    display: block;
+    font-size: 24rpx;
+    color: $text-tertiary;
+    line-height: 1.8;
+  }
+
+  &__icp {
+    display: block;
+    margin-top: 16rpx;
+    font-size: 22rpx;
+    color: $text-quaternary;
+  }
+}
