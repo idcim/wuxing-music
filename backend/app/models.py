@@ -150,6 +150,7 @@ class Order(Base):
     amount: Mapped[float] = mapped_column(Float)
     # pending/paid/refunding/refunded/failed/closed
     status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    transaction_id: Mapped[str] = mapped_column(String(64), default="")  # 微信支付单号
     paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     # 退款相关

@@ -3,7 +3,7 @@ import Taro, { useDidShow } from '@tarojs/taro';
 import { useState } from 'react';
 import { WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
-import { bindPhone } from '@/services/user';
+import { bindPhone, updateProfile, uploadAvatar } from '@/services/user';
 import Icon from '@/components/Icon';
 import { A } from '@/utils/color';
 import { resolveUrl } from '@/utils/url';
@@ -30,27 +30,42 @@ export default function UserInfo() {
 
   const back = () => Taro.navigateBack();
 
-  // 微信头像授权
-  const onChooseAvatar = (e: any) => {
-    const url = e?.detail?.avatarUrl;
-    if (url) {
-      setProfile({ avatar: url });
+  // 微信头像授权 → 先上传临时图换正式 URL，再落库，最后更新本地
+  const onChooseAvatar = async (e: any) => {
+    const tmp = e?.detail?.avatarUrl;
+    if (!tmp) return;
+    Taro.showLoading({ title: '上传中', mask: true });
+    try {
+      const url = await uploadAvatar(tmp);
+      const saved = await updateProfile({ avatar: url });
+      setProfile({ avatar: saved.avatar ?? url });
+      Taro.hideLoading();
       Taro.showToast({ title: '头像已更新', icon: 'success' });
+    } catch {
+      Taro.hideLoading();
+      Taro.showToast({ title: '上传失败', icon: 'none' });
     }
   };
 
-  // 修改昵称
+  // 修改昵称 → 调后端落库，成功后更新本地
   const onEditNickname = () => {
     Taro.showModal({
       title: '修改昵称',
       editable: true,
       placeholderText: '输入新昵称',
       content: user?.nickname || '',
-      success: (res: any) => {
+      success: async (res: any) => {
         const name = String(res?.content || '').trim();
-        if (res.confirm && name) {
-          setProfile({ nickname: name });
+        if (!res.confirm || !name) return;
+        Taro.showLoading({ title: '保存中', mask: true });
+        try {
+          const saved = await updateProfile({ nickname: name });
+          setProfile({ nickname: saved.nickname ?? name });
+          Taro.hideLoading();
           Taro.showToast({ title: '已更新', icon: 'success' });
+        } catch {
+          Taro.hideLoading();
+          Taro.showToast({ title: '保存失败', icon: 'none' });
         }
       }
     } as any);

@@ -4,20 +4,20 @@ import { request } from '@/services/api';
 import { isWeapp } from '@/utils/platform';
 import type { PlanId, Membership } from '@/types';
 
-// 微信统一下单返回的小程序支付参数
+// 微信统一下单返回的小程序支付参数（后端二次签名后下发）
 interface PayParams {
   timeStamp: string;
   nonceStr: string;
   package: string;
   signType: 'MD5' | 'HMAC-SHA256' | 'RSA';
   paySign: string;
-  orderId: string;
 }
 
 interface CreateOrderResult {
   dev_opened?: boolean;       // 开发期后端直接开通
+  orderNo?: string;
   membership?: Membership;
-  pay?: PayParams;            // 生产期微信支付参数
+  payParams?: PayParams;      // 生产期微信支付参数
 }
 
 const PLAN_DAYS: Record<PlanId, number> = {
@@ -49,6 +49,21 @@ function buildMembership(planId: PlanId): Membership {
   };
 }
 
+// 支付后会员由回调异步开通，短轮询拉取最新会员态（最多 ~5s）。
+// 若轮询结束仍未生效，则回退用本地推算的会员信息，避免界面卡住。
+async function pollMembership(planId: PlanId): Promise<Membership> {
+  for (let i = 0; i < 5; i++) {
+    try {
+      const m = await request<Membership & { isPremium?: boolean }>('/api/mp/membership');
+      if (m && m.type === planId) return m;
+    } catch {
+      // 忽略，继续重试
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  return buildMembership(planId);
+}
+
 // 创建订单并拉起微信支付。成功后返回新会员信息（由调用方刷新 store）。
 export async function purchasePlan(planId: PlanId): Promise<PayOutcome> {
   // iOS App 端订阅须走 Apple IAP，小程序端不受影响。此处仅小程序支付。
@@ -71,15 +86,16 @@ export async function purchasePlan(planId: PlanId): Promise<PayOutcome> {
     }
 
     // 生产：后端返回微信支付参数 → 拉起支付 → 取最新会员态
-    if (res.pay) {
+    if (res.payParams) {
       await Taro.requestPayment({
-        timeStamp: res.pay.timeStamp,
-        nonceStr: res.pay.nonceStr,
-        package: res.pay.package,
-        signType: res.pay.signType,
-        paySign: res.pay.paySign
+        timeStamp: res.payParams.timeStamp,
+        nonceStr: res.payParams.nonceStr,
+        package: res.payParams.package,
+        signType: res.payParams.signType,
+        paySign: res.payParams.paySign
       });
-      const membership = await request<Membership>('/api/mp/membership');
+      // 支付成功后会员由微信回调异步开通，可能略有延迟：短轮询取最新会员态
+      const membership = await pollMembership(planId);
       return { ok: true, membership };
     }
 

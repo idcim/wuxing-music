@@ -1,8 +1,10 @@
 import json
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app import storage
 from app.database import get_db
 from app.models import Admin, Setting
 from app.schemas import MpSettingIn, PaySettingIn, SiteSettingIn, StorageSettingIn, ok
@@ -102,6 +104,34 @@ def update_storage(
     incoming = _merge_secrets(body.model_dump(), current, STORAGE_SECRETS)
     _save_setting(db, STORAGE_KEY, incoming)
     return ok({"saved": True})
+
+
+class MigrateIn(BaseModel):
+    rewrite_db: bool = True  # 迁移后是否把数据库里的旧本地 URL 改写为 OSS URL
+
+
+@router.post("/storage/migrate")
+def migrate_storage(
+    body: MigrateIn,
+    db: Session = Depends(get_db),
+    _: Admin = Depends(get_current_admin),
+):
+    """把本地 ./uploads 文件迁移到 OSS（需已切换 provider=oss 并保存配置）。
+    不删除本地文件；可选把数据库里引用的旧 URL 改写为 OSS URL。"""
+    try:
+        result = storage.migrate_local_to_oss(db)
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    rewritten = 0
+    if body.rewrite_db and result.get("mapping"):
+        rewritten = storage.rewrite_db_urls(db, result["mapping"])
+
+    return ok({
+        "migrated": result["migrated"],
+        "failed": result["failed"],
+        "db_rewritten": rewritten,
+    })
 
 
 # ── 小程序配置 ──

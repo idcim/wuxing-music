@@ -55,6 +55,8 @@ export const updateSiteSetting = (data: any) => req.put('/api/admin/settings/sit
 // ── 存储设置 ──
 export const getStorageSetting = () => req.get('/api/admin/settings/storage');
 export const updateStorageSetting = (data: any) => req.put('/api/admin/settings/storage', data);
+export const migrateStorage = (rewrite_db = true) =>
+  req.post('/api/admin/settings/storage/migrate', { rewrite_db });
 
 // ── 小程序配置 ──
 export const getMpSetting = () => req.get('/api/admin/settings/mp');

@@ -5,16 +5,22 @@
 鉴权：登录返回用户 JWT（sub=user:<id>），后续接口用 Bearer 携带。
 """
 import json
+import logging
+import uuid
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse
 from jose import JWTError, jwt
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app import storage, wxpay
 from app.config import settings
 from app.database import get_db
-from app.models import Cdkey, CdkeyRedeemLog, Element, PlayHistory, Plan, Track, User
+from app.models import Cdkey, CdkeyRedeemLog, Element, Order, PlayHistory, Plan, Setting, Track, User
+
+logger = logging.getLogger("uvicorn.error")
 
 router = APIRouter(prefix="/api/mp", tags=["miniprogram"])
 
@@ -131,6 +137,58 @@ def mp_login(body: LoginIn, db: Session = Depends(get_db)):
 @router.get("/profile")
 def mp_profile(user: User = Depends(get_current_user)):
     return ok(_user_dict(user))
+
+
+class UpdateProfileIn(BaseModel):
+    nickname: str | None = None
+    avatar: str | None = None
+
+
+@router.api_route("/profile", methods=["PATCH", "POST"])
+def mp_update_profile(
+    body: UpdateProfileIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """更新昵称 / 头像（仅传需要修改的字段）。
+    同时支持 PATCH 与 POST，规避部分反向代理对 PATCH 的限制（405）。"""
+    if body.nickname is not None:
+        name = body.nickname.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="昵称不能为空")
+        if len(name) > 32:
+            raise HTTPException(status_code=400, detail="昵称过长")
+        user.nickname = name
+    if body.avatar is not None:
+        user.avatar = body.avatar.strip()
+    db.commit()
+    db.refresh(user)
+    return ok(_user_dict(user))
+
+
+# ── 用户上传（头像）──
+MP_UPLOAD_MAX = 5 * 1024 * 1024  # 头像 5MB
+
+
+@router.post("/upload")
+async def mp_upload(
+    request: Request,
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """用户态上传（目前仅头像，限图片 5MB）。走统一存储层，OSS/本地透明。"""
+    ext = storage.ext_of(file.filename)
+    if ext not in storage.IMAGE_EXT:
+        raise HTTPException(status_code=400, detail="仅支持图片")
+    content = await file.read()
+    if len(content) > MP_UPLOAD_MAX:
+        raise HTTPException(status_code=400, detail="图片不能超过 5MB")
+    try:
+        result = storage.save_bytes(db, content, ext, base_url=str(request.base_url))
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return ok(result)
 
 
 @router.get("/membership")
@@ -291,7 +349,28 @@ def mp_redeem(
     })
 
 
-# ── 下单（开发期：直接开通；生产接微信统一下单）──
+# ── 支付 ──
+def _pay_cfg(db: Session) -> dict:
+    row = db.query(Setting).filter(Setting.key == "pay_config").first()
+    return json.loads(row.value) if row and row.value else {}
+
+
+def _gen_order_no() -> str:
+    return datetime.utcnow().strftime("%Y%m%d%H%M%S") + uuid.uuid4().hex[:10]
+
+
+def _grant_membership(db: Session, user: User, plan: Plan, source: str = "purchase") -> None:
+    """按套餐天数累加会员有效期（已是会员则从到期日续期）。"""
+    now = datetime.utcnow()
+    base = user.membership_expire_at if (user.membership_expire_at and user.membership_expire_at > now) else now
+    user.membership_type = plan.id
+    user.membership_name = plan.name
+    user.membership_expire_at = base + timedelta(days=plan.duration_days)
+    user.membership_source = source
+    db.commit()
+    db.refresh(user)
+
+
 class CreateOrderIn(BaseModel):
     planId: str
 
@@ -305,21 +384,100 @@ def mp_create_order(
     plan = db.query(Plan).filter(Plan.id == body.planId).first()
     if not plan:
         raise HTTPException(status_code=404, detail="套餐不存在")
-    # TODO 生产：调用微信统一下单返回支付参数，回调成功后再开通。
-    # 开发期无证书，直接开通便于联调。
-    now = datetime.utcnow()
-    base = user.membership_expire_at if (user.membership_expire_at and user.membership_expire_at > now) else now
-    expire_at = base + timedelta(days=plan.duration_days)
-    user.membership_type = plan.id
-    user.membership_name = plan.name
-    user.membership_expire_at = expire_at
-    user.membership_source = "purchase"
+
+    cfg = _pay_cfg(db)
+    pay_enabled = bool(cfg.get("enabled")) and bool(cfg.get("wx_mch_id")) and bool(cfg.get("wx_key_pem"))
+
+    # 创建订单（pending）
+    order = Order(
+        order_no=_gen_order_no(),
+        user_id=user.id,
+        plan_id=plan.id,
+        plan_name=plan.name,
+        amount=plan.price,
+        status="pending",
+    )
+    db.add(order)
     db.commit()
-    db.refresh(user)
+    db.refresh(order)
+
+    if not pay_enabled:
+        # 开发期/未配置支付：直接开通，便于联调
+        _grant_membership(db, user, plan)
+        order.status = "paid"
+        order.paid_at = datetime.utcnow()
+        db.commit()
+        return ok({
+            "dev_opened": True,
+            "orderNo": order.order_no,
+            "membership": _user_dict(user)["membership"],
+        })
+
+    # 生产：调微信 JSAPI 统一下单，返回前端 requestPayment 参数
+    try:
+        pay_params = wxpay.create_jsapi_order(
+            cfg,
+            openid=user.openid,
+            order_no=order.order_no,
+            amount_fen=int(round(plan.price * 100)),
+            description=f"五行律音 · {plan.name}",
+        )
+    except wxpay.WxPayError as e:
+        order.status = "failed"
+        db.commit()
+        raise HTTPException(status_code=400, detail=str(e))
+
     return ok({
-        "dev_opened": True,  # 标记开发期直接开通
-        "membership": _user_dict(user)["membership"],
+        "dev_opened": False,
+        "orderNo": order.order_no,
+        "payParams": pay_params,
     })
+
+
+@router.post("/pay/callback")
+async def mp_pay_callback(request: Request, db: Session = Depends(get_db)):
+    """微信支付结果通知。解密后校验金额/状态，幂等开通会员。
+    返回 {code:'SUCCESS'} 告知微信已受理，避免重复回调。"""
+    fail = JSONResponse(status_code=500, content={"code": "FAIL", "message": "处理失败"})
+    cfg = _pay_cfg(db)
+    try:
+        envelope = json.loads(await request.body())
+        resource = envelope.get("resource") or {}
+        data = wxpay.decrypt_callback_resource(cfg.get("wx_api_key", ""), resource)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("支付回调解密失败：%s", e)
+        return fail
+
+    if data.get("trade_state") != "SUCCESS":
+        return JSONResponse(content={"code": "SUCCESS", "message": "已接收"})
+
+    order_no = data.get("out_trade_no")
+    order = db.query(Order).filter(Order.order_no == order_no).first()
+    if not order:
+        logger.warning("支付回调订单不存在：%s", order_no)
+        return JSONResponse(content={"code": "SUCCESS", "message": "已接收"})
+
+    if order.status == "paid":  # 幂等：重复回调直接成功
+        return JSONResponse(content={"code": "SUCCESS", "message": "已处理"})
+
+    # 金额校验（分）
+    paid_fen = (data.get("amount") or {}).get("total")
+    if paid_fen is not None and int(paid_fen) != int(round(order.amount * 100)):
+        logger.warning("支付回调金额不符：订单 %s 期望 %s 实付 %s", order_no, order.amount, paid_fen)
+        return fail
+
+    plan = db.query(Plan).filter(Plan.id == order.plan_id).first()
+    if not plan:
+        return fail
+
+    user = db.query(User).filter(User.id == order.user_id).first()
+    if user:
+        _grant_membership(db, user, plan)
+    order.status = "paid"
+    order.transaction_id = data.get("transaction_id", "")
+    order.paid_at = datetime.utcnow()
+    db.commit()
+    return JSONResponse(content={"code": "SUCCESS", "message": "成功"})
 
 
 # ── 聆听历史 ──
