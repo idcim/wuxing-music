@@ -29,7 +29,9 @@ function mockUser(openid: string): User {
   };
 }
 
-// wx.login 拿临时 code → 后端换 token + 用户信息
+// wx.login 拿临时 code → 后端换 token + 用户信息。
+// 注意：真实环境后端用 code 调微信接口换 openid/unionid；当前后端 /api/mp/login
+// 直接接收 openid，故此处以 code 充当 openid 占位（联调用）。生产应改为后端 code 换取。
 export async function wxLogin(): Promise<LoginResult> {
   const { code } = await Taro.login();
 
@@ -41,23 +43,14 @@ export async function wxLogin(): Promise<LoginResult> {
     return { token, user };
   }
 
-  const result = await request<LoginResult>('/api/auth/wx-login', {
+  const result = await request<LoginResult>('/api/mp/login', {
     method: 'POST',
-    data: { code },
+    data: { openid: code },
     auth: false
   });
   storage.set(TOKEN_KEY, result.token);
   storage.set(STORAGE_KEYS.USER, result.user);
   return result;
-}
-
-export async function refreshToken(): Promise<string> {
-  if (USE_MOCK) return storage.get<string>(TOKEN_KEY) || '';
-  const { token } = await request<{ token: string }>('/api/auth/refresh', {
-    method: 'POST'
-  });
-  storage.set(TOKEN_KEY, token);
-  return token;
 }
 
 export async function fetchProfile(): Promise<User> {
@@ -66,7 +59,7 @@ export async function fetchProfile(): Promise<User> {
     if (cached) return cached;
     throw new Error('未登录');
   }
-  return request<User>('/api/user/profile');
+  return request<User>('/api/mp/profile');
 }
 
 export function getToken(): string | null {

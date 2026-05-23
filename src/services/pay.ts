@@ -14,8 +14,10 @@ interface PayParams {
   orderId: string;
 }
 
-interface OrderResult {
-  pay: PayParams;
+interface CreateOrderResult {
+  dev_opened?: boolean;       // 开发期后端直接开通
+  membership?: Membership;
+  pay?: PayParams;            // 生产期微信支付参数
 }
 
 const PLAN_DAYS: Record<PlanId, number> = {
@@ -58,20 +60,30 @@ export async function purchasePlan(planId: PlanId): Promise<PayOutcome> {
   }
 
   try {
-    const { pay } = await request<OrderResult>('/api/pay/create-order', {
+    const res = await request<CreateOrderResult>('/api/mp/pay/create-order', {
       method: 'POST',
       data: { planId }
     });
-    await Taro.requestPayment({
-      timeStamp: pay.timeStamp,
-      nonceStr: pay.nonceStr,
-      package: pay.package,
-      signType: pay.signType,
-      paySign: pay.paySign
-    });
-    // 支付成功，向后端确认订单状态后由 profile/membership 接口取最新会员态
-    const membership = await request<Membership>('/api/user/membership');
-    return { ok: true, membership };
+
+    // 开发期：后端直接开通，返回 dev_opened + 最新会员态，无需拉起支付
+    if (res.dev_opened && res.membership) {
+      return { ok: true, membership: res.membership };
+    }
+
+    // 生产：后端返回微信支付参数 → 拉起支付 → 取最新会员态
+    if (res.pay) {
+      await Taro.requestPayment({
+        timeStamp: res.pay.timeStamp,
+        nonceStr: res.pay.nonceStr,
+        package: res.pay.package,
+        signType: res.pay.signType,
+        paySign: res.pay.paySign
+      });
+      const membership = await request<Membership>('/api/mp/membership');
+      return { ok: true, membership };
+    }
+
+    return { ok: false, reason: 'fail' };
   } catch (err: any) {
     if (err?.errMsg && String(err.errMsg).includes('cancel')) {
       return { ok: false, reason: 'cancel' };
