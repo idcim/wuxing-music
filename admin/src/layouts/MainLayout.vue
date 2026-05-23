@@ -11,6 +11,8 @@
         <el-menu-item index="/cdkeys"><el-icon><Ticket /></el-icon><span>兑换码</span></el-menu-item>
         <el-menu-item index="/quiz"><el-icon><EditPen /></el-icon><span>测评管理</span></el-menu-item>
         <el-menu-item index="/users"><el-icon><User /></el-icon><span>用户</span></el-menu-item>
+        <el-menu-item index="/site"><el-icon><HomeFilled /></el-icon><span>站点设置</span></el-menu-item>
+        <el-menu-item index="/storage"><el-icon><FolderOpened /></el-icon><span>存储设置</span></el-menu-item>
         <el-menu-item index="/settings"><el-icon><Setting /></el-icon><span>支付设置</span></el-menu-item>
       </el-menu>
     </el-aside>

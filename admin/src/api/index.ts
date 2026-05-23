@@ -39,3 +39,14 @@ export const deleteQuiz = (id: number) => req.delete(`/api/admin/quiz/${id}`);
 // ── 支付设置 ──
 export const getPaySetting = () => req.get('/api/admin/settings/pay');
 export const updatePaySetting = (data: any) => req.put('/api/admin/settings/pay', data);
+
+// ── 站点设置 ──
+export const getSiteSetting = () => req.get('/api/admin/settings/site');
+export const updateSiteSetting = (data: any) => req.put('/api/admin/settings/site', data);
+
+// ── 存储设置 ──
+export const getStorageSetting = () => req.get('/api/admin/settings/storage');
+export const updateStorageSetting = (data: any) => req.put('/api/admin/settings/storage', data);
+
+// 上传接口地址（el-upload 直传用）
+export const UPLOAD_URL = '/api/admin/upload';
