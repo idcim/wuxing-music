@@ -97,7 +97,8 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     openid: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    unionid: Mapped[str] = mapped_column(String(64), default="")
+    unionid: Mapped[str] = mapped_column(String(64), default="", index=True)
+    phone: Mapped[str] = mapped_column(String(20), default="", index=True)
     nickname: Mapped[str] = mapped_column(String(64), default="律音用户")
     avatar: Mapped[str] = mapped_column(Text, default="")
     element: Mapped[str] = mapped_column(String(2), default="")

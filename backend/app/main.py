@@ -17,6 +17,7 @@ from app.routers import (
     auth,
     cdkeys,
     elements,
+    mp,
     orders,
     plans,
     quiz,
@@ -142,6 +143,7 @@ app.include_router(users.router)
 app.include_router(orders.router)
 app.include_router(upload.router)
 app.include_router(site.router)
+app.include_router(mp.router)
 
 # 本地上传文件的静态托管
 os.makedirs(UPLOAD_DIR, exist_ok=True)
