@@ -85,7 +85,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
     }
   },
 
-  // 启动时优先用缓存的登录态，无 token 时静默登录
+  // 启动时优先用缓存的登录态；token 失效(401)则清掉重新登录
   initFromCache: async () => {
     const cached = storage.get<User>(STORAGE_KEYS.USER);
     if (cached) {
@@ -95,19 +95,27 @@ export const useUserStore = create<UserStore>((set, get) => ({
         isPremium: computePremium(cached.membership)
       });
     }
+
     if (getToken()) {
       try {
         const fresh = await fetchProfile();
         get().setUser(fresh);
-      } catch {
-        // 拉取失败保持缓存态
+        return;
+      } catch (e: any) {
+        // token 失效（如旧 mock token / 过期）：清理后走静默登录
+        if (e?.code === 401) {
+          clearAuth();
+        } else {
+          return; // 其他错误（如网络）保持缓存态，不强制重登
+        }
       }
-    } else {
-      try {
-        await get().login();
-      } catch {
-        // 静默登录失败，进入游客态
-      }
+    }
+
+    // 无有效 token：静默登录
+    try {
+      await get().login();
+    } catch {
+      // 静默登录失败，进入游客态
     }
   },
 

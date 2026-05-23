@@ -5,8 +5,8 @@
   align-items: center;
   gap: 28rpx;
   padding: 28rpx 32rpx;
-  border: 2rpx solid $border;
-  border-radius: $radius-sm;
+  border: 2rpx solid rgba(255, 255, 255, 0.04);
+  border-radius: 32rpx;
   background: rgba(255, 255, 255, 0.02);
   transition: all 0.25s;
 
@@ -21,8 +21,8 @@
     justify-content: center;
   }
 
-  &__icon {
-    font-size: 30rpx;
+  &__lock {
+    font-size: 26rpx;
   }
 
   &__info {
@@ -33,20 +33,14 @@
   &__title {
     display: block;
     font-size: 28rpx;
-    color: #cbd5e1;
     margin-bottom: 8rpx;
     letter-spacing: 1rpx;
-  }
-
-  &--active &__title {
-    color: $text-primary;
-    font-weight: 500;
   }
 
   &__meta {
     display: flex;
     align-items: center;
-    gap: 12rpx;
+    gap: 16rpx;
   }
 
   &__hz {
@@ -62,6 +56,11 @@
   &__sub {
     font-size: 22rpx;
     color: $text-tertiary;
+  }
+
+  &__plays {
+    font-size: 22rpx;
+    color: #475569;
   }
 
   &__tag {

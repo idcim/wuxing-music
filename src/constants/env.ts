@@ -1,8 +1,8 @@
-// 后端尚未就绪：MOCK 模式下 api/auth 走本地模拟，便于全流程联调。
-// 后端上线后将 USE_MOCK 置为 false，并填入真实 API_BASE。
-export const USE_MOCK = true;
+// 本地联调：关闭 mock，直连本地 Docker 后端（localhost:8000）。
+// 演示/无后端时改回 true；生产部署时把 API_BASE 换成线上地址。
+export const USE_MOCK = false;
 
-export const API_BASE = 'https://api.wuxingmusic.com';
+export const API_BASE = 'http://localhost:8000';
 
 export const TOKEN_KEY = 'wx_token';
 

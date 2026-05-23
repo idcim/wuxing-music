@@ -1,34 +1,141 @@
-import { View, Text } from '@tarojs/components';
+import { useState } from 'react';
+import { View, Text, ScrollView } from '@tarojs/components';
 import Taro from '@tarojs/taro';
-import { ELEMENT_LIST } from '@/constants/wuxing';
+import { ELEMENT_LIST, WUXING } from '@/constants/wuxing';
+import { useUserStore } from '@/stores/user';
+import { usePlayerStore } from '@/stores/player';
+import Icon from '@/components/Icon';
+import { A } from '@/utils/color';
+import TrackCard from '@/components/TrackCard';
 import MiniPlayer from '@/components/MiniPlayer';
 import TabBar from '@/components/TabBar';
 import type { ElementId } from '@/types';
+import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
 
 export default function Explore() {
-  const openElement = (id: ElementId) =>
-    Taro.navigateTo({ url: `/pages/element/index?id=${encodeURIComponent(id)}` });
+  const [selected, setSelected] = useState<ElementId | null>(null);
+  const isPremium = useUserStore((s) => s.isPremium);
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const play = usePlayerStore((s) => s.play);
+  const pause = usePlayerStore((s) => s.pause);
+  const resume = usePlayerStore((s) => s.resume);
+
+  const we = selected ? WUXING[selected] : null;
+
+  const goMember = () => Taro.redirectTo({ url: '/pages/member/index' });
+
+  const onTrack = (id: number) => {
+    if (!we) return;
+    const track = we.tracks.find((t) => t.id === id)!;
+    if (currentTrack?.id === id) {
+      isPlaying ? pause() : resume();
+    } else {
+      play(track);
+    }
+  };
 
   return (
     <View className="explore">
-      <Text className="explore__title serif">探律</Text>
-      <Text className="explore__sub">五行五音 · 各有所归</Text>
-      <View className="explore__grid">
-        {ELEMENT_LIST.map((el) => (
-          <View
-            key={el.id}
-            className="explore__card fade-up"
-            style={{ borderColor: el.glow }}
-            onClick={() => openElement(el.id)}
-          >
-            <Text className="explore__card-el serif" style={{ color: el.primary }}>{el.id}</Text>
-            <Text className="explore__card-note">{el.note}音 · {el.organ}</Text>
-            <Text className="explore__card-desc">{el.desc}</Text>
-            <Text className="explore__card-arrow">›</Text>
-          </View>
-        ))}
+      {/* 标题 */}
+      <View className="explore__header fade-up">
+        <Text className="explore__eyebrow cormorant italic">Explore Sounds</Text>
+        <Text className="explore__title">探索律音</Text>
       </View>
+
+      {/* 筛选 chip 横滑 */}
+      <ScrollView scrollX className="explore__chips" showScrollbar={false}>
+        {ELEMENT_LIST.map((w) => {
+          const active = selected === w.id;
+          return (
+            <View
+              key={w.id}
+              className="explore__chip"
+              style={{
+                background: active ? A.a20(w.primary) : 'rgba(255,255,255,0.025)',
+                borderColor: active ? A.a50(w.primary) : 'rgba(255,255,255,0.06)'
+              }}
+              onClick={() => setSelected(w.id)}
+            >
+              <Icon
+                name={w.icon as IconName}
+                size={28}
+                color={active ? w.primary : '#64748b'}
+                strokeWidth={1.5}
+              />
+              <Text
+                className="explore__chip-text"
+                style={{ color: active ? w.primary : '#64748b' }}
+              >
+                {w.id}音
+              </Text>
+            </View>
+          );
+        })}
+      </ScrollView>
+
+      {/* 选中元素信息卡 + 曲目列表 */}
+      {we ? (
+        <View>
+          <View
+            className="explore__el fade-up"
+            style={{
+              background: `linear-gradient(135deg, ${A.a15(we.primary)}, transparent)`,
+              borderColor: A.a25(we.primary)
+            }}
+          >
+            <View
+              className="explore__el-glow"
+              style={{ background: `radial-gradient(circle, ${we.glow}, transparent 70%)` }}
+            />
+            <View className="explore__el-body">
+              <View
+                className="explore__el-icon"
+                style={{ background: A.a15(we.primary), borderColor: A.a40(we.primary) }}
+              >
+                <Icon name={we.icon as IconName} size={52} color={we.primary} strokeWidth={1.2} />
+              </View>
+              <View className="explore__el-text">
+                <View className="explore__el-row">
+                  <Text className="explore__el-id" style={{ color: we.primary }}>{we.id}</Text>
+                  <Text className="explore__el-en cormorant" style={{ color: we.accent }}>
+                    {we.en} · {we.notePinyin}
+                  </Text>
+                </View>
+                <Text className="explore__el-meta">
+                  {we.note}音 · {we.organ} · {we.season}季 · {we.quality}
+                </Text>
+                <Text className="explore__el-desc">{we.desc}</Text>
+              </View>
+            </View>
+          </View>
+
+          <View className="explore__list">
+            {we.tracks.map((t, i) => {
+              const locked = !isPremium && t.isPremium;
+              return (
+                <TrackCard
+                  key={t.id}
+                  track={t}
+                  element={we}
+                  isActive={currentTrack?.id === t.id}
+                  isPlaying={isPlaying}
+                  locked={locked}
+                  delay={i * 0.08}
+                  onPlay={() => (locked ? goMember() : onTrack(t.id))}
+                />
+              );
+            })}
+          </View>
+        </View>
+      ) : (
+        <View className="explore__empty">
+          <Icon name="compass" size={64} color="#334155" strokeWidth={1} />
+          <Text className="explore__empty-text">选择五行分类，探索专属律音</Text>
+        </View>
+      )}
+
       <MiniPlayer />
       <TabBar active="explore" />
     </View>

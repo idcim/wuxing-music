@@ -3,102 +3,216 @@
 .cdkey-mask {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.7);
   z-index: 100;
   display: flex;
   align-items: flex-end;
+  justify-content: center;
+  animation: fadeIn 0.3s ease forwards;
 }
 
 .cdkey-sheet {
   width: 100%;
-  background: $bg-mid;
-  border-top-left-radius: $radius-xl;
-  border-top-right-radius: $radius-xl;
-  border-top: 2rpx solid $border;
-  padding: 28rpx $pad-outer 80rpx;
+  max-width: 840rpx;
+  background: linear-gradient(180deg, #0a1018, #050810);
+  border-top-left-radius: 56rpx;
+  border-top-right-radius: 56rpx;
+  border: 2rpx solid rgba(255, 255, 255, 0.06);
+  border-bottom: none;
+  padding: 56rpx 48rpx 72rpx;
+  max-height: 85vh;
+  overflow-y: auto;
+  animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 
-  &__handle {
-    width: 80rpx;
-    height: 8rpx;
-    border-radius: 8rpx;
-    background: $text-quaternary;
-    margin: 0 auto 36rpx;
+  &__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 56rpx;
+  }
+
+  &__eyebrow {
+    display: block;
+    color: $text-quaternary;
+    font-size: 24rpx;
+    letter-spacing: 6rpx;
+    margin-bottom: 12rpx;
   }
 
   &__title {
     display: block;
-    font-size: 40rpx;
     color: $text-primary;
+    font-size: 44rpx;
+    font-weight: 200;
+    letter-spacing: 4rpx;
   }
 
-  &__sub {
-    display: block;
-    margin: 12rpx 0 40rpx;
-    font-size: 26rpx;
-    color: $text-tertiary;
-  }
-
-  &__input {
-    height: 96rpx;
-    padding: 0 32rpx;
-    border: 2rpx solid $border;
-    border-radius: $radius-sm;
-    background: rgba(0, 0, 0, 0.25);
-    color: $text-primary;
-    font-size: 28rpx;
-    letter-spacing: 2rpx;
-  }
-
-  &__hint {
-    display: block;
-    margin-top: 20rpx;
-    font-size: 24rpx;
-
-    &--error,
-    &--used { color: #f97316; }
-  }
-
-  &__btn {
-    margin-top: 40rpx;
-    height: 96rpx;
-    border-radius: $radius-pill;
-    background: $text-primary;
+  &__close {
+    width: 64rpx;
+    height: 64rpx;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.04);
+    border: 2rpx solid rgba(255, 255, 255, 0.06);
     display: flex;
     align-items: center;
     justify-content: center;
+  }
 
-    &--disabled {
-      opacity: 0.4;
+  // ── 三态结果 ──
+  &__result {
+    text-align: center;
+    padding: 24rpx 0 48rpx;
+  }
+
+  &__circle {
+    width: 144rpx;
+    height: 144rpx;
+    border-radius: 50%;
+    border: 2rpx solid;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 40rpx;
+
+    &--ok {
+      background: radial-gradient(circle, rgba(132, 204, 22, 0.2), transparent);
+      border-color: rgba(132, 204, 22, 0.4);
     }
 
-    &-text {
-      color: $bg-deep;
-      font-size: 30rpx;
-      letter-spacing: 4rpx;
+    &--err {
+      background: radial-gradient(circle, rgba(248, 113, 113, 0.15), transparent);
+      border-color: rgba(248, 113, 113, 0.3);
+    }
+
+    &--used {
+      background: radial-gradient(circle, rgba(234, 179, 8, 0.15), transparent);
+      border-color: rgba(234, 179, 8, 0.3);
     }
   }
 
-  &__result {
-    text-align: center;
-    padding: 40rpx 0 0;
+  &__result-title {
+    display: block;
+    color: $text-primary;
+    font-size: 36rpx;
+    font-weight: 300;
+    letter-spacing: 2rpx;
+    margin-bottom: 16rpx;
+  }
 
-    &-icon {
-      display: block;
-      font-size: 80rpx;
-      color: #84cc16;
+  &__result-msg {
+    display: block;
+    color: $text-secondary;
+    font-size: 26rpx;
+    letter-spacing: 2rpx;
+  }
+
+  &__result-plan {
+    color: #fde047;
+  }
+
+  &__result-sub {
+    display: block;
+    color: $text-secondary;
+    font-size: 26rpx;
+    letter-spacing: 2rpx;
+    margin-top: 8rpx;
+    margin-bottom: 48rpx;
+  }
+
+  // ── 蓝紫提示卡 ──
+  &__tip {
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.08), rgba(99, 102, 241, 0.05));
+    border: 2rpx solid rgba(56, 189, 248, 0.2);
+    border-radius: 36rpx;
+    padding: 36rpx;
+    margin-bottom: 44rpx;
+    display: flex;
+    gap: 28rpx;
+    align-items: center;
+  }
+
+  &__tip-icon {
+    width: 88rpx;
+    height: 88rpx;
+    border-radius: 24rpx;
+    background: rgba(56, 189, 248, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  &__tip-title {
+    display: block;
+    color: $text-primary;
+    font-size: 26rpx;
+    margin-bottom: 8rpx;
+  }
+
+  &__tip-sub {
+    display: block;
+    color: $text-tertiary;
+    font-size: 22rpx;
+    letter-spacing: 1rpx;
+  }
+
+  &__label {
+    display: block;
+    color: $text-quaternary;
+    font-size: 22rpx;
+    letter-spacing: 4rpx;
+    margin-bottom: 16rpx;
+  }
+
+  &__input {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.04);
+    border: 2rpx solid rgba(255, 255, 255, 0.1);
+    border-radius: 28rpx;
+    padding: 28rpx 36rpx;
+    color: $text-primary;
+    font-size: 28rpx;
+    letter-spacing: 4rpx;
+    margin-bottom: 28rpx;
+  }
+
+  // ── 通用按钮 ──
+  &__action {
+    width: 100%;
+    border-radius: 28rpx;
+    padding: 28rpx 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16rpx;
+
+    &--light {
+      background: linear-gradient(135deg, #f8fafc, #cbd5e1);
     }
 
-    &-title {
-      display: block;
-      margin: 24rpx 0 12rpx;
-      font-size: 34rpx;
-      color: $text-primary;
+    &--disabled {
+      background: rgba(255, 255, 255, 0.04);
     }
 
-    &-msg {
-      display: block;
-      font-size: 28rpx;
-      color: $text-secondary;
+    &--ghost {
+      background: rgba(255, 255, 255, 0.06);
+      border: 2rpx solid rgba(255, 255, 255, 0.1);
+      display: inline-flex;
+      width: auto;
+      padding: 24rpx 72rpx;
+      border-radius: 60rpx;
+    }
+  }
+
+  &__action-text {
+    font-size: 28rpx;
+    font-weight: 600;
+    letter-spacing: 4rpx;
+    color: #cbd5e1;
+
+    &--dark {
+      color: #0a0e1a;
     }
   }
 }

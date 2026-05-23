@@ -2,12 +2,15 @@ import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { PLANS } from '@/constants/plans';
+import { ELEMENT_LIST } from '@/constants/wuxing';
 import { purchasePlan } from '@/services/pay';
 import { useUserStore } from '@/stores/user';
+import Icon from '@/components/Icon';
 import MiniPlayer from '@/components/MiniPlayer';
 import CdkeyModal from '@/components/CdkeyModal';
 import TabBar from '@/components/TabBar';
 import type { PlanId } from '@/types';
+import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
 
 export default function Member() {
@@ -46,46 +49,135 @@ export default function Member() {
     return '立即开通';
   };
 
+  const planIcon = (id: PlanId): IconName =>
+    id === 'year' ? 'crown' : id === 'month' ? 'star' : 'music2';
+  const planIconColor = (id: PlanId) =>
+    id === 'year' ? '#fde047' : id === 'month' ? '#cbd5e1' : '#64748b';
+
   return (
     <View className="member">
-      <Text className="member__title serif">会员</Text>
-      <Text className="member__sub">解锁全部音律 · 深度安眠</Text>
+      {/* 标题 */}
+      <View className="member__header fade-up">
+        <Text className="member__eyebrow cormorant italic">Membership</Text>
+        <Text className="member__title">律音会员</Text>
+        <Text className="member__sub">以音养身，以律养神</Text>
+      </View>
+
+      {/* CDKEY 入口 */}
+      <View className="member__cdkey fade-up" onClick={() => setCdkeyOpen(true)}>
+        <View className="member__cdkey-icon">
+          <Icon name="keyRound" size={36} color="#38bdf8" strokeWidth={1.5} />
+        </View>
+        <View className="member__cdkey-text">
+          <Text className="member__cdkey-title">使用兑换码</Text>
+          <Text className="member__cdkey-sub">CDKEY / Gift Card · 礼品卡兑换会员</Text>
+        </View>
+        <Icon name="chevronRight" size={32} color="#475569" strokeWidth={1.5} />
+      </View>
+
+      {/* 套餐 */}
       <View className="member__list">
-        {PLANS.map((p) => {
+        {PLANS.map((p, idx) => {
           const isCurrent = isPremium && currentType === p.id;
           return (
             <View
               key={p.id}
               className={`member__plan ${p.featured ? 'member__plan--featured' : ''} fade-up`}
+              style={{ animationDelay: `${idx * 0.08}s` }}
             >
-              <View className="member__plan-head">
-                <Text className="member__plan-name serif">{p.name}</Text>
-                {p.badge && <Text className="member__plan-badge">{p.badge}</Text>}
-              </View>
-              <View className="member__plan-price">
-                <Text className="member__plan-amount">¥{p.price}</Text>
-                {p.unit && <Text className="member__plan-unit">{p.unit}</Text>}
-                {p.original && <Text className="member__plan-original">¥{p.original}</Text>}
-              </View>
-              {p.features.map((f) => (
-                <Text key={f} className="member__plan-feat">· {f}</Text>
-              ))}
-              <View
-                className={`member__plan-btn
-                  ${p.id === 'free' ? 'member__plan-btn--free' : ''}
-                  ${p.featured ? 'member__plan-btn--featured' : ''}
-                  ${isCurrent ? 'member__plan-btn--current' : ''}`}
-                onClick={() => buy(p.id)}
-              >
-                <Text className="member__plan-btn-text">{btnLabel(p.id)}</Text>
+              {p.featured && <View className="member__plan-glow" />}
+              {p.badge && (
+                <View className={`member__plan-badge ${p.featured ? 'member__plan-badge--featured' : ''}`}>
+                  <Text className="member__plan-badge-text">{p.badge}</Text>
+                </View>
+              )}
+
+              <View className="member__plan-body">
+                <View className="member__plan-head">
+                  <Icon
+                    name={planIcon(p.id)}
+                    size={28}
+                    color={planIconColor(p.id)}
+                    strokeWidth={1.5}
+                  />
+                  <Text
+                    className="member__plan-name"
+                    style={{ color: p.featured ? '#fde047' : '#e2e8f0' }}
+                  >
+                    {p.name}
+                  </Text>
+                  <Text className="member__plan-en cormorant italic">{p.en}</Text>
+                </View>
+
+                <View className="member__plan-price">
+                  {p.price === 0 ? (
+                    <Text className="member__plan-free">免费</Text>
+                  ) : (
+                    <View className="member__plan-price-row">
+                      <Text
+                        className="member__plan-amount"
+                        style={{ color: p.featured ? '#fde047' : '#e2e8f0' }}
+                      >
+                        ¥{p.price}
+                      </Text>
+                      {p.unit && <Text className="member__plan-unit">{p.unit}</Text>}
+                      {p.original && <Text className="member__plan-original">¥{p.original}</Text>}
+                    </View>
+                  )}
+                </View>
+
+                <View className="member__plan-feats">
+                  {p.features.map((f) => (
+                    <View key={f} className="member__plan-feat">
+                      <Icon
+                        name="check"
+                        size={26}
+                        color={p.featured ? '#fde047' : p.price === 0 ? '#475569' : '#cbd5e1'}
+                        strokeWidth={2}
+                      />
+                      <Text
+                        className="member__plan-feat-text"
+                        style={{
+                          color: p.featured ? '#e2e8f0' : p.price === 0 ? '#64748b' : '#cbd5e1'
+                        }}
+                      >
+                        {f}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+
+                <View
+                  className={`member__plan-btn
+                    ${p.id === 'free' ? 'member__plan-btn--free' : ''}
+                    ${p.featured ? 'member__plan-btn--featured' : ''}
+                    ${p.id === 'month' ? 'member__plan-btn--month' : ''}
+                    ${isCurrent ? 'member__plan-btn--current' : ''}`}
+                  onClick={() => buy(p.id)}
+                >
+                  <Text className="member__plan-btn-text">{btnLabel(p.id)}</Text>
+                </View>
               </View>
             </View>
           );
         })}
       </View>
 
-      <View className="member__cdkey-entry" onClick={() => setCdkeyOpen(true)}>
-        <Text className="member__cdkey-entry-text">有兑换码？立即兑换 ›</Text>
+      {/* 五音疗愈说明 */}
+      <View className="member__heal">
+        <View className="member__heal-head">
+          <Icon name="award" size={28} color="#94a3b8" strokeWidth={1.5} />
+          <Text className="member__heal-title">五音疗愈体系</Text>
+        </View>
+        <View className="member__heal-list">
+          {ELEMENT_LIST.map((w) => (
+            <View key={w.id} className="member__heal-row">
+              <Icon name={w.icon as IconName} size={32} color={w.primary} strokeWidth={1.5} />
+              <Text className="member__heal-el" style={{ color: w.primary }}>{w.id}音</Text>
+              <Text className="member__heal-desc">{w.note} · {w.organ} · {w.desc}</Text>
+            </View>
+          ))}
+        </View>
       </View>
 
       <CdkeyModal open={cdkeyOpen} onClose={() => setCdkeyOpen(false)} />

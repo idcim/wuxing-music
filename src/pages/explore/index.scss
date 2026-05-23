@@ -2,59 +2,150 @@
 
 .explore {
   min-height: 100vh;
-  padding: 140rpx $pad-outer 160rpx;
-  background: $bg-deep;
+  padding: 0 44rpx 280rpx;
+
+  // ── 标题 ──
+  &__header {
+    padding: 88rpx 0 56rpx;
+  }
+
+  &__eyebrow {
+    display: block;
+    color: $text-quaternary;
+    font-size: 24rpx;
+    letter-spacing: 6rpx;
+    margin-bottom: 12rpx;
+  }
 
   &__title {
     display: block;
-    font-size: 56rpx;
-    letter-spacing: 8rpx;
     color: $text-primary;
+    font-size: 52rpx;
+    font-weight: 200;
+    letter-spacing: 6rpx;
   }
 
-  &__sub {
+  // ── 筛选 chip ──
+  &__chips {
+    white-space: nowrap;
+    margin-bottom: 56rpx;
+  }
+
+  &__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 12rpx;
+    border: 2rpx solid;
+    border-radius: 48rpx;
+    padding: 20rpx 36rpx;
+    margin-right: 16rpx;
+    vertical-align: top;
+
+    &:last-child {
+      margin-right: 0;
+    }
+
+    &-text {
+      font-size: 26rpx;
+      letter-spacing: 2rpx;
+    }
+  }
+
+  // ── 元素信息卡 ──
+  &__el {
+    position: relative;
+    overflow: hidden;
+    border: 2rpx solid;
+    border-radius: 40rpx;
+    padding: 44rpx;
+    margin-bottom: 56rpx;
+  }
+
+  &__el-glow {
+    position: absolute;
+    right: -40rpx;
+    top: -40rpx;
+    width: 240rpx;
+    height: 240rpx;
+    border-radius: 50%;
+  }
+
+  &__el-body {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    gap: 36rpx;
+    align-items: flex-start;
+  }
+
+  &__el-icon {
+    width: 112rpx;
+    height: 112rpx;
+    border-radius: 32rpx;
+    border: 2rpx solid;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &__el-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__el-row {
+    display: flex;
+    align-items: baseline;
+    gap: 16rpx;
+    margin-bottom: 8rpx;
+  }
+
+  &__el-id {
+    font-size: 36rpx;
+    font-weight: 300;
+    letter-spacing: 4rpx;
+  }
+
+  &__el-en {
+    font-size: 22rpx;
+    letter-spacing: 4rpx;
+  }
+
+  &__el-meta {
     display: block;
-    margin: 16rpx 0 48rpx;
-    font-size: 26rpx;
     color: $text-tertiary;
+    font-size: 24rpx;
+    letter-spacing: 2rpx;
+    margin-bottom: 12rpx;
   }
 
-  &__grid {
+  &__el-desc {
+    display: block;
+    color: #cbd5e1;
+    font-size: 26rpx;
+    line-height: 1.7;
+  }
+
+  // ── 曲目列表 ──
+  &__list {
     display: flex;
     flex-direction: column;
-    gap: $gap-list;
+    gap: 20rpx;
   }
 
-  &__card {
-    position: relative;
-    padding: 40rpx $pad-card;
-    border: 2rpx solid $border;
-    border-radius: $radius-lg;
-    background: $surface;
+  // ── 空态 ──
+  &__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 120rpx 0;
 
-    &-el {
-      font-size: 64rpx;
-    }
-
-    &-arrow {
-      position: absolute;
-      top: 40rpx;
-      right: $pad-card;
-      font-size: 40rpx;
-      color: $text-tertiary;
-    }
-
-    &-note {
-      display: block;
-      margin: 12rpx 0;
-      font-size: 24rpx;
-      color: $text-secondary;
-    }
-
-    &-desc {
-      display: block;
+    &-text {
+      margin-top: 32rpx;
+      color: $text-quaternary;
       font-size: 26rpx;
-      color: $text-tertiary;
+      letter-spacing: 4rpx;
     }
   }
 }

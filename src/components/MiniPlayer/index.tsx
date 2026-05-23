@@ -4,8 +4,11 @@ import Taro from '@tarojs/taro';
 import { usePlayerStore } from '@/stores/player';
 import { useUserStore } from '@/stores/user';
 import { WUXING } from '@/constants/wuxing';
+import { A } from '@/utils/color';
+import Icon from '@/components/Icon';
 import SleepTimer from '@/components/SleepTimer';
 import type { ElementId } from '@/types';
+import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
 
 export default function MiniPlayer() {
@@ -44,43 +47,77 @@ export default function MiniPlayer() {
     isPlaying ? pause() : resume();
   };
 
+  // 进度 → 当前时间显示（与原型一致的近似换算）
+  const curMin = Math.floor(progress * 0.36);
+  const curSec = String(Math.floor((progress * 21.6) % 60)).padStart(2, '0');
+
   return (
-    <View className="mini-player">
-      <View className="mini-player__bar">
-        <View
-          className="mini-player__bar-fill"
-          style={{ width: `${progress}%`, background: el.primary }}
-        />
-      </View>
+    <View
+      className="mini-player"
+      style={{
+        borderColor: A.a40(el.primary),
+        boxShadow: `0 -20rpx 80rpx ${el.glow}`
+      }}
+    >
       <View className="mini-player__body">
-        <View className="mini-player__dot" style={{ background: el.primary }} />
         <View
-          className="mini-player__info"
+          className="mini-player__cover"
+          style={{
+            background: `radial-gradient(circle, ${A.a30(el.primary)}, ${A.a10(el.primary)})`,
+            borderColor: A.a40(el.primary)
+          }}
           onClick={() => Taro.navigateTo({ url: '/pages/player/index' })}
         >
-          <Text className="mini-player__title">{currentTrack.title}</Text>
-          <Text className="mini-player__hz serif" style={{ color: el.accent }}>
-            {currentTrack.hz} · {currentTrack.tag}
-          </Text>
+          <Icon name={el.icon as IconName} size={36} color={el.primary} strokeWidth={1.5} />
         </View>
+
+        <View className="mini-player__info">
+          <Text className="mini-player__title">{currentTrack.title}</Text>
+          <View className="mini-player__row">
+            <Text className="mini-player__time cormorant" style={{ color: el.accent }}>
+              {curMin}:{curSec}
+            </Text>
+            <View className="mini-player__bar">
+              <View
+                className="mini-player__bar-fill"
+                style={{ width: `${progress}%`, background: el.primary }}
+              />
+            </View>
+          </View>
+        </View>
+
         <View
-          className={`mini-player__timer ${timerVal ? 'mini-player__timer--on' : ''}`}
+          className="mini-player__timer"
           style={timerVal ? { color: el.primary } : undefined}
           onClick={() => setTimerOpen(true)}
         >
-          <Text className="mini-player__timer-text">
-            {timerVal ? `${timerVal}'` : '⏱'}
-          </Text>
+          <Text className="mini-player__timer-text">{timerVal ? `${timerVal}'` : '⏱'}</Text>
         </View>
-        <View
-          className="mini-player__toggle"
-          style={{ background: el.primary }}
-          onClick={toggle}
-        >
+
+        <View className="mini-player__wave">
+          {[0, 1, 2, 3].map((i) => (
+            <View
+              key={i}
+              className="mini-player__wave-bar"
+              style={{
+                background: el.primary,
+                height: isPlaying ? '100%' : '30%',
+                animation: isPlaying
+                  ? `wave ${0.5 + i * 0.1}s ease-in-out infinite`
+                  : 'none',
+                animationDelay: `${i * 0.08}s`
+              }}
+            />
+          ))}
+        </View>
+
+        <View className="mini-player__toggle" style={{ background: el.primary }} onClick={toggle}>
           {isLoading ? (
             <View className="mini-player__spinner" />
+          ) : isPlaying ? (
+            <Icon name="pause" size={28} fill="#0a0e1a" strokeWidth={0} color="#0a0e1a" />
           ) : (
-            <Text className="mini-player__toggle-icon">{isPlaying ? '‖' : '▶'}</Text>
+            <Icon name="play" size={28} fill="#0a0e1a" strokeWidth={0} color="#0a0e1a" />
           )}
         </View>
       </View>

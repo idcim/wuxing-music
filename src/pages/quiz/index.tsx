@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro from '@tarojs/taro';
+import Icon from '@/components/Icon';
 import { QUIZ_QUESTIONS, EMPTY_SCORES, calcTopElement } from '@/constants/quiz';
 import { useUserStore } from '@/stores/user';
 import { submitQuiz } from '@/services/user';
@@ -13,7 +14,11 @@ export default function Quiz() {
   const setElement = useUserStore((s) => s.setElement);
 
   const question = QUIZ_QUESTIONS[step];
-  const progress = ((step + 1) / QUIZ_QUESTIONS.length) * 100;
+
+  const back = () => {
+    if (step > 0) setStep(step - 1);
+    else Taro.navigateBack().catch(() => Taro.redirectTo({ url: '/pages/onboard/index' }));
+  };
 
   const choose = (opt: QuizOption) => {
     const next = { ...scores };
@@ -34,17 +39,38 @@ export default function Quiz() {
 
   return (
     <View className="quiz">
-      <View className="quiz__bar">
-        <View className="quiz__bar-fill" style={{ width: `${progress}%` }} />
+      {/* 顶部栏：返回 + 分段进度 + 计数 */}
+      <View className="quiz__top">
+        <View className="quiz__back" onClick={back}>
+          <Icon name="chevronLeft" size={32} color="#94a3b8" strokeWidth={2} />
+        </View>
+        <View className="quiz__seg">
+          {QUIZ_QUESTIONS.map((_, i) => (
+            <View
+              key={i}
+              className={`quiz__seg-item${i <= step ? ' quiz__seg-item--on' : ''}`}
+            />
+          ))}
+        </View>
+        <Text className="quiz__count cormorant">
+          {step + 1} / {QUIZ_QUESTIONS.length}
+        </Text>
       </View>
-      <Text className="quiz__step">{step + 1} / {QUIZ_QUESTIONS.length}</Text>
-      <Text className="quiz__q serif">{question.q}</Text>
-      <View className="quiz__opts">
-        {question.opts.map((opt) => (
-          <View key={opt.text} className="quiz__opt fade-up" onClick={() => choose(opt)}>
-            <Text className="quiz__opt-text">{opt.text}</Text>
-          </View>
-        ))}
+
+      {/* 题目区：换题时 key 触发 fade-up 重播 */}
+      <View className="quiz__panel fade-up" key={step}>
+        <Text className="quiz__qno cormorant italic">
+          QUESTION {String(step + 1).padStart(2, '0')}
+        </Text>
+        <Text className="quiz__q serif">{question.q}</Text>
+        <View className="quiz__opts">
+          {question.opts.map((opt) => (
+            <View key={opt.text} className="quiz__opt" onClick={() => choose(opt)}>
+              <Text className="quiz__opt-text">{opt.text}</Text>
+              <Icon name="arrowRight" size={28} color="#475569" strokeWidth={1.5} />
+            </View>
+          ))}
+        </View>
       </View>
     </View>
   );

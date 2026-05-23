@@ -4,11 +4,17 @@ import Taro from '@tarojs/taro';
 import { WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
 import { bindPhone } from '@/services/user';
+import Icon from '@/components/Icon';
+import { A } from '@/utils/color';
 import CdkeyModal from '@/components/CdkeyModal';
 import MiniPlayer from '@/components/MiniPlayer';
 import TabBar from '@/components/TabBar';
 import type { ElementId } from '@/types';
+import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
+
+const BARS = [40, 65, 30, 80, 55, 70, 45];
+const WEEK_LABELS = ['一', '二', '三', '四', '五', '六', '今'];
 
 export default function Profile() {
   const element = useUserStore((s) => s.element);
@@ -18,12 +24,20 @@ export default function Profile() {
   const login = useUserStore((s) => s.login);
   const logout = useUserStore((s) => s.logout);
   const setPhone = useUserStore((s) => s.setPhone);
-  const el = element ? WUXING[element as ElementId] : null;
+  const el = WUXING[(element as ElementId) || '木'];
 
   const [cdkeyOpen, setCdkeyOpen] = useState(false);
 
   const retakeQuiz = () => Taro.navigateTo({ url: '/pages/quiz/index' });
   const goAbout = () => Taro.navigateTo({ url: '/pages/about/index' });
+
+  // 会员剩余天数
+  const expireDays = user?.membership.expireAt
+    ? Math.max(
+        0,
+        Math.ceil((new Date(user.membership.expireAt).getTime() - Date.now()) / 86400000)
+      )
+    : null;
 
   // 绑定手机号：真实环境用 getPhoneNumber 授权按钮拿加密数据；此处弹窗输入模拟。
   const onBindPhone = () => {
@@ -65,24 +79,62 @@ export default function Profile() {
     Taro.showModal({
       title: '退出登录',
       content: '确定要退出当前账号吗？',
-      success: (res) => { if (res.confirm) logout(); }
+      success: (res) => {
+        if (res.confirm) logout();
+      }
     });
   };
 
+  // 功能菜单
+  const menu: { icon: IconName; text: string; onClick: () => void; highlight?: boolean }[] = [
+    { icon: 'keyRound', text: '兑换码 / CDKEY', onClick: () => setCdkeyOpen(true), highlight: true },
+    { icon: 'user', text: element ? '重新测评体质' : '立即测评体质', onClick: retakeQuiz },
+    { icon: 'circleDot', text: user?.phone ? `手机号 ${user.phone}` : '绑定手机号', onClick: onBindPhone },
+    { icon: 'history', text: '聆听历史', onClick: () => {} },
+    { icon: 'download', text: '下载管理', onClick: () => {} },
+    { icon: 'settings', text: '设置', onClick: () => {} },
+    { icon: 'messageCircle', text: '关于我们', onClick: goAbout },
+    user
+      ? { icon: 'user', text: '退出登录', onClick: onLogout }
+      : { icon: 'user', text: loggingIn ? '登录中…' : '微信登录', onClick: onLogin }
+  ];
+
   return (
     <View className="profile">
-      <Text className="profile__title serif">我的</Text>
+      {/* 标题 */}
+      <View className="profile__header fade-up">
+        <Text className="profile__eyebrow cormorant italic">Profile</Text>
+        <Text className="profile__title">我的</Text>
+      </View>
 
-      <View className="profile__user fade-up">
-        <View className="profile__avatar" style={{ background: el?.glow || 'rgba(255,255,255,0.06)' }}>
-          <Text className="profile__avatar-text serif" style={{ color: el?.primary || '#e2e8f0' }}>
-            {el ? el.id : '律'}
-          </Text>
+      {/* 用户卡 */}
+      <View
+        className="profile__user fade-up"
+        style={{
+          background: `linear-gradient(135deg, ${A.a15(el.primary)}, transparent)`,
+          borderColor: A.a25(el.primary)
+        }}
+      >
+        <View
+          className="profile__avatar"
+          style={{
+            background: `radial-gradient(circle, ${A.a25(el.primary)}, transparent)`,
+            borderColor: A.a50(el.primary)
+          }}
+        >
+          <Icon name={el.icon as IconName} size={52} color={el.primary} strokeWidth={1.2} />
         </View>
         <View className="profile__user-info">
-          <Text className="profile__user-name">{user ? user.nickname : '未登录'}</Text>
+          <Text className="profile__user-name">
+            {user ? user.membership.name : '未登录'}
+          </Text>
+          <Text className="profile__user-meta" style={{ color: el.accent }}>
+            {el.id}型 · {el.note}音{expireDays !== null ? ` · ${expireDays}天到期` : ''}
+          </Text>
           {user ? (
-            <Text className="profile__user-action" onClick={onLogout}>退出登录</Text>
+            <Text className="profile__user-sub">
+              {isPremium ? '已解锁全部权益' : '升级解锁全部曲目'}
+            </Text>
           ) : (
             <Text className="profile__user-action" onClick={onLogin}>
               {loggingIn ? '登录中…' : '微信登录 ›'}
@@ -91,43 +143,61 @@ export default function Profile() {
         </View>
       </View>
 
-      <View className="profile__card fade-up">
-        <Text className="profile__card-label">本命五行</Text>
-        <Text className="profile__card-el serif" style={{ color: el?.primary || '#e2e8f0' }}>
-          {el ? `${el.id}型 · ${el.note}音` : '尚未测评'}
-        </Text>
-        <Text className="profile__card-link" onClick={retakeQuiz}>
-          {el ? '重新测评 ›' : '立即测评 ›'}
-        </Text>
-      </View>
-
-      <View className="profile__card fade-up">
-        <Text className="profile__card-label">会员状态</Text>
-        <Text className="profile__card-el serif">
-          {isPremium && user ? user.membership.name : '听闻 · 免费'}
-        </Text>
-        {isPremium && user?.membership.expireAt && (
-          <Text className="profile__card-link">
-            {new Date(user.membership.expireAt).toLocaleDateString()} 到期
+      {/* 本周统计 */}
+      <View className="profile__stats fade-up" style={{ animationDelay: '0.1s' }}>
+        <View className="profile__stats-head">
+          <View className="profile__stats-label">
+            <Icon name="trendingUp" size={28} color="#94a3b8" strokeWidth={1.5} />
+            <Text className="profile__stats-en cormorant italic">This Week</Text>
+          </View>
+          <Text className="profile__stats-val cormorant" style={{ color: el.accent }}>
+            5.2<Text className="profile__stats-unit">hrs</Text>
           </Text>
-        )}
+        </View>
+        <View className="profile__stats-bars">
+          {BARS.map((h, i) => {
+            const today = i === BARS.length - 1;
+            return (
+              <View key={i} className="profile__stats-col">
+                <View
+                  className="profile__stats-bar"
+                  style={{
+                    height: `${h}%`,
+                    background: today
+                      ? `linear-gradient(180deg, ${el.primary}, ${A.a50(el.primary)})`
+                      : 'rgba(148,163,184,0.15)'
+                  }}
+                />
+                <Text
+                  className="profile__stats-day"
+                  style={{ color: today ? el.accent : '#475569' }}
+                >
+                  {WEEK_LABELS[i]}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
       </View>
 
-      <View className="profile__entry fade-up" onClick={onBindPhone}>
-        <Text className="profile__entry-text">手机号</Text>
-        <Text className="profile__entry-arrow">
-          {user?.phone ? `${user.phone} ›` : '去绑定 ›'}
-        </Text>
-      </View>
-
-      <View className="profile__entry fade-up" onClick={() => setCdkeyOpen(true)}>
-        <Text className="profile__entry-text">兑换码</Text>
-        <Text className="profile__entry-arrow">›</Text>
-      </View>
-
-      <View className="profile__entry fade-up" onClick={goAbout}>
-        <Text className="profile__entry-text">关于我们</Text>
-        <Text className="profile__entry-arrow">›</Text>
+      {/* 功能菜单 */}
+      <View className="profile__menu">
+        {menu.map((item, i) => (
+          <View
+            key={i}
+            className={`profile__menu-item ${i < menu.length - 1 ? 'profile__menu-item--divider' : ''}`}
+            onClick={item.onClick}
+          >
+            <Icon
+              name={item.icon}
+              size={32}
+              color={item.highlight ? el.accent : '#64748b'}
+              strokeWidth={1.5}
+            />
+            <Text className="profile__menu-text">{item.text}</Text>
+            <Icon name="chevronRight" size={28} color="#334155" strokeWidth={1.5} />
+          </View>
+        ))}
       </View>
 
       <CdkeyModal open={cdkeyOpen} onClose={() => setCdkeyOpen(false)} />
