@@ -93,20 +93,34 @@ docker compose up -d --build
 cd admin && npm install && npm run dev   # http://localhost:5173（/api 代理到后端 8000）
 ```
 
-页面：登录、仪表盘、歌曲管理（分页/筛选）、五行、套餐、兑换码（批量生成/导出/禁用）、测评、用户、支付设置。
+页面：登录、仪表盘、歌曲管理（分页/筛选/音频封面上传）、五行、套餐、兑换码（批量生成/导出/禁用）、测评、订单（详情+退单）、用户（详情+开通会员）、站点设置（站点信息/小程序/文件存储/支付，含 LOGO/证书上传）。
 
 ---
 
 ## 路线图
 
-- [x] 小程序前端主流程 + 播放体验
-- [x] FastAPI 管理后端骨架 + 核心 CRUD + Docker（外部 MySQL）
+- [x] 小程序前端主流程 + 播放体验（已按原型还原 UI）
+- [x] FastAPI 管理后端 + 全套管理 CRUD + Docker（外部 MySQL）
 - [x] 管理后台界面（Vue3 + Element Plus）
-- [ ] 小程序公开接口（让 `USE_MOCK=false` 真连后端）
-- [ ] 微信支付统一下单 + 回调验签
-- [ ] 离线下载 / 周聆听统计 / 分享卡片
+- [x] 小程序公开接口对接（`USE_MOCK=false` 真连后端）
+- [x] 订单管理 + 退单流程；后台开通会员；用户/订单详情
+- [x] 站点/小程序/存储/支付配置；文件上传（本地）
+- [ ] 微信支付统一下单 + 回调验签（证书已可在后台配置）
+- [ ] 微信 code→openid 服务端换取（AppSecret 已可配）
+- [ ] OSS 上传逻辑接入（配置已就绪）
+- [ ] 周聆听统计 / 分享卡片
+
+> 注：项目不支持「离线下载」，相关功能已全端移除。
 
 ---
+
+## 常见问题
+
+- **小程序报 `taro.useState/useMemo is not a function`**：多为增量构建缓存损坏。清缓存后全量重建：
+  `rm -rf dist node_modules/.vite .swc && npm run dev:weapp`。
+- **`webapi_getwxaasyncsecinfo:fail`**：开发者工具游客模式下 `wx.login` 受限，已自动兜底游客身份；用真实 AppID 登录即正常。
+- **图标不显示 / `appServiceSDKScriptError`**：图标用 `View + background-image(URL编码SVG)` 渲染（`<Image>` 不稳）。
+- **本地连后端**：开发者工具「本地设置」勾选「不校验合法域名」；真机需把 `API_BASE` 改成局域网 IP。
 
 ## 备案与合规
 
