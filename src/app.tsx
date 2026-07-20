@@ -1,5 +1,5 @@
 import { PropsWithChildren } from 'react';
-import { useLaunch } from '@tarojs/taro';
+import Taro, { useLaunch } from '@tarojs/taro';
 import { useUserStore } from '@/stores/user';
 import { useContentStore } from '@/stores/content';
 import { isH5, isInWeChat } from '@/utils/platform';
@@ -23,9 +23,13 @@ function App({ children }: PropsWithChildren) {
 async function bootstrapAuth(): Promise<void> {
   if (isH5 && isInWeChat && !getToken()) {
     try {
-      const user = await useUserStore.getState().loginByWechatH5();
+      const { user, devGuest } = await useUserStore.getState().loginByWechatH5();
       // user 为 null 表示正在跳转授权页，页面即将卸载，无需继续
-      if (user) cleanOAuthParams();
+      if (user) {
+        cleanOAuthParams();
+        // 开发游客兜底（公众号未配）：轻提示，区别于真实微信登录
+        if (devGuest) Taro.showToast({ title: '开发环境·游客登录', icon: 'none', duration: 2500 });
+      }
     } catch {
       // 网页授权失败：退回常规流程（游客态兜底）
       useUserStore.getState().initFromCache();

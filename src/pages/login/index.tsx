@@ -108,9 +108,19 @@ export default function Login() {
     if (submitting) return;
     setSubmitting(true);
     try {
-      const user = await loginByWechatH5();
-      // user 为 null 表示正在跳转微信授权页，页面即将卸载，无需处理
-      if (user) Taro.reLaunch({ url: '/pages/home/index' });
+      const { user, devGuest } = await loginByWechatH5();
+      // user 为 null：正在跳转微信授权页，页面即将卸载，无需处理
+      if (!user) return;
+      // 开发游客兜底（公众号未配置）：醒目弹窗，避免误以为是真实微信登录
+      if (devGuest) {
+        await Taro.showModal({
+          title: '开发环境提示',
+          content: '公众号未配置，当前为「游客登录」，并非真实微信登录。配置公众号 AppID/Secret 并关闭后端 DEBUG 后，此处将走真实微信授权。',
+          showCancel: false,
+          confirmText: '知道了'
+        });
+      }
+      Taro.reLaunch({ url: '/pages/home/index' });
     } catch (e: any) {
       Taro.showToast({ title: e?.message || '微信登录失败', icon: 'none' });
       setSubmitting(false);

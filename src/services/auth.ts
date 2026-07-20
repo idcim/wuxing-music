@@ -17,6 +17,15 @@ export interface SmsSendResult {
   devCode?: string;          // 开发/mock 期直接下发验证码，便于联调（生产不返回）
 }
 
+// 微信 H5 登录结果：
+// - user 为 null 表示正在跳转微信授权页（页面即将卸载）；
+// - devGuest=true 表示公众号未配置、走了「开发游客兜底」（并非真实微信登录），
+//   供 UI 醒目提示；配好公众号 / 生产关 DEBUG 后此分支不再触发，提示自动消失。
+export interface WechatH5LoginResult {
+  user: User | null;
+  devGuest: boolean;
+}
+
 // 落地登录态：token 存 TOKEN_KEY、user 存 USER（与 wxLogin 一致），返回 user。
 function persistLogin(result: LoginResult): User {
   storage.set(TOKEN_KEY, result.token);
@@ -150,25 +159,26 @@ export async function setPassword(password: string): Promise<void> {
 // ── 微信网页授权登录（H5 公众号内）───────────────────────
 // 流程：地址栏带 code → 用 code 换 token；无 code → 取授权跳转地址并 replace 跳转
 //（此时函数返回 null，页面即将卸载）；后端未配置公众号时 → 用游客 id 兜底登录（dev）。
-export async function wechatLoginH5(): Promise<User | null> {
+export async function wechatLoginH5(): Promise<WechatH5LoginResult> {
   const guest = getGuestOpenid();
 
   if (USE_MOCK) {
     const user = mockUser(`mock-openid-h5-${guest.slice(0, 12)}`);
-    return persistLogin({ token: `mock-token-h5-${guest.slice(0, 12)}`, user });
+    persistLogin({ token: `mock-token-h5-${guest.slice(0, 12)}`, user });
+    return { user, devGuest: true };
   }
 
   const loc = typeof window !== 'undefined' ? window.location : null;
   const code = loc ? new URLSearchParams(loc.search).get('code') : null;
 
-  // 已从微信授权回跳（地址栏带 code）：换取 token
+  // 已从微信授权回跳（地址栏带 code）：换取 token —— 真实微信登录
   if (code) {
     const result = await request<LoginResult>('/api/mp/h5/login', {
       method: 'POST',
       data: { code, guestId: guest },
       auth: false
     });
-    return persistLogin(result);
+    return { user: persistLogin(result), devGuest: false };
   }
 
   // 无 code：向后端要授权跳转地址（redirect 为当前不含 code/state 的完整 URL）
@@ -185,18 +195,19 @@ export async function wechatLoginH5(): Promise<User | null> {
   );
 
   if (oauth.configured && oauth.url && loc) {
-    // 跳转到微信授权页，函数不再返回有效 user（页面即将卸载）
+    // 已配公众号：跳转微信授权页，函数不再返回有效 user（页面即将卸载）
     loc.replace(oauth.url);
-    return null;
+    return { user: null, devGuest: false };
   }
 
-  // 后端未配置公众号：游客兜底登录（dev）
+  // 后端未配置公众号：游客兜底登录（仅开发态，生产后端会 503）——标记 devGuest 供 UI 提示
+  console.warn('[H5] 公众号未配置，走「开发游客兜底登录」（非真实微信登录）');
   const result = await request<LoginResult>('/api/mp/h5/login', {
     method: 'POST',
     data: { guestId: guest },
     auth: false
   });
-  return persistLogin(result);
+  return { user: persistLogin(result), devGuest: true };
 }
 
 export async function fetchProfile(): Promise<User> {
