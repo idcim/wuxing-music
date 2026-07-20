@@ -9,151 +9,195 @@
 - **个性化**：通过 4 题快速测评定位用户五行体质偏向
 - **专业性**：每首曲目对应五脏、季节、频率，有理论依据
 - **沉浸感**：深色冥想氛围 + 高级时尚视觉
-- **变现路径**：免费试听 → 月卡 → 年卡 + CDKEY 兑换
+- **变现路径**：免费试听 → 月卡 → 年卡 + CDKEY 兑换 + **买卡送人（礼物码）**
 
 ------
 
-## 技术栈推荐
+## 当前状态（务必先读）
 
-### 方案 A：Taro 3 + React（推荐）
+> ⚠️ 本文档一度停留在"待初始化"阶段，现已按实际实现全面校正。运行/部署的**操作细节**见 [`README.md`](README.md)、[`backend/README.md`](backend/README.md)、[`admin/README.md`](admin/README.md)；本文件负责讲"**是什么 / 规范 / 数据结构 / 协作约定**"。
 
-React 写法直接接近现有原型，跨端能力强。**Taro 3.2+ 官方支持 React Native**，一套代码可同时编译到微信小程序、H5、iOS、Android。本项目从立项起即按跨端友好原则组织代码，详见末尾「未来扩展到 App」章节。
+本项目是一个 **monorepo**，三部分均已落地：
+
+| 目录 | 角色 | 技术栈 | 状态 |
+| ---- | ---- | ------ | ---- |
+| `src/` | 小程序 / H5 前端 | **Taro 4.2 + React 18 + TS + Sass + Zustand** | 小程序主流程完成；H5（微信内）登录/支付已接入（v1.1） |
+| `backend/` | 后端 API（管理端 + 小程序公开端） | **FastAPI + SQLAlchemy + 外部 MySQL**（开发可 SQLite），Docker | 全套接口 + 微信支付/礼物码/统计已实现，待真实商户配置上线 |
+| `admin/` | 管理后台 | **Vue3 + Vite + Element Plus + Pinia** | 15 个视图完成 |
+
+- **数据源开关**：`src/constants/env.ts` 的 `USE_MOCK`。当前 `false`，直连线上 `API_BASE = https://app-api.azure-glow.cn`。置 `true` 可在无后端时本地跑通登录/曲目/兑换/支付/音频全链路。
+- **已完成**：前端全部页面与播放体验、后端管理 CRUD、小程序公开接口对接、微信支付（JSAPI 统一下单 + 回调验签，逻辑已就绪）、CDKEY 兑换、买卡送人礼物码、订单/退款、聆听历史与周统计、海报小程序码、站点/存储/支付/小程序配置与文件上传（本地）。
+- **已完成（H5 端，v1.1）**：H5（微信内）手机登录（短信验证码 + 手机号密码）、微信登录（公众号网页授权 OAuth2）、微信支付（公众号 JSAPI）；短信/公众号抽象层（未配则 dev 兜底）；版本管理基建（`version.json` + `docs/ROADMAP.md` + `src/constants/version.ts`）。详见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
+- **待补**：真实微信商户号 + 证书上线联调；真实公众号/小程序 AppSecret 配置后授权与 `code→openid` 生效验证；短信服务商密钥接入（抽象层已就位）；对象存储（OSS）上传接入（抽象层已就位）；**上线前安全加固清单见 [`docs/ROADMAP.md`](docs/ROADMAP.md)**。
+- **不做**：❌ 离线下载（已全端移除，勿再引入）。
+
+------
+
+## 技术栈（已定，勿再按"方案 A/B/C"选型）
+
+立项文档曾并列 Taro / 原生 / uni-app 三方案，现已**确定并落地方案 A**，且实际细节与早期设想不同，以此处为准：
+
+### 前端 `src/`
 
 ```
-- Taro 3.x（要求 3.2+ 以支持 RN）
-- React 18 + Hooks
-- TypeScript
+- Taro 4.2（注意：不是 3.x；4.x + Vite 编译）
+- React 18 + Hooks + TypeScript（strict）
+- Sass（注意：不是 Less；design token 在 src/styles/variables.scss）
 - Zustand（状态管理）
-- NutUI-React-Taro（多端组件库，比 Taro UI 更适合 RN）
-- Less / Sass
+- 无第三方 UI 组件库（未用 NutUI / vant；界面按原型手写，最大化控制力与跨端可控性）
+- 图标：lucide-static 生成 SVG 路径 → 自研 Icon 组件用 background-image 渲染（见「图标方案」）
 ```
 
-### 方案 B：原生微信小程序
+> 为何不用 NutUI：本项目视觉高度定制（深色冥想氛围、五行渐变），组件库反而是负担；且 Taro4+Vite 下自定义 tabBar 有编译 bug（见「已知陷阱」），越少黑盒越好。
 
-体积小、性能好，但开发效率低于 Taro。
+### 后端 `backend/`
 
 ```
-- WXML + WXSS + JS/TS
-- MobX-miniprogram（状态管理）
-- vant-weapp（组件库）
+- FastAPI + Uvicorn
+- SQLAlchemy 2.x（Mapped/mapped_column 声明式模型）
+- 数据库：生产外部 MySQL（utf8mb4），开发可切 SQLite
+- 鉴权：JWT（python-jose）；管理端 sub=<username>，小程序端 sub=user:<id>
+- 微信支付：JSAPI 统一下单 + 回调解密（app/wxpay.py）
+- 存储抽象：本地 / OSS 透明切换（app/storage.py）
+- Docker + docker-compose（根目录一键起后端 + 后台，连外部 MySQL）
 ```
 
-### 方案 C：uni-app（Vue 派）
+### 管理后台 `admin/`
 
-若团队偏 Vue，多端发布友好。
-
-**本文档以方案 A（Taro + React）为主线展开**。
+```
+- Vue3 + Vite + TypeScript
+- Element Plus（组件库）+ Pinia（状态）+ Vue Router
+- 生产用 Nginx 托管，/api 反代到后端（同源无跨域）
+```
 
 ------
 
-## 项目结构
+## 项目结构（monorepo）
 
 ```
 wuxing-music/
-├── src/
-│   ├── app.config.ts           # 全局配置
-│   ├── app.tsx                 # 入口
-│   ├── app.less                # 全局样式
-│   ├── pages/
-│   │   ├── splash/             # 启动页
-│   │   ├── onboard/            # 引导页
-│   │   ├── quiz/               # 五行测评
-│   │   ├── result/             # 测评结果
-│   │   ├── home/               # 首页（归处）
-│   │   ├── explore/            # 探律
-│   │   ├── member/             # 会员
-│   │   ├── profile/            # 我的
-│   │   └── player/             # 全屏播放器（次要）
-│   ├── components/
-│   │   ├── TrackCard/          # 曲目卡片
-│   │   ├── MiniPlayer/         # 底部迷你播放器
-│   │   ├── TabBar/             # 自定义 tabBar
-│   │   ├── CdkeyModal/         # 兑换码弹窗
-│   │   ├── ElementBadge/       # 五行徽章
-│   │   └── WaveBar/            # 播放波形动画
-│   ├── stores/
-│   │   ├── user.ts             # 用户 / 会员状态
-│   │   ├── player.ts           # 播放器状态
-│   │   └── content.ts          # 曲目库 / 五行数据
-│   ├── services/
-│   │   ├── api.ts              # API 封装
-│   │   ├── auth.ts             # 登录鉴权
-│   │   ├── pay/                # 支付（分平台）
-│   │   │   ├── index.ts        # 统一入口
-│   │   │   ├── pay.weapp.ts    # 微信小程序支付
-│   │   │   └── pay.rn.ts       # RN 端支付（IAP / H5）
-│   │   ├── audio/              # 音频（分平台）
-│   │   │   ├── index.ts        # 抽象接口
-│   │   │   ├── audio.weapp.ts  # wx.createInnerAudioContext
-│   │   │   └── audio.rn.ts     # react-native-track-player
-│   │   ├── storage/            # 存储（分平台）
-│   │   │   ├── index.ts
-│   │   │   ├── storage.weapp.ts
-│   │   │   └── storage.rn.ts
-│   │   └── cdkey.ts            # 兑换码
+├── src/                        # 小程序 / H5 前端（Taro 4 + React 18）
+│   ├── app.config.ts           # 全局配置（页面注册 / 后台音频模式）
+│   ├── app.tsx / app.scss      # 入口 / 全局样式（含 keyframes）
+│   ├── pages/                  # 16 页（均为「页内 TabBar + redirectTo」而非原生 tabBar）
+│   │   ├── splash/             #   启动页
+│   │   ├── onboard/            #   引导页
+│   │   ├── login/              #   登录
+│   │   ├── quiz/               #   五行测评（4 题）
+│   │   ├── result/             #   测评结果
+│   │   ├── home/               #   首页（归处 / 本命曲目）
+│   │   ├── explore/            #   探律（五行卡入口）
+│   │   ├── element/            #   单元素详情（下钻曲目列表）
+│   │   ├── member/             #   会员（套餐 / 购买 / 买卡送人）
+│   │   ├── profile/            #   我的
+│   │   ├── userinfo/           #   资料编辑（昵称 / 头像）
+│   │   ├── settings/           #   设置
+│   │   ├── orders/             #   我的订单（购买记录 + 礼物码回看）
+│   │   ├── history/            #   聆听历史 + 周统计
+│   │   ├── player/             #   全屏播放器（旋转罗盘 / seek）
+│   │   └── about/              #   关于 / 条款
+│   ├── components/             # 8 个：CdkeyModal / Icon / MiniPlayer / Playlist
+│   │   │                       #        PosterShare / SleepTimer / TabBar / TrackCard
+│   ├── stores/                 # zustand：user / player / content
+│   ├── services/               # 业务与平台能力封装（禁止组件里直接 wx.xxx）
+│   │   ├── api.ts              #   request()：{code,data,msg} 信封 + Bearer
+│   │   ├── auth.ts             #   微信登录 / 静默登录 / profile
+│   │   ├── content.ts          #   五行 + 曲目
+│   │   ├── cdkey.ts            #   兑换码（含 mock）
+│   │   ├── pay.ts              #   微信支付 / 买卡送人 / 我的订单
+│   │   ├── share.ts            #   转发 / 朋友圈
+│   │   ├── site.ts             #   站点信息
+│   │   ├── stats.ts            #   周聆听统计
+│   │   ├── user.ts             #   资料 / 绑定手机
+│   │   ├── audio/              #   音频（分端：index.weapp.ts / index.h5.ts / types.ts）
+│   │   └── storage/            #   本地存储（index.ts，统一封装）
 │   ├── constants/
-│   │   ├── wuxing.ts           # 五行配置数据
-│   │   └── quiz.ts             # 测评题目
-│   ├── utils/
-│   │   ├── audio.ts            # 音频管理
-│   │   ├── storage.ts          # 本地存储
-│   │   └── format.ts           # 格式化工具
-│   ├── assets/
-│   │   ├── icons/              # 图标（PNG/SVG，小程序不支持lucide）
-│   │   └── images/             # 图片资源
-│   └── types/
-│       └── index.d.ts          # TS 类型声明
+│   │   ├── wuxing.ts           #   五行运行时数据（角徵宫商羽 / 五脏 / 曲目）
+│   │   ├── quiz.ts             #   测评题库
+│   │   ├── plans.ts            #   会员套餐兜底数据
+│   │   └── env.ts              #   USE_MOCK / API_BASE / TOKEN_KEY
+│   ├── utils/                  # color / format / nav / platform / share / url
+│   ├── styles/variables.scss   # ★ design token（基色 / 圆角 / 间距 / 五行色 map）
+│   ├── assets/                 # 图标 / 图片
+│   └── types/index.ts          # 全量 TS 类型
+├── backend/                    # FastAPI 后端
+│   └── app/
+│       ├── main.py             #   应用入口 + 路由挂载 + 建表
+│       ├── config.py           #   .env 配置（DATABASE_URL / JWT / 管理员）
+│       ├── database.py         #   引擎 / Session / Base
+│       ├── models.py           #   ★ 11 张表（见「后端数据模型」）
+│       ├── schemas.py          #   Pydantic 出入参 + ok() 信封
+│       ├── security.py         #   密码哈希 / JWT / 管理员依赖
+│       ├── seed.py             #   启动种子数据（五行/曲目/套餐/测评/测试兑换码/管理员）
+│       ├── wxpay.py            #   微信支付统一下单 + 回调解密
+│       ├── storage.py          #   本地 / OSS 存储抽象
+│       └── routers/            #   auth / users / orders / plans / elements / tracks
+│           │                   #   cdkeys / quiz / settings / site / upload（管理端）
+│           └── mp.py           #   ★ 小程序公开端（/api/mp/*）
+├── admin/                      # Vue3 管理后台
+│   └── src/
+│       ├── api/                #   接口封装（index.ts / request.ts）
+│       ├── stores/auth.ts      #   Pinia 登录态
+│       ├── router/             #   路由
+│       └── views/              #   15 视图（Dashboard / Users / Orders / Plans / Elements
+│                               #           Tracks / Cdkeys / Quiz / Site / Storage / MpPanel …）
 ├── prototype/
 │   └── wuxing-music-app.jsx    # 原型参考（Web React 版）
-├── project.config.json
-├── tsconfig.json
-└── package.json
+├── docker-compose.yml          # 一键起 backend + admin（连外部 MySQL）
+├── project.config.json         # 微信开发者工具配置
+└── package.json                # 前端脚手架
 ```
+
+------
+
+## 数据流与 Mock 模式
+
+前端所有网络请求统一走 `src/services/api.ts` 的 `request<T>()`：
+
+- 基址 `API_BASE`，响应信封 `{ code, data, msg }`，`code === 0` 为成功，否则抛 `ApiError(code, msg)`。
+- 默认携带 `Authorization: Bearer <token>`（token 存 `storage`，键 `wx_token`）；公开接口传 `{ auth: false }`。
+- HTTP 非 2xx → 抛 `ApiError(statusCode)`。
+
+**`USE_MOCK` 开关**（`src/constants/env.ts`）：每个 service（auth / cdkey / pay / content …）内部 `if (USE_MOCK) { …本地假数据… }`，因此后端未就绪时前端可独立跑通。切真实接口只需把 `USE_MOCK` 置 `false` 并填对 `API_BASE`。修改任何 service 时**务必同时维护 mock 与真实两条分支**。
+
+**登录约定（小程序）**：`wxLogin()` 取 `wx.login()` 的临时 `code` + 稳定游客 openid 一起发给 `/api/mp/login`；后端配置了 AppSecret 时用 `code` 调 `jscode2session` 换真实 openid，否则回退前端直传的稳定 openid（保证游客态身份不漂移）。**切勿把每次都变的 `code` 当 openid 用**。
+
+**登录约定（H5，v1.1）**：按平台分支（`utils/platform.ts` 的 `isH5`/`isInWeChat`）。手机登录（`loginByPhone`/`loginByPassword`）平台无关。微信登录 `wechatLoginH5()` 走公众号网页授权：无 `code` → 取 `/api/mp/h5/oauth-url` 跳转授权；带 `code` 回跳 → `/api/mp/h5/login` 换 `oa_openid`（`app.tsx` 在微信内静默触发并清理 URL）。**安全约束**：`/api/mp/login`（小程序）与 `/api/mp/h5/login`（H5）均——已配置密钥时**必须用真实 `code` 换 openid、忽略前端直传标识**，仅未配置时才用游客标识走 dev 兜底（防绕过授权/顶号）；手机号合成 openid `phone:<手机号>` 不可经 openid 直信路径登录（详见 [`docs/ROADMAP.md`](docs/ROADMAP.md) 安全加固清单）。
 
 ------
 
 ## 设计系统
 
-### 字体（小程序需嵌入或降级）
+### 字体
 
-小程序无法直接用 Google Fonts，需要替代方案：
+小程序无法直接用 Google Fonts。**当前采用系统字体降级**（`src/app.scss`），无需异步加载、无闪烁：
 
-**方案 1：使用系统字体降级**
+- 中文正文：`PingFang SC, 苹方-简, system-ui`
+- 衬线（`.serif`，约等于 Noto Serif SC）：`STSong, Songti SC, SimSun`
+- 装饰英文/数字（`.cormorant`，约等于 Cormorant Garamond）：`Georgia, STSong, Times New Roman`
 
-- 中文：`PingFang SC, 苹方-简, system-ui`
-- 数字/英文小标：`-apple-system, SF Pro Display`
-- 衬线（标题）：`STSong, SimSun`（系统衬线，效果约等于 Noto Serif SC）
-
-**方案 2：自定义字体（推荐）**
-
-- 通过 `wx.loadFontFace()` 加载 CDN 上的 woff2
-- 必须开启 `scopedSlots`，仅支持 `.ttf` / `.woff`
-- 字体文件需托管在 HTTPS，建议放对象存储（OSS / COS）
-
-```js
-wx.loadFontFace({
-  family: 'CormorantGaramond',
-  source: 'url("https://cdn.yourdomain.com/fonts/Cormorant.woff2")',
-  scopes: ['webview', 'native']
-});
-```
+> 可选增强（未启用）：如需精确字形，可后续用 `wx.loadFontFace()` 加载 CDN 上的 woff2/ttf；当前为控制体积与首屏稳定，暂不引入。
 
 ### 配色系统
 
+Design token 定义在 **`src/styles/variables.scss`（Sass 变量，非 Less）**，各页/组件 `@import` 复用。
+
 #### 全局基色
 
-```less
-@bg-deep: #03050a;        // 最深底
-@bg-mid: #0a0e1a;         // 中间底
-@text-primary: #e2e8f0;   // 主文字
-@text-secondary: #94a3b8; // 次文字
-@text-tertiary: #64748b;  // 辅助文字
-@text-quaternary: #475569;// 弱化文字
-@border: rgba(255,255,255,0.06);
-@surface: rgba(255,255,255,0.025);
+```scss
+$bg-deep: #03050a;         // 最深底
+$bg-mid: #0a0e1a;          // 中间底
+$text-primary: #e2e8f0;    // 主文字
+$text-secondary: #94a3b8;  // 次文字
+$text-tertiary: #64748b;   // 辅助文字
+$text-quaternary: #475569; // 弱化文字
+$border: rgba(255,255,255,0.06);
+$surface: rgba(255,255,255,0.025);
 ```
 
 #### 五行色板（必备核心数据）
+
+`variables.scss` 存 `$wuxing-colors` map 供样式循环；运行时数据（含频率/五脏/曲目）在 `src/constants/wuxing.ts`。二者色值一致：
 
 | 元素 | primary   | accent    | glow                    | 对应五脏 | 频率示例     |
 | ---- | --------- | --------- | ----------------------- | -------- | ------------ |
@@ -163,33 +207,34 @@ wx.loadFontFace({
 | 金   | `#cbd5e1` | `#f1f5f9` | `rgba(203,213,225,0.2)` | 肺大肠   | 741Hz / 商调 |
 | 水   | `#38bdf8` | `#7dd3fc` | `rgba(56,189,248,0.25)` | 肾膀胱   | 174Hz / 羽调 |
 
-### 圆角与间距
+#### 圆角与间距（`variables.scss`）
 
-- 卡片圆角：`16-24rpx`（小卡）/ `32-44rpx`（大卡）
-- 按钮圆角：`40-60rpx`（胶囊）
-- 内边距：`44rpx`（外）/ `28-36rpx`（卡内）
-- 列表间距：`20rpx`
+```scss
+$radius-sm: 16rpx;  $radius-md: 24rpx;  $radius-lg: 32rpx;  $radius-xl: 44rpx;  $radius-pill: 60rpx;
+$pad-outer: 44rpx;  $pad-card: 32rpx;   $gap-list: 20rpx;
+```
 
-### 动效
+### 动效（`app.scss` 已定义 keyframes）
 
-- 进场：`fadeUp 0.6s cubic-bezier(0.16,1,0.3,1)`
-- 旋转：罗盘元素 `rotate-slow 30-40s linear infinite`
-- 波形：播放波形 `scaleY 0.5-1`
-- 星点：`star-twinkle 2-5s ease-in-out`
+- 进场：`fadeUp 0.6s cubic-bezier(0.16,1,0.3,1)`（`.fade-up`）
+- 浮动：`float 4s ease-in-out infinite`（`.float`）
+- 罗盘旋转：`rotate-slow`（用处指定 30-40s linear infinite）
+- 播放波形：`wave`（scaleY 0.3-1）
+- 星点：`star-twinkle`；另有 `fadeIn / shimmer / pulse-ring / progress-fill`
 
 ### 图标方案
 
-**lucide-react 在小程序不可用**，需要替换：
+**lucide-react 在小程序不可用**。本项目做法：
 
-- 推荐：`iconfont`（阿里巴巴矢量图标库）批量下载 SVG → 用 `image` 标签引用，或导出字体图标
-- 备选：`@taro-icons/lucide`（社区移植版）
-- 颜色控制：SVG 通过 `currentColor` 或 image 的 mode
+- 用 `lucide-static` 在开发期取 SVG，路径数据集中在 `src/components/Icon/paths.ts`；
+- `Icon` 组件（`src/components/Icon/index.tsx`）用 **`View` + `background-image`（URL 编码的 SVG）** 渲染，颜色/尺寸由 props 控制。
+- ⚠️ 不用 `<Image>` 渲染图标：真机下偶发 `appServiceSDKScriptError`，`background-image` 更稳（见「已知陷阱」）。
 
-需要的图标清单：
+需要的图标清单（示意）：
 
 ```
 Sprout, Flame, Mountain, Gem, Droplets (五行)
-Play, Pause, Heart, Download, ListMusic (播放)
+Play, Pause, Heart, ListMusic (播放)
 Crown, Gift, KeyRound, Check, X, Zap (会员/兑换)
 Home, Compass, User, ChevronRight, ArrowRight (导航)
 Moon, Sparkles, Star, Timer, Volume2 (装饰/功能)
@@ -198,110 +243,60 @@ TrendingUp, BarChart3, History, Settings (统计/设置)
 
 ------
 
-## 核心数据结构
+## 核心数据结构（前端，`src/types/index.ts`）
 
-### 五行配置 `src/constants/wuxing.ts`
+以 `types/index.ts` 为准（后端 `_user_dict` / `_track_dict` 出参与此对齐）。
 
 ```typescript
-export interface WuxingElement {
-  id: '木' | '火' | '土' | '金' | '水';
-  en: string;
-  icon: string;              // iconfont class 或 SVG 路径
-  primary: string;
-  accent: string;
-  glow: string;
-  bg: string;                // radial-gradient
-  note: '角' | '徵' | '宫' | '商' | '羽';
-  notePinyin: string;
-  organ: string;             // 对应五脏
-  season: string;
-  quality: string;           // 五行特性
-  desc: string;              // 一句话疗效
-  sleepTip: string;          // 详细说明
-  tracks: Track[];
-}
+export type ElementId = '木' | '火' | '土' | '金' | '水';
+export type NoteName  = '角' | '徵' | '宫' | '商' | '羽';
 
 export interface Track {
   id: number;
   title: string;
   duration: string;          // "MM:SS"
-  durationSec: number;       // 用于实际播放
+  durationSec: number;
   hz: string;                // "324Hz" 或 "角调"
-  tag: string;               // "深度睡眠" / "助眠冥想"
-  plays: string;             // "12.4k"
-  audioUrl: string;          // CDN 地址
+  tag: string;
+  plays: string;             // "12.4k"（后端 = 后台基数 + 实际聆听次数）
+  audioUrl: string;
   coverUrl?: string;
-  isPremium: boolean;        // 是否会员专属
-  previewSec?: number;       // 免费试听秒数
-}
-```
-
-完整数据见原型文件 `prototype/wuxing-music-app.jsx` 中的 `WUXING` 对象。
-
-### 测评题目 `src/constants/quiz.ts`
-
-```typescript
-export interface QuizQuestion {
-  q: string;
-  opts: {
-    text: string;
-    score: Partial<Record<'木'|'火'|'土'|'金'|'水', number>>;
-  }[];
-}
-```
-
-4 道题，每题选项加分映射，最终求 max 决定主体质（原型已有完整题库）。
-
-### 用户模型
-
-```typescript
-export interface User {
-  id: string;
-  openid: string;            // 微信 openid
-  unionid?: string;
-  nickname: string;
-  avatar: string;
-  element: '木'|'火'|'土'|'金'|'水' | null;
-  elementScores: Record<string, number>;
-  quizCompletedAt: string | null;
-  membership: Membership;
-  createdAt: string;
+  isPremium: boolean;
+  previewSec?: number;       // 免费试听秒数（默认 30）
 }
 
+export interface WuxingElement {
+  id: ElementId; en: string; icon: string;
+  primary: string; accent: string; glow: string; bg: string;
+  note: NoteName; notePinyin: string;
+  organ: string; season: string; quality: string;
+  desc: string; sleepTip: string;
+  tracks: Track[];
+}
+
+export type ElementScores = Record<ElementId, number>;
+export interface QuizOption { text: string; score: Partial<ElementScores>; }
+export interface QuizQuestion { q: string; opts: QuizOption[]; }
+
+export type PlanId = 'free' | 'month' | 'year' | 'trial';
 export interface Membership {
-  type: 'free' | 'month' | 'year' | 'trial';
-  name: string;              // 显示名："听闻"/"月悦"/"年藏"
+  type: PlanId;
+  name: string;              // "听闻" / "月悦" / "年藏"
   startAt: string | null;
   expireAt: string | null;
   source: 'purchase' | 'cdkey' | 'gift' | null;
 }
+export interface User {
+  id: string; openid: string; unionid?: string; phone?: string;
+  nickname: string; avatar: string;
+  element: ElementId | null; elementScores: ElementScores;
+  quizCompletedAt: string | null;
+  membership: Membership; createdAt: string;
+}
 ```
 
-------
-
-## 页面流转
-
-```
-splash (2s)
-  ↓
-onboard ─────────── (跳过) ──────────┐
-  ↓                                   ↓
-quiz (4题)                          main
-  ↓                              ┌────┴────┬─────────┬──────────┐
-result                          home   explore   member    profile
-  ↓                              │         │         │           │
-main ←──────────────────────────┴─────────┴─────────┴───────────┘
-                                                │           │
-                                          CdkeyModal ←──────┘
-```
-
-### 关键状态字段
-
-- `currentPage`：`splash | onboard | quiz | result | main`
-- `activeTab`：`home | explore | member | profile`
-- `currentTrack`：当前播放曲目
-- `isPlaying`、`progress`、`timerVal`
-- `cdkeyModalOpen`、`cdkeyStatus`
+- 五行完整配置见 `src/constants/wuxing.ts`（含 `bg` 渐变、每元素曲目）。
+- 测评题库见 `src/constants/quiz.ts`。
 
 ------
 
@@ -309,511 +304,264 @@ main ←────────────────────────
 
 ### 1. 五行测评 `pages/quiz/`
 
-- 4 题单选，进度条顶部
-- 每题选项点击 → 加分 → 下一题
-- 最后一题完成 → 计算最高分元素 → 跳转 result
-- 体质结果存入本地 + 同步后端
-
-**算法**：
+4 题单选，顶部进度条；每题选项加分，末题算最高分元素并跳转 `result`，结果 `POST /api/mp/quiz` 同步后端 + 本地缓存。
 
 ```typescript
-const top = Object.entries(scores)
-  .sort((a, b) => b[1] - a[1])[0][0];
+const top = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
 ```
 
-### 2. 音频播放
+### 2. 音频播放 `services/audio/`（分端）
 
-小程序原生：`wx.createInnerAudioContext()`
+- 小程序：`Taro.getBackgroundAudioManager()`（**用 BackgroundAudioManager 才能后台/锁屏播放**，`app.config.ts` 已配 `requiredBackgroundModes: ['audio']`）。
+- H5：`index.h5.ts` 对应实现；统一接口见 `types.ts`。
+- 非会员 **30 秒试听**：`previewSec` 到点暂停并提示升级。
+- iOS 弱网首次加载慢，需 loading 态；`audioUrl` 当前多为占位，真机需在微信后台配 `downloadFile` 合法域名，mock 下回退 `MOCK_AUDIO_URL`。
 
-```typescript
-const audio = wx.createInnerAudioContext({ useWebAudioImplement: false });
-audio.src = track.audioUrl;
-audio.autoplay = true;
+### 3. 睡眠定时器 `components/SleepTimer/`
 
-// 关键事件
-audio.onPlay(() => setIsPlaying(true));
-audio.onPause(() => setIsPlaying(false));
-audio.onTimeUpdate(() => {
-  setProgress(audio.currentTime / audio.duration * 100);
-});
-audio.onError((err) => console.error(err));
-
-// 非会员限制：30 秒预览
-if (!user.isPremium && audio.currentTime > 30) {
-  audio.pause();
-  showUpgradeModal();
-}
-```
-
-**注意事项**：
-
-- 后台播放需配置 `requiredBackgroundModes: ['audio']`
-- 必须用 `BackgroundAudioManager` 才能锁屏继续播放
-- iOS 静音模式需要 `obeyMuteSwitch: false`
-
-### 3. 睡眠定时器
-
-四档预设：15 / 30 / 45 / 60 分钟
-
-```typescript
-// 设置后启动 setTimeout
-const timerId = setTimeout(() => {
-  audio.stop();
-  setIsPlaying(false);
-  setTimerVal(null);
-}, timerVal * 60 * 1000);
-
-// 切换/取消时清除
-clearTimeout(timerId);
-```
+四档 15 / 30 / 45 / 60 分钟：`setTimeout` 到点 `stop`；切换/取消时 `clearTimeout`。
 
 ### 4. CDKEY 兑换系统 ⭐
 
-**前端流程**：
+**前端**（`components/CdkeyModal/` + `services/cdkey.ts`）：3 处入口（首页/会员/我的）→ 底部抽屉输入（自动大写）→ `redeemCdkey()` → 三态展示（success 显示卡名+天数并刷新会员；used 已使用；error 无效可重试）。
 
-```
-点击入口（3 处：首页 / 会员页 / 我的）
-  → 弹出底部抽屉
-  → 输入 CDKEY（自动大写）
-  → 点击「立即兑换」
-  → 调用 /api/cdkey/redeem
-  → 三态展示：
-     ✓ success: 显示卡名 + 天数，刷新会员状态
-     ✗ error:   提示无效，可重试
-     ⊙ used:    提示已使用
-  → 关闭弹窗 → 全局刷新
-```
+**后端**（`backend/app/routers/mp.py::mp_redeem`，`POST /api/mp/cdkey/redeem`，需登录）：校验存在/未使用/未禁用过期 → **剩余会员期叠加**发放权益 → 置 `used` + 写 `cdkey_redeem_log`。失败返回业务错误信息（"兑换码不存在/已被使用/不可用/已过期"），前端据消息映射为 `invalid` / `used`。
 
-**后端接口**：
+> 说明：早期文档里的 40001-40004 业务码方案未采用，以 `mp.py` 实际契约为准。
 
-```http
-POST /api/cdkey/redeem
-Body: { cdkey: string }
-Auth: Bearer <token>
+**管理端生成**（`routers/cdkeys.py`）：批量生成 / 导出 / 禁用。生成规则：`{前缀}-{年份}-{4位}-{4位}`，字符集 `A-Z + 2-9`（去 0/O/1/I），如 `WUXING-2026-A8K3-N9P2`。买卡送人的礼物码前缀为 `GIFT-`。
 
-Response 成功:
-{
-  "code": 0,
-  "data": {
-    "plan": "年藏会员卡",
-    "type": "year",
-    "days": 365,
-    "expireAt": "2026-12-31T23:59:59Z"
-  }
-}
+**安全**：兑换需登录态；失败限频；记录 IP/device；批量生成校验唯一性。
 
-Response 失败码:
-- 40001: CDKEY 不存在
-- 40002: CDKEY 已被使用
-- 40003: CDKEY 已过期
-- 40004: 该账户已绑定过同类型卡
-```
+### 5. 会员体系与支付
 
-**数据库表结构**：
-
-```sql
-CREATE TABLE cdkey (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  code VARCHAR(32) UNIQUE NOT NULL,    -- 兑换码
-  batch_id VARCHAR(64),                 -- 批次号
-  plan_type ENUM('month','year','trial') NOT NULL,
-  duration_days INT NOT NULL,
-  plan_name VARCHAR(64) NOT NULL,
-  status ENUM('unused','used','expired','disabled') DEFAULT 'unused',
-  used_by BIGINT NULL,                  -- 用户ID
-  used_at DATETIME NULL,
-  expire_at DATETIME NULL,              -- 兑换码本身有效期
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  remark VARCHAR(255),
-  INDEX idx_status (status),
-  INDEX idx_batch (batch_id)
-);
-
-CREATE TABLE cdkey_redeem_log (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  user_id BIGINT NOT NULL,
-  cdkey_id BIGINT NOT NULL,
-  redeem_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  ip VARCHAR(45),
-  device VARCHAR(255)
-);
-```
-
-**生成规则**（管理端）：
-
-```
-格式：{前缀}-{年份}-{4位随机}-{4位随机}
-示例：WUXING-2026-A8K3-N9P2
-字符集：A-Z + 2-9（去除易混 0/O/1/I）
-长度：建议 20-24 字符
-```
-
-**安全要求**：
-
-- 兑换接口必须登录态
-- 限频：单用户每分钟最多 5 次失败
-- 日志：每次兑换记录 IP、device
-- 防爬：兑换码批量生成时校验唯一性
-
-### 5. 会员体系
-
-**三档套餐**：
+**三档套餐**（`constants/plans.ts` 兜底，后台 `plan` 表可改）：
 
 | ID    | 名称 | 价格 | 时长  | 特性                          |
 | ----- | ---- | ---- | ----- | ----------------------------- |
-| free  | 听闻 | ¥0   | 永久  | 每日3首试听、30秒预览         |
-| month | 月悦 | ¥18  | 30天  | 全部曲目、下载30首            |
-| year  | 年藏 | ¥128 | 365天 | 无限下载、专属冥想课、1v1咨询 |
+| free  | 听闻 | ¥0   | 永久  | 每日试听、30秒预览            |
+| month | 月悦 | ¥18  | 30天  | 全部曲目                      |
+| year  | 年藏 | ¥128 | 365天 | 专属冥想课、1v1咨询           |
 
-**支付集成**：
+**支付**（`services/pay.ts` ↔ `mp.py`）：
+- `POST /api/mp/pay/create-order` 建订单（pending），下单体带 `channel: 'weapp'|'h5'`。**未配置商户时后端直接开通**（`dev_opened`，便于联调）；已配置则调微信 JSAPI 统一下单返回 `payParams`，前端**按端拉起**（小程序 `Taro.requestPayment`；H5 走 `services/wechat` 的 `chooseWXPay`），成功后由 `POST /api/mp/pay/callback` 异步开通，前端短轮询 `GET /api/mp/membership` 取最新会员态。H5 用**公众号 appid + `user.oa_openid`** 作 payer（后端 `_resolve_pay_payer` 按 channel 选）。
+- 会员发放一律**按套餐天数在剩余期上累加续期**。
+- iOS App 端订阅须走 Apple IAP（小程序端不受影响，详见「支付特别说明」）。
 
-- 微信小程序：`wx.requestPayment()`
-- 服务端：统一下单 `unifiedorder`
-- 支付成功回调更新 `user.membership`
+### 6. 买卡送人（礼物码）
 
-### 6. 离线下载
+`services/pay.ts::purchaseGift` ↔ `POST /api/mp/gift/create-order`：建 `is_gift` 订单，支付完成后后端生成一张未使用的 `GIFT-` 兑换码写入订单 `gift_code`，前端轮询 `GET /api/mp/gift/code` 取回，用 `PosterShare` 生成海报 + 小程序码分享。买家不直接开会员，受赠者用礼物码兑换。
 
-- 月悦：30 首上限
-- 年藏：无限制
-- 实现：`wx.downloadFile()` + `wx.saveFile()`
-- 注意：小程序本地存储上限 10MB（普通）/ 200MB（saveFile）
+### 7. 我的订单 / 聆听历史 / 周统计 / 海报码
+
+- `GET /api/mp/orders`：购买 + 礼物订单列表（`pages/orders/`）。
+- `POST/GET /api/mp/history`：上报/拉取聆听历史（去重最新 50 条，`pages/history/`）。
+- `GET /api/mp/stats/weekly`：近 7 天每日次数/分钟 + 本周总时长。
+- `POST /api/mp/qrcode`：`getwxacodeunlimit` 生成无限量小程序码（海报二维码用）。
 
 ------
 
 ## API 端点清单
 
+响应统一 `{ code, data, msg }`（`code=0` 成功）。
+
+### 小程序公开端 `/api/mp/*`（`backend/app/routers/mp.py`）
+
 ```
-认证:
-POST   /api/auth/wx-login          # code 换 token
-POST   /api/auth/refresh           # 刷新 token
-
-用户:
-GET    /api/user/profile
-PATCH  /api/user/profile
-POST   /api/user/quiz              # 提交测评结果
-GET    /api/user/membership
-
-内容:
-GET    /api/elements               # 获取五行配置
-GET    /api/tracks                 # 曲目列表（按元素筛选）
-GET    /api/tracks/:id             # 曲目详情
-GET    /api/tracks/recommend       # 个性化推荐
-POST   /api/tracks/:id/play        # 播放上报（用于统计 plays）
-
-会员:
-GET    /api/plans                  # 套餐列表
-POST   /api/pay/create-order       # 创建订单
-POST   /api/pay/callback           # 支付回调（微信侧）
-
-兑换码:
-POST   /api/cdkey/redeem           # 兑换
-GET    /api/cdkey/history          # 兑换历史
-
-统计:
-GET    /api/stats/weekly           # 周聆听统计
-POST   /api/stats/event            # 行为埋点
-```
-
-------
-
-## 状态管理（Zustand 示例）
-
-`src/stores/user.ts`：
-
-```typescript
-import { create } from 'zustand';
-
-interface UserStore {
-  user: User | null;
-  setUser: (u: User) => void;
-  updateMembership: (m: Membership) => void;
-  logout: () => void;
-}
-
-export const useUserStore = create<UserStore>((set) => ({
-  user: null,
-  setUser: (user) => set({ user }),
-  updateMembership: (membership) => set(state => ({
-    user: state.user ? { ...state.user, membership } : null
-  })),
-  logout: () => set({ user: null }),
-}));
+POST /api/mp/login              # code+openid → token+user（内部 jscode2session 换 openid）
+POST /api/mp/sms/send           # 发短信验证码（未配短信→dev 兜底回传 devCode）
+POST /api/mp/login/phone        # 手机号 + 验证码登录
+POST /api/mp/login/password     # 手机号 + 密码登录
+POST /api/mp/set-password       # 设置/改密码（需登录）
+GET  /api/mp/h5/oauth-url       # 公众号网页授权跳转地址（未配→configured:false）
+POST /api/mp/h5/login           # 公众号 code 换 openid 登录（未配→guestId dev 兜底）
+GET  /api/mp/h5/jssdk-config    # wx.config 签名（JSAPI 支付 / 分享）
+GET  /api/mp/profile            # 我的资料
+PATCH|POST /api/mp/profile      # 改昵称/头像（同时支持 POST 规避代理对 PATCH 的 405）
+POST /api/mp/upload             # 用户头像上传（≤5MB）
+GET  /api/mp/membership         # 会员态（含 isPremium）
+POST /api/mp/bind-phone         # 绑定手机号
+POST /api/mp/quiz               # 提交测评（element + scores）
+GET  /api/mp/elements           # 五行 + 曲目（公开免登录）
+GET  /api/mp/plans              # 套餐（公开）
+POST /api/mp/cdkey/redeem       # 兑换码
+POST /api/mp/pay/create-order   # 会员下单（未配商户则直开）
+POST /api/mp/pay/callback       # 微信支付回调（验签/幂等/金额校验）
+POST /api/mp/gift/create-order  # 买卡送人下单
+GET  /api/mp/gift/code          # 轮询礼物码
+GET  /api/mp/orders             # 我的订单
+POST /api/mp/history            # 上报聆听
+GET  /api/mp/history            # 聆听历史
+GET  /api/mp/stats/weekly       # 周聆听统计
+POST /api/mp/qrcode             # 小程序码（海报）
 ```
 
-`src/stores/player.ts`：
+### 管理端 `/api/admin/*`（需 Bearer；`admin/src/api/index.ts` 有全量封装）
 
-```typescript
-interface PlayerStore {
-  currentTrack: Track | null;
-  isPlaying: boolean;
-  progress: number;
-  timerVal: number | null;
-  play: (track: Track) => void;
-  pause: () => void;
-  resume: () => void;
-  stop: () => void;
-  setTimer: (min: number | null) => void;
-}
+```
+POST /api/admin/login  GET /me  GET /dashboard
+GET  /users  GET /users/{id}  POST /users/{id}/grant                 # 用户 + 后台开通会员
+GET  /orders GET /orders/{id} POST /orders/{id}/refund  .../refund/confirm  # 订单 + 退款
+GET/POST /plans     DELETE /plans/{id}
+GET/POST /elements  DELETE /elements/{id}
+GET  /tracks POST /tracks  PUT/DELETE /tracks/{id}
+GET  /cdkeys POST /cdkeys/generate  POST /cdkeys/{id}/disable
+GET/POST /quiz  PUT/DELETE /quiz/{id}
+GET/PUT /settings/pay | /settings/site | /settings/storage | /settings/mp
+POST /settings/storage/migrate      # 存储迁移
+POST /upload                        # 后台文件/封面/证书上传
 ```
 
 ------
 
-## 开发优先级
+## 后端数据模型（`backend/app/models.py`，SQLAlchemy）
 
-### Phase 1 - MVP（2-3 周）
+> 早期文档写的是手工 MySQL DDL；**实际由 SQLAlchemy 模型声明，启动自动建表 + 种子数据**（`main.py::_auto_migrate` 会为已存在的表自动补加新列）。以下为 12 张表要点（`order` 是 MySQL 保留字，订单表名 `app_order`）：
 
-- [x] 设计稿 / 原型确认
-- [ ] 项目脚手架搭建（Taro init）
-- [ ] 五行数据 / 测评数据搬入
-- [ ] 启动页 / 引导页 / 测评 / 结果页
-- [ ] 首页 + 探律 + 个人中心（静态）
-- [ ] 音频播放器核心（含 mini player）
-- [ ] 微信登录 + 用户中心
+| 表 | 说明 | 关键字段 |
+| -- | ---- | -------- |
+| `admin` | 管理员 | username / password_hash / is_active |
+| `element` | 五行配置（id=木火土金水） | primary/accent/glow/bg、note/organ/season、sleep_tip |
+| `track` | 曲目 | element_id(FK)、hz、audio_url、cover_url、is_premium、preview_sec、is_online |
+| `plan` | 套餐 | id(free/month/year/trial)、price、duration_days、features(JSON) |
+| `user` | 用户 | openid/unionid/**oa_openid**/phone/**password_hash**、element、membership_type/name/expire_at/source |
+| `cdkey` | 兑换码 | code、batch_id、plan_type、status(unused/used/disabled/expired) |
+| `cdkey_redeem_log` | 兑换日志 | user_id、cdkey_id、ip、device |
+| `app_order` | 订单 | order_no、status(pending/paid/refunding/refunded…)、**is_gift/gift_code**、**refund_*** |
+| `quiz_question` | 测评题 | q、options(JSON) |
+| `setting` | KV 配置 | key/value（`pay_config`/`site_config`/`storage_config`/`mp_config`/`oa_config`(公众号)/`sms_config`(短信)） |
+| `play_history` | 聆听历史 | user_id、track_id、played_at |
+| `sms_code` | 短信验证码（手机登录） | phone、code、scene、expire_at、used、attempts（失败≥5 作废） |
 
-### Phase 2 - 会员（1-2 周）
+------
 
-- [ ] 会员页 + 套餐展示
-- [ ] 微信支付集成
-- [ ] **CDKEY 兑换系统**（前后端）
-- [ ] 会员权限校验（试听限制）
-- [ ] 后台 CDKEY 管理（生成 / 批量导出 / 禁用）
+## 管理后台 `admin/`（Vue3 + Element Plus）
 
-### Phase 3 - 增强（1-2 周）
+页面（`admin/src/views/`）：登录、仪表盘、歌曲（分页/筛选/音频封面上传）、五行、套餐、兑换码（批量生成/导出/禁用）、测评、订单（详情+退单）、用户（详情+开通会员）、站点设置（站点/小程序/文件存储/支付，含 LOGO/证书上传）。默认管理员 `admin` / `admin123`（由 `backend/.env` 覆盖）。
 
-- [ ] 离线下载
-- [ ] 睡眠统计 / 周报表
-- [ ] 后台播放 / 锁屏控制
+------
+
+## 开发优先级（现状）
+
+### Phase 1 - MVP ✅ 已完成
+- [x] 原型确认、Taro 脚手架、五行/测评数据搬入
+- [x] 启动/引导/测评/结果、首页/探律/会员/我的
+- [x] 音频播放器核心 + MiniPlayer + 全屏播放器
+- [x] 微信登录 + 用户中心
+
+### Phase 2 - 会员 ✅ 基本完成
+- [x] 会员页/套餐、微信支付集成（逻辑就绪）、CDKEY 兑换（前后端）
+- [x] 会员权限校验（30 秒试听）
+- [x] 后台 CDKEY 管理（生成/导出/禁用）
+
+### Phase 3 - 增强 🔶 部分完成
+- [x] 睡眠定时器、后台/锁屏播放、聆听历史 + 周统计
+- [x] 转发分享 + 朋友圈 + 海报小程序码、买卡送人礼物码、订单/退款
 - [ ] 推送（睡眠提醒）
-- [ ] 分享卡片
+- [x] ~~离线下载~~ **已移除，不做**
 
-### Phase 4 - 运营（持续）
+### H5 端（v1.1）✅ 已完成
+- [x] 手机登录（短信验证码 + 手机号密码）、微信网页授权登录、H5 微信支付（公众号 JSAPI）
+- [x] 版本管理基建（`version.json` + `docs/ROADMAP.md` + `constants/version.ts`）
+- [x] SMS 验证码校验次数上限（防暴力，失败 5 次作废）
+- [ ] APP 更新接口（契约已定，随 APP 阶段实现）；**上线前安全加固**（见 [`docs/ROADMAP.md`](docs/ROADMAP.md)）
 
-- [ ] 曲目库扩充（后台 CMS）
-- [ ] 推荐算法优化
-- [ ] 数据埋点 / 分析
-- [ ] 用户调研 / 迭代
-
-### Phase 5 - App 化（可选，业务跑通后）
-
-- [ ] 补全 `services/*/audio.rn.ts` 实现（react-native-track-player）
-- [ ] 补全 `services/*/storage.rn.ts`（AsyncStorage）
-- [ ] 补全 `services/*/pay.rn.ts`（iOS IAP / Android H5 支付）
-- [ ] 补全所有组件的 `.rn.scss` 样式适配
-- [ ] 替换不兼容视觉（gradient / blur 用 RN 库实现）
-- [ ] 配置原生工程（iOS Xcode / Android）
-- [ ] Apple Developer 账号 + App Store 审核
-- [ ] Android 应用市场上架（华为/小米/OPPO/vivo/应用宝）
-- [ ] 推送通道接入（极光 / 个推）
+### 待补（上线前）
+- [ ] 真实微信商户号 + 证书上线联调（后台可配）
+- [ ] 真实 AppSecret 配置后 `code→openid` 生效验证
+- [ ] OSS 上传接入（抽象层已就绪）
 
 ------
 
 ## 未来扩展到 App（跨端策略）
 
-**目标**：当前以微信小程序为主战场，但代码从第一天起即按跨端友好原则组织，使得未来能以最小成本编译为 iOS / Android 原生 App（基于 Taro 3 + React Native）。
+> **现状注记**：已落地 **微信小程序（weapp）+ H5（微信内）** 两端。`services/audio/`、`services/wechat/` 已按端分文件（`index.weapp.ts` / `index.h5.ts`）；`auth.ts` / `pay.ts` 用 `isWeapp`/`isH5` 运行时分支（H5 走公众号网页授权 + JSAPI，小程序走 `wx.login` + `requestPayment`）；`storage/` 仍单文件。**自定义 tabBar 因 Taro4+Vite 编译 bug 用页内 `TabBar` 组件 + `redirectTo` 替代**；RN 端（`.rn.ts` / `.rn.scss`）尚未开始。以下为**未来 App 化的目标规范**，新代码应朝此方向组织。
 
-### 总体原则
-
-> 业务逻辑跨端共用，UI 与平台 API 分平台实现。
-
-1. **业务层零依赖平台 API**：组件中禁止直接出现 `wx.xxx` 调用，所有原生能力必须经 service 层封装
-2. **样式分平台编写**：差异样式走 `.weapp.scss` / `.rn.scss`，共用样式走 `.scss`
-3. **组件库选多端兼容的**：NutUI-React-Taro 优于 vant-weapp
-4. **状态管理跨端可用**：Zustand 在 RN 和小程序均可工作
+**总原则**：业务逻辑跨端共用，UI 与平台 API 分平台实现。业务层零依赖平台 API（组件禁止直接 `wx.xxx`，一律经 `services/` 封装）；差异样式走 `.weapp.scss` / `.rn.scss`，共用走 `.scss`；状态用 Zustand（RN/小程序均可）。
 
 ### 平台能力差异速查
 
 | 能力     | 小程序                       | React Native                     | 抽象方案                   |
 | -------- | ---------------------------- | -------------------------------- | -------------------------- |
-| 音频播放 | `wx.createInnerAudioContext` | `react-native-track-player`      | `services/audio/` 抽象接口 |
-| 后台播放 | `BackgroundAudioManager`     | TrackPlayer 内置                 | 同上                       |
+| 音频播放 | `BackgroundAudioManager`     | `react-native-track-player`      | `services/audio/`（已分端）|
 | 本地存储 | `wx.setStorageSync`          | `AsyncStorage`                   | `services/storage/`        |
-| 文件下载 | `wx.downloadFile`            | `react-native-fs`                | `services/download/`       |
-| 支付     | `wx.requestPayment`          | Apple IAP（订阅必须）/ 微信H5SDK | `services/pay/`            |
-| 登录     | `wx.login` + code            | 手机号/邮箱/三方 OAuth           | `services/auth/`           |
-| 推送     | 订阅消息                     | 极光/个推 / APNs / FCM           | `services/push/`           |
-| 分享     | `Button open-type=share`     | `react-native-share`             | `services/share/`          |
-| 字体加载 | `wx.loadFontFace`            | 原生工程链接 ttf                 | `services/font/`           |
+| 支付     | `wx.requestPayment`          | Apple IAP（订阅必须）/ 微信H5SDK | `services/pay.ts`          |
+| 登录     | `wx.login` + code            | 手机号/邮箱/三方 OAuth           | `services/auth.ts`         |
+| 分享     | `open-type=share` / 转发     | `react-native-share`             | `services/share.ts`        |
+| 字体加载 | 系统降级 / `wx.loadFontFace` | 原生工程链接 ttf                 | -                          |
 
-### 样式兼容性陷阱
+### 样式兼容性陷阱（RN 是 CSS 子集 + Flexbox）
 
-RN 用的是 CSS 子集 + Flexbox 布局，**当前原型大量使用的视觉手法在 RN 上不可用**，需要从一开始就避坑：
-
-| 现状（原型）               | RN 兼容性        | 替代方案                                                    |
+| 现状用法                   | RN 兼容性        | 替代方案                                                    |
 | -------------------------- | ---------------- | ----------------------------------------------------------- |
-| `radial-gradient` 背景渐变 | ❌ 不支持         | `react-native-linear-gradient` 多层叠加 + 透明蒙版          |
+| `radial-gradient` 背景     | ❌ 不支持         | `react-native-linear-gradient` 多层叠加                     |
 | `backdrop-filter: blur()`  | ❌ 不支持         | `@react-native-community/blur`                              |
-| `box-shadow`               | ⚠️ 部分支持       | iOS 用 `shadowColor/Offset/Opacity`，Android 用 `elevation` |
+| `box-shadow`               | ⚠️ 部分           | iOS `shadow*` / Android `elevation`                         |
 | 父元素 color/font 继承     | ❌ 不继承         | 每个 `Text` 单独写样式                                      |
-| `@keyframes` CSS 动画      | ❌ 不支持         | `Animated` API 或 `react-native-reanimated`                 |
+| `@keyframes` 动画          | ❌ 不支持         | `Animated` / `react-native-reanimated`                      |
 | `position: fixed`          | ❌ 不支持         | `position: absolute` + 顶层容器                             |
-| `pointer-events`           | ⚠️ 仅 `auto/none` | 设计上避免依赖此特性                                        |
-| `linear-gradient`          | ⚠️ 需库           | 同 radial-gradient 处理                                     |
-| `transform: rotate`        | ✅ 支持           | 不变                                                        |
-| Flexbox 基础布局           | ✅ 支持           | 不变                                                        |
-| 五行 hex 配色              | ✅ 完全支持       | 不变                                                        |
-| 圆角 `border-radius`       | ✅ 支持           | 不变                                                        |
-| 透明度 `opacity`           | ✅ 支持           | 不变                                                        |
-
-### 代码组织规范
-
-#### 1. 平台分支文件命名
-
-Taro 编译时会优先匹配带平台后缀的文件：
-
-```
-audio.weapp.ts   →  编译微信小程序时使用
-audio.rn.ts      →  编译 React Native 时使用
-audio.h5.ts      →  编译 H5 时使用
-audio.ts         →  兜底文件，未匹配时使用
-```
-
-#### 2. Service 层抽象示例
-
-**统一接口**（`services/audio/index.ts`）：
-
-```typescript
-export interface AudioService {
-  load(url: string): Promise<void>;
-  play(): void;
-  pause(): void;
-  stop(): void;
-  seek(sec: number): void;
-  onProgress(cb: (current: number, total: number) => void): void;
-  onEnd(cb: () => void): void;
-  destroy(): void;
-}
-
-// Taro 会自动按平台加载对应实现
-import audioImpl from './audio';
-export default audioImpl as AudioService;
-```
-
-**小程序实现**（`services/audio/audio.weapp.ts`）：
-
-```typescript
-const ctx = wx.createInnerAudioContext();
-export default {
-  load: (url) => { ctx.src = url; },
-  play: () => ctx.play(),
-  pause: () => ctx.pause(),
-  // ...
-} as AudioService;
-```
-
-**RN 实现**（`services/audio/audio.rn.ts`）：
-
-```typescript
-import TrackPlayer from 'react-native-track-player';
-export default {
-  load: async (url) => {
-    await TrackPlayer.add({ id: '1', url });
-  },
-  play: () => TrackPlayer.play(),
-  // ...
-} as AudioService;
-```
-
-#### 3. 样式分平台示例
-
-```
-TrackCard/
-├── index.tsx              # 业务逻辑
-├── index.scss             # 共用样式（基础布局、字体、颜色）
-├── index.weapp.scss       # 小程序专属（backdrop-filter / radial-gradient）
-└── index.rn.scss          # RN 专属（用 LinearGradient 组件替代）
-```
-
-#### 4. 平台判断工具
-
-```typescript
-// utils/platform.ts
-import Taro from '@tarojs/taro';
-
-export const PLATFORM = process.env.TARO_ENV;
-// 'weapp' | 'h5' | 'rn' | 'alipay' | ...
-
-export const isWeapp = PLATFORM === 'weapp';
-export const isRN = PLATFORM === 'rn';
-export const isH5 = PLATFORM === 'h5';
-```
-
-业务代码中需要做平台分支时：
-
-```tsx
-{isRN && <BlurView />}
-{isWeapp && <View className="backdrop-blur" />}
-```
+| `transform: rotate`、Flexbox、hex 配色、`border-radius`、`opacity` | ✅ 支持 | 不变 |
 
 ### 支付特别说明 ⚠️
 
-**iOS 端订阅类商品必须走 Apple IAP**（苹果抽 30% 佣金，且禁止引导用户到外部支付），这是 App Store 审核硬规定。具体策略：
+iOS 端订阅类商品**必须走 Apple IAP**（苹果抽 30%，禁止引导外部支付）。策略：小程序端微信支付原价（¥18 / ¥128）；iOS App 端苹果内购需上调覆盖佣金；Android App 端可用微信/支付宝 H5 原价。**CDKEY 与礼物码路径不受影响**，App 化后反而更重要（可绕开苹果税做营销）。
 
-- **小程序端**：微信支付，¥18 / ¥128 原价
-- **iOS App 端**：苹果内购，价格需上调（如 ¥25 / ¥168 覆盖佣金）
-- **Android App 端**：微信支付 H5 / 支付宝 H5，可用原价
+### 分两阶段实施
 
-CDKEY 兑换路径**完全不受影响**，App 端用户照常使用兑换码升级会员，这也是为什么 CDKEY 系统在 App 化后会变得更重要——可以绕开苹果税做营销活动。
-
-### 字体方案的跨端处理
-
-- **小程序**：`wx.loadFontFace()` 加载 CDN 上的 woff2
-
-- RN
-
-  ：字体文件需要 link 到原生工程
-
-  - iOS：放进 `ios/项目名/Fonts/` 并在 `Info.plist` 注册
-  - Android：放进 `android/app/src/main/assets/fonts/`
-  - 命令：`npx react-native-asset`
-
-### 推荐策略：分两阶段实施
-
-#### 阶段一：小程序 MVP（当前）
-
-- 严格按上述目录结构组织
-- 平台 API 调用走 service 层
-- 即使现在只写 `.weapp.ts`，文件名也带后缀
-- 样式可暂时只写主样式，标注 `// TODO: RN 不支持` 的属性
-
-#### 阶段二：扩展 App（业务跑通后）
-
-1. 验证用户增长曲线，确认 App 化 ROI
-2. 补全所有 service 的 `.rn.ts` 实现
-3. 补全样式的 `.rn.scss` 文件
-4. 配置原生工程（iOS Xcode / Android Studio）
-5. 申请 Apple Developer 账号（$99/年）+ App Store 上架审核
-6. Android 上架国内应用市场（华为 / 小米 / OPPO / vivo / 应用宝）
-
-### Claude Code 协作时的额外注意
-
-跨端友好的代码习惯，需要 Claude Code 在写代码时严格遵守：
-
-✅ **必做**：
-
-- 任何 `wx.xxx` API 调用必须包在 `services/` 下
-- 新组件中使用的 CSS 属性，要在上面那张兼容性表里核对
-- 涉及音频、存储、支付、登录、推送时，永远引用 service 层抽象接口
-- 文件命名带 `.weapp` / `.rn` 后缀，即使当前只实现一端
-
-❌ **禁止**：
-
-- 组件 `.tsx` 文件中出现 `wx.xxx`
-- 样式中使用 `backdrop-filter` / `radial-gradient` 而不分平台
-- 引入小程序专属组件库（如 vant-weapp）
-- 业务逻辑里使用 `process.env.TARO_ENV === 'weapp'` 写硬分支（应该用 service 抽象掉）
+- **阶段一（当前）**：严格按上述目录组织；平台 API 走 service 层；文件名带 `.weapp` / `.rn` 后缀即使只实现一端；样式暂只写主样式，`// TODO: RN 不支持` 标注。
+- **阶段二（业务跑通后）**：补全各 service 的 `.rn.ts` 与样式 `.rn.scss`、配置原生工程（iOS Xcode / Android）、上架审核。
 
 ------
 
-⚠️ **重要**：
+## 已知陷阱
 
-- 小程序需要主体备案（个人或公司）
-- **音乐版权**：每首曲目需要授权或自制，建议初期与原创音乐人合作（成本低、版权清晰）
-- **中医宣称**：UI 上的"疗愈""安神"等需注意《广告法》，避免出现"治疗""治愈"字样
-- **服务条款**：需明确标注「本应用提供的音乐为放松辅助，不替代医疗诊断」
+1. **自定义 tabBar 不可用**：Taro4 + Vite 下 `custom: true` 原生 tabBar 不编译（官方 bug #18415）。本项目改用**页内 `TabBar` 组件 + `Taro.redirectTo`** 切换，`app.config.ts` 不声明 `tabBar`。
+2. **图标别用 `<Image>`**：真机偶发 `appServiceSDKScriptError`；用 `View` + `background-image`（URL 编码 SVG）渲染（见 `Icon` 组件）。
+3. **本地连后端**：开发者工具「本地设置」勾「不校验合法域名」；真机把 `API_BASE` 改成局域网 IP，并在微信后台配 request/downloadFile 合法域名。
+4. **增量构建缓存损坏**（报 `taro.useState/useMemo is not a function` 等）：清缓存全量重建 `rm -rf dist node_modules/.vite .swc && npm run dev:weapp`。
+5. **游客模式 `wx.login` 受限**（`webapi_getwxaasyncsecinfo:fail`）：已自动兜底稳定游客 openid；真实 AppID 登录即正常。
+6. `wx.createInnerAudioContext` 无法后台播放——一律用 `BackgroundAudioManager`。
+7. 真机调试音频问题多，模拟器不可信；iOS 弱网首次加载慢，需 loading 态。
+8. 小程序 `style` 不支持全部 CSS：`backdrop-filter` / `radial-gradient` 需在 `.scss` 里验证；跨端另见上表。
+9. **H5 微信 JS-SDK 签名**：`wx.config` 签名 URL 必须去掉 `#hash`（Taro H5 是 hash 路由，`services/wechat/index.h5.ts` 已 `split('#')[0]`）。iOS 微信对 SPA 用「首次进入页面的 URL」签名，若 SPA 路由跳转后支付签名失效，需用进入时缓存的 entry URL 重签。
+10. **H5 登录/支付仅微信内可用**：走公众号网页授权 + JSAPI；外部浏览器（Safari/Chrome）暂不支持（未来加 H5 MWEB / 扫码，见 ROADMAP）。H5 联调需在公众号后台配「网页授权域名」「JS 安全域名」，商户后台绑定公众号 appid。
+11. **公众号 openid ≠ 小程序 openid**：跨端同一用户靠开放平台 UnionID 打通；`user.oa_openid` 专供 H5 JSAPI 支付 payer。
 
 ------
 
-## 测试 CDKEY（开发期）
+## Claude Code 协作约定
+
+### 代码导航（重要）
+
+- **查代码优先用 codegraph**（`codegraph_explore` 为主）：结构性问题（谁调用谁 / 定义在哪 / 改动影响面 / 某系统怎么跑）一次调用直接给带行号源码，比 grep+Read 更快更准。已验证本仓库索引可用。
+- grep / Read 仅用于补 codegraph 未覆盖的字面细节（字符串/注释）。
+
+### 代码风格
+
+- TS strict；函数式组件 + Hooks，不用 class。
+- 组件 PascalCase，工具 camelCase；注释中文、变量英文。
+- 单文件超 300 行考虑拆分。
+- **五行配置统一从 `src/constants/wuxing.ts` 引用，颜色/间距走 `variables.scss` token，禁止魔法数字。**
+- **新增网络调用前先看 `src/services/*.ts` 是否已封装，并同时维护 `USE_MOCK` 两条分支。**
+- **组件 `.tsx` 里禁止出现 `wx.xxx`**，平台能力一律经 `services/` 抽象（为 App 化留路）。
+
+### 提交规范（Conventional Commits）
+
+```
+feat: 新功能   fix: 修复   style: 样式   refactor: 重构   docs: 文档   chore: 杂项
+```
+
+------
+
+## 备案与合规 ⚠️
+
+- 小程序需主体备案；**音乐版权**需授权或自制（建议与原创音乐人合作）。
+- **中医宣称**：UI 文案避免"治疗/治愈"等违反《广告法》的医疗宣称，"疗愈/安神"等谨慎使用。
+- **服务条款**：明确标注「本应用提供的音乐为放松辅助，不替代医疗诊断」。
+
+------
+
+## 测试 CDKEY（`USE_MOCK` 模式下 `services/cdkey.ts` 内置）
 
 ```
 WUXING-2026-FREE-30D  → 月悦体验卡 30天
@@ -821,55 +569,17 @@ MOON-LIGHT-VIP-365    → 年藏会员卡 365天
 ZEROER-GIFT-7DAY      → 7日体验卡
 ```
 
-------
-
-## Claude Code 协作约定
-
-### 代码风格
-
-- TS strict mode 开启
-- 函数式组件 + Hooks，不用 class
-- 文件命名：组件 PascalCase，工具 camelCase
-- 注释用中文，变量名用英文
-- 避免巨型组件，单文件超 300 行需拆分
-
-### 提交规范（Conventional Commits）
-
-```
-feat: 新功能
-fix:  修复
-style: 样式
-refactor: 重构
-docs: 文档
-chore: 杂项
-```
-
-### 与 Claude Code 协作时
-
-- 优先告知具体页面 / 组件路径
-- 提供原型参考：`prototype/wuxing-music-app.jsx`
-- 五行配置统一从 `src/constants/wuxing.ts` 引用，不要硬编码
-- 颜色、间距走 design tokens，避免魔法数字
-- 新增 API 调用前先确认 `src/services/api.ts` 是否已封装
-
-### 已知陷阱
-
-1. 小程序 `style` 不支持所有 CSS 属性，`backdrop-filter`、`radial-gradient` 兼容性需验证
-2. `wx.createInnerAudioContext` 在 iOS 弱网下首次加载会很慢，需要 loading 态
-3. 真机调试音频问题居多，模拟器不可信
-4. 自定义 tabBar 时，要在 `app.config.ts` 设置 `custom: true`
-5. 字体加载是异步的，splash 页需要等字体 ready 或预降级
-6. **跨端兼容**：写代码时严格遵循「未来扩展到 App」章节的规范，避免后期重构成本
+> 真实后端下的可用兑换码由管理后台批量生成（种子数据也会写入一批测试码）。
 
 ------
 
 ## 参考资源
 
-- Taro 官方文档：https://docs.taro.zone/
-- 微信小程序文档：https://developers.weixin.qq.com/miniprogram/dev/framework/
-- 中医五行音乐疗法相关文献（自行查找）
-- 原型预览文件：`prototype/wuxing-music-app.jsx`（React Web 版）
+- 本仓库：[`README.md`](README.md)（如何跑）、[`backend/README.md`](backend/README.md)、[`admin/README.md`](admin/README.md)、[`docs/ROADMAP.md`](docs/ROADMAP.md)（版本路线图 + APP 更新接口契约）、根 `version.json`（机读版本清单）
+- 原型预览：`prototype/wuxing-music-app.jsx`（React Web 版）
+- Taro 文档：https://docs.taro.zone/ ｜ 微信小程序：https://developers.weixin.qq.com/miniprogram/dev/framework/
 
 ------
 
-**最后更新**：项目初始化 **当前阶段**：原型完成，待 Taro 项目初始化
+**最后更新**：H5 端（v1.1）登录/支付接入 + 版本管理基建（见 [`docs/ROADMAP.md`](docs/ROADMAP.md)）。
+**当前阶段**：小程序 + H5（微信内）前端、后端管理/公开接口、管理后台均已完成；微信支付/公众号授权/短信/OSS 待真实配置上线验证。
