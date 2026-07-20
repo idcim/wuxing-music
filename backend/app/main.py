@@ -11,7 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.config import settings
+from app.config import DEFAULT_JWT_SECRET, settings
 from app.database import Base, SessionLocal, engine
 from app.routers import (
     auth,
@@ -79,8 +79,25 @@ def _auto_migrate() -> None:
                 logger.warning("自动迁移 %s.%s 失败（可忽略）：%s", table.name, col.name, e)
 
 
+def _guard_jwt_secret() -> None:
+    """JWT 密钥守卫：默认占位密钥可被伪造 token 接管全站。
+    生产（debug=false）仍用默认值则拒绝启动；开发态仅告警。"""
+    if settings.jwt_secret != DEFAULT_JWT_SECRET:
+        return
+    if not settings.debug:
+        logger.error("=" * 60)
+        logger.error("JWT_SECRET 仍为默认占位值，生产环境拒绝启动！")
+        logger.error("请在 .env 设置随机长串 JWT_SECRET（例：openssl rand -hex 32）")
+        logger.error("=" * 60)
+        raise SystemExit(1)
+    logger.warning(
+        "JWT_SECRET 仍为默认占位值（开发态允许）；生产部署前务必改为随机长串。"
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _guard_jwt_secret()
     # 先探活数据库，连不上时给出清晰提示而非整篇 traceback
     try:
         with engine.connect() as conn:

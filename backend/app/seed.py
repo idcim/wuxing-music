@@ -190,8 +190,9 @@ def seed(db: Session) -> None:
                 sort=i,
             ))
 
-    # 测试兑换码
-    if db.query(Cdkey).count() == 0:
+    # 测试兑换码：仅开发态植入（含 365 天年藏卡）。生产（debug=false）不植入，
+    # 避免公开测试码被白嫖领取会员。
+    if settings.debug and db.query(Cdkey).count() == 0:
         for code, ptype, days, pname in TEST_CDKEYS:
             db.add(Cdkey(
                 code=code, batch_id="seed", plan_type=ptype,
