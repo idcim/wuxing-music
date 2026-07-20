@@ -1,0 +1,49 @@
+{
+  "current": {
+    "app": "1.1.0",
+    "api": "1.1.0"
+  },
+  "channels": {
+    "weapp": {
+      "version": "1.1.0",
+      "note": "微信小程序端"
+    },
+    "h5": {
+      "version": "1.1.0",
+      "note": "H5（微信内）端"
+    },
+    "android": {
+      "version": "",
+      "url": "",
+      "forceUpdate": false,
+      "minSupported": "",
+      "note": "预留：APP 阶段填充"
+    },
+    "ios": {
+      "version": "",
+      "url": "",
+      "forceUpdate": false,
+      "minSupported": "",
+      "note": "预留：APP 阶段填充"
+    }
+  },
+  "changelog": [
+    {
+      "version": "1.1.0",
+      "date": "2026-07-21",
+      "notes": [
+        "H5 端上线：手机登录（短信验证码 + 手机号密码）",
+        "H5 端上线：微信登录（公众号网页授权）",
+        "H5 端上线：微信支付（JSAPI 公众号支付）",
+        "版本管理基建：version.json + docs/ROADMAP.md + 前端版本常量"
+      ]
+    },
+    {
+      "version": "1.0.0",
+      "date": "2026-05-23",
+      "notes": [
+        "微信小程序端首个完整版本：五行测评、播放、会员、CDKEY、买卡送人、订单/统计"
+      ]
+    }
+  ]
+}
