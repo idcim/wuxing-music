@@ -1,0 +1,16 @@
+# H5 构建上下文（context: .）用；排除无关/沉重目录，加速构建、缩小上下文。
+# 注：backend/ 与 admin/ 各自的镜像用各自子目录为上下文，不受本文件影响。
+node_modules
+dist
+.git
+.github
+.omc
+.swc
+backend
+admin
+prototype
+docs
+scripts
+*.md
+.vscode
+.idea

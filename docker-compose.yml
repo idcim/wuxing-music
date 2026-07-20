@@ -35,6 +35,20 @@ services:
     networks:
       - default
 
+  h5:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.h5
+    image: wuxing-h5:latest
+    container_name: wuxing-h5
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    depends_on:
+      - api
+    networks:
+      - default
+
 volumes:
   uploads_data:
 
