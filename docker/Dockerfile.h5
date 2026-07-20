@@ -3,7 +3,10 @@
 # 用法：由根 docker-compose.yml 的 h5 服务构建（context: .，dockerfile: docker/Dockerfile.h5）。
 
 # ── 构建阶段：编译 Taro H5 ──
-FROM node:22-alpine AS build
+# 必须用 glibc 版（slim/Debian，非 alpine）：Taro 4 的原生绑定 @tarojs/binding
+# 在 package-lock 里只有 linux-x64-gnu，没有 musl，alpine 下 npm ci 装不上
+# 会报 Cannot find module '@tarojs/binding-linux-x64-musl'。
+FROM node:22-slim AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
