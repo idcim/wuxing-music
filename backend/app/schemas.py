@@ -148,6 +148,24 @@ class MpSettingIn(BaseModel):
     env_version: str = "release"  # release | trial | develop
 
 
+# ── 公众号配置（H5 网页授权 / JSSDK / JSAPI 支付）──
+class OaSettingIn(BaseModel):
+    app_id: str = ""            # 公众号 AppID（公开）
+    app_secret: str = ""        # 公众号 AppSecret（脱敏，网页授权/access_token 用）
+    original_id: str = ""       # 原始 ID（gh_xxx）
+    oa_name: str = ""           # 公众号名称
+
+
+# ── 短信配置 ──
+class SmsSettingIn(BaseModel):
+    provider: str = "aliyun"    # 短信服务商（目前实现 aliyun）
+    access_key_id: str = ""
+    access_key_secret: str = ""  # 脱敏
+    sign_name: str = ""         # 短信签名
+    template_code: str = ""     # 验证码模板 CODE（模板变量名约定为 code）
+    enabled: bool = False
+
+
 # ── 退款 ──
 class RefundIn(BaseModel):
     reason: str = ""

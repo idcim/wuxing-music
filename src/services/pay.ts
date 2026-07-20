@@ -1,17 +1,10 @@
 import Taro from '@tarojs/taro';
 import { USE_MOCK } from '@/constants/env';
 import { request } from '@/services/api';
-import { isWeapp } from '@/utils/platform';
+import { isWeapp, isH5 } from '@/utils/platform';
+import wechat from '@/services/wechat';
+import type { PayParams } from '@/services/wechat/types';
 import type { PlanId, Membership } from '@/types';
-
-// 微信统一下单返回的小程序支付参数（后端二次签名后下发）
-interface PayParams {
-  timeStamp: string;
-  nonceStr: string;
-  package: string;
-  signType: 'MD5' | 'HMAC-SHA256' | 'RSA';
-  paySign: string;
-}
 
 interface CreateOrderResult {
   dev_opened?: boolean;       // 开发期后端直接开通
@@ -64,10 +57,38 @@ async function pollMembership(planId: PlanId): Promise<Membership> {
   return buildMembership(planId);
 }
 
+// 按端调起微信支付：
+// - 小程序：Taro.requestPayment（下单参数直传）
+// - H5（公众号内）：加载 JS-SDK，先 config 当前页再 chooseWXPay
+// wechat 服务由 Taro 按端解析（weapp → index.weapp 桩，不含 jweixin；
+// jweixin 仅 index.h5 在运行时以 <script> 注入），故不会打进小程序包。
+async function invokePay(payParams: PayParams): Promise<void> {
+  if (isH5) {
+    // wechat 由 Taro 按端解析：h5 → index.h5（真实 JSSDK），weapp → index.weapp（桩）。
+    await wechat.configJsSdk(typeof window !== 'undefined' ? window.location.href : '');
+    await wechat.chooseWXPay(payParams);
+    return;
+  }
+  await Taro.requestPayment({
+    timeStamp: payParams.timeStamp,
+    nonceStr: payParams.nonceStr,
+    package: payParams.package,
+    signType: payParams.signType,
+    paySign: payParams.paySign
+  });
+}
+
+// 识别用户主动取消：小程序 requestPayment 取消 errMsg 含 'cancel'；
+// H5 chooseWXPay 取消无统一标识，尽量从 errMsg / message 中识别。
+function isPayCancel(err: any): boolean {
+  const msg = String(err?.errMsg || err?.message || '').toLowerCase();
+  return msg.includes('cancel');
+}
+
 // 创建订单并拉起微信支付。成功后返回新会员信息（由调用方刷新 store）。
 export async function purchasePlan(planId: PlanId): Promise<PayOutcome> {
-  // iOS App 端订阅须走 Apple IAP，小程序端不受影响。此处仅小程序支付。
-  if (!isWeapp) return { ok: false, reason: 'platform' };
+  // 小程序 / H5（微信内）端内支付；其它端（未来 rn / iOS App 走 IAP）返回 platform。
+  if (!isWeapp && !isH5) return { ok: false, reason: 'platform' };
 
   if (USE_MOCK) {
     await new Promise((r) => setTimeout(r, 600));
@@ -77,7 +98,7 @@ export async function purchasePlan(planId: PlanId): Promise<PayOutcome> {
   try {
     const res = await request<CreateOrderResult>('/api/mp/pay/create-order', {
       method: 'POST',
-      data: { planId }
+      data: { planId, channel: isH5 ? 'h5' : 'weapp' }
     });
 
     // 开发期：后端直接开通，返回 dev_opened + 最新会员态，无需拉起支付
@@ -85,15 +106,9 @@ export async function purchasePlan(planId: PlanId): Promise<PayOutcome> {
       return { ok: true, membership: res.membership };
     }
 
-    // 生产：后端返回微信支付参数 → 拉起支付 → 取最新会员态
+    // 生产：后端返回微信支付参数 → 分端拉起支付 → 取最新会员态
     if (res.payParams) {
-      await Taro.requestPayment({
-        timeStamp: res.payParams.timeStamp,
-        nonceStr: res.payParams.nonceStr,
-        package: res.payParams.package,
-        signType: res.payParams.signType,
-        paySign: res.payParams.paySign
-      });
+      await invokePay(res.payParams);
       // 支付成功后会员由微信回调异步开通，可能略有延迟：短轮询取最新会员态
       const membership = await pollMembership(planId);
       return { ok: true, membership };
@@ -101,9 +116,7 @@ export async function purchasePlan(planId: PlanId): Promise<PayOutcome> {
 
     return { ok: false, reason: 'fail' };
   } catch (err: any) {
-    if (err?.errMsg && String(err.errMsg).includes('cancel')) {
-      return { ok: false, reason: 'cancel' };
-    }
+    if (isPayCancel(err)) return { ok: false, reason: 'cancel' };
     return { ok: false, reason: 'fail' };
   }
 }
@@ -163,7 +176,7 @@ async function pollGiftCode(orderNo: string): Promise<{ giftCode: string; planNa
 
 // 购买礼物卡：成功返回礼物码（调用方用海报展示分享）。
 export async function purchaseGift(planId: PlanId): Promise<GiftOutcome> {
-  if (!isWeapp) return { ok: false, reason: 'platform' };
+  if (!isWeapp && !isH5) return { ok: false, reason: 'platform' };
 
   if (USE_MOCK) {
     await new Promise((r) => setTimeout(r, 600));
@@ -173,7 +186,7 @@ export async function purchaseGift(planId: PlanId): Promise<GiftOutcome> {
   try {
     const res = await request<GiftOrderResult>('/api/mp/gift/create-order', {
       method: 'POST',
-      data: { planId }
+      data: { planId, channel: isH5 ? 'h5' : 'weapp' }
     });
 
     // 开发期：直接返回礼物码
@@ -181,15 +194,9 @@ export async function purchaseGift(planId: PlanId): Promise<GiftOutcome> {
       return { ok: true, giftCode: res.giftCode, planName: res.planName || PLAN_NAMES[planId] };
     }
 
-    // 生产：拉起支付 → 轮询礼物码
+    // 生产：分端拉起支付 → 轮询礼物码
     if (res.payParams && res.orderNo) {
-      await Taro.requestPayment({
-        timeStamp: res.payParams.timeStamp,
-        nonceStr: res.payParams.nonceStr,
-        package: res.payParams.package,
-        signType: res.payParams.signType,
-        paySign: res.payParams.paySign
-      });
+      await invokePay(res.payParams);
       const r = await pollGiftCode(res.orderNo);
       if (r) return { ok: true, giftCode: r.giftCode, planName: r.planName };
       return { ok: false, reason: 'fail' };
@@ -197,9 +204,7 @@ export async function purchaseGift(planId: PlanId): Promise<GiftOutcome> {
 
     return { ok: false, reason: 'fail' };
   } catch (err: any) {
-    if (err?.errMsg && String(err.errMsg).includes('cancel')) {
-      return { ok: false, reason: 'cancel' };
-    }
+    if (isPayCancel(err)) return { ok: false, reason: 'cancel' };
     return { ok: false, reason: 'fail' };
   }
 }

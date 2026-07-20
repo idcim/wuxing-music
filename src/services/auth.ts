@@ -9,6 +9,21 @@ interface LoginResult {
   user: User;
 }
 
+// 短信验证码场景：登录 / 绑定 / 重置密码等，默认登录。
+export type SmsScene = 'login' | 'bind' | 'reset';
+
+export interface SmsSendResult {
+  sent: boolean;
+  devCode?: string;          // 开发/mock 期直接下发验证码，便于联调（生产不返回）
+}
+
+// 落地登录态：token 存 TOKEN_KEY、user 存 USER（与 wxLogin 一致），返回 user。
+function persistLogin(result: LoginResult): User {
+  storage.set(TOKEN_KEY, result.token);
+  storage.set(STORAGE_KEYS.USER, result.user);
+  return result.user;
+}
+
 function mockUser(openid: string): User {
   // 默认昵称带随机后缀，便于区分（与后端一致）
   const suffix = openid.slice(-4).toUpperCase();
@@ -77,6 +92,111 @@ export async function wxLogin(): Promise<LoginResult> {
   storage.set(TOKEN_KEY, result.token);
   storage.set(STORAGE_KEYS.USER, result.user);
   return result;
+}
+
+// ── 手机号登录（H5 主路径）─────────────────────────────
+
+// 发送短信验证码。mock 下直接下发固定码，便于无短信通道联调。
+export async function sendSmsCode(phone: string, scene: SmsScene = 'login'): Promise<SmsSendResult> {
+  if (USE_MOCK) {
+    return { sent: true, devCode: '123456' };
+  }
+  return request<SmsSendResult>('/api/mp/sms/send', {
+    method: 'POST',
+    data: { phone, scene },
+    auth: false
+  });
+}
+
+// 手机号 + 验证码登录，成功后落地登录态并返回 user。
+export async function loginByPhone(phone: string, code: string): Promise<User> {
+  if (USE_MOCK) {
+    const user = mockUser(`mock-openid-phone-${phone}`);
+    user.phone = phone;
+    return persistLogin({ token: `mock-token-phone-${phone.slice(-4)}`, user });
+  }
+  const result = await request<LoginResult>('/api/mp/login/phone', {
+    method: 'POST',
+    data: { phone, code },
+    auth: false
+  });
+  return persistLogin(result);
+}
+
+// 手机号 + 密码登录，成功后落地登录态并返回 user。
+export async function loginByPassword(phone: string, password: string): Promise<User> {
+  if (USE_MOCK) {
+    const user = mockUser(`mock-openid-pwd-${phone}`);
+    user.phone = phone;
+    return persistLogin({ token: `mock-token-pwd-${phone.slice(-4)}`, user });
+  }
+  const result = await request<LoginResult>('/api/mp/login/password', {
+    method: 'POST',
+    data: { phone, password },
+    auth: false
+  });
+  return persistLogin(result);
+}
+
+// 设置/修改登录密码（需登录态）。
+export async function setPassword(password: string): Promise<void> {
+  if (USE_MOCK) return;
+  await request<{ ok: boolean }>('/api/mp/set-password', {
+    method: 'POST',
+    data: { password }
+  });
+}
+
+// ── 微信网页授权登录（H5 公众号内）───────────────────────
+// 流程：地址栏带 code → 用 code 换 token；无 code → 取授权跳转地址并 replace 跳转
+//（此时函数返回 null，页面即将卸载）；后端未配置公众号时 → 用游客 id 兜底登录（dev）。
+export async function wechatLoginH5(): Promise<User | null> {
+  const guest = getGuestOpenid();
+
+  if (USE_MOCK) {
+    const user = mockUser(`mock-openid-h5-${guest.slice(0, 12)}`);
+    return persistLogin({ token: `mock-token-h5-${guest.slice(0, 12)}`, user });
+  }
+
+  const loc = typeof window !== 'undefined' ? window.location : null;
+  const code = loc ? new URLSearchParams(loc.search).get('code') : null;
+
+  // 已从微信授权回跳（地址栏带 code）：换取 token
+  if (code) {
+    const result = await request<LoginResult>('/api/mp/h5/login', {
+      method: 'POST',
+      data: { code, guestId: guest },
+      auth: false
+    });
+    return persistLogin(result);
+  }
+
+  // 无 code：向后端要授权跳转地址（redirect 为当前不含 code/state 的完整 URL）
+  let redirect = '';
+  if (loc) {
+    const u = new URL(loc.href);
+    u.searchParams.delete('code');
+    u.searchParams.delete('state');
+    redirect = u.href;
+  }
+  const oauth = await request<{ url: string; configured: boolean }>(
+    `/api/mp/h5/oauth-url?redirect=${encodeURIComponent(redirect)}`,
+    { auth: false }
+  );
+
+  if (oauth.configured && oauth.url && loc) {
+    // 跳转到微信授权页，函数不再返回有效 user（页面即将卸载）
+    loc.replace(oauth.url);
+    return null;
+  }
+
+  // 后端未配置公众号：游客兜底登录（dev）
+  const result = await request<LoginResult>('/api/mp/h5/login', {
+    method: 'POST',
+    data: { guestId: guest },
+    auth: false
+  });
+  return persistLogin(result);
 }
 
 export async function fetchProfile(): Promise<User> {

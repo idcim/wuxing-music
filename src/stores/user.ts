@@ -1,7 +1,15 @@
 import { create } from 'zustand';
 import type { User, Membership, ElementId, ElementScores } from '@/types';
 import { storage, STORAGE_KEYS } from '@/services/storage';
-import { wxLogin, fetchProfile, clearAuth, getToken } from '@/services/auth';
+import {
+  wxLogin,
+  fetchProfile,
+  clearAuth,
+  getToken,
+  loginByPhone as apiLoginByPhone,
+  loginByPassword as apiLoginByPassword,
+  wechatLoginH5 as apiWechatLoginH5
+} from '@/services/auth';
 
 interface UserStore {
   user: User | null;
@@ -15,6 +23,9 @@ interface UserStore {
   setPhone: (phone: string) => void;
   setProfile: (p: { nickname?: string; avatar?: string }) => void;
   login: () => Promise<User>;
+  loginByPhone: (phone: string, code: string) => Promise<User>;
+  loginByPassword: (phone: string, password: string) => Promise<User>;
+  loginByWechatH5: () => Promise<User | null>;
   initFromCache: () => Promise<void>;
   logout: () => void;
 }
@@ -91,6 +102,27 @@ export const useUserStore = create<UserStore>((set, get) => ({
     } finally {
       set({ loggingIn: false });
     }
+  },
+
+  // H5：手机号 + 验证码登录
+  loginByPhone: async (phone, code) => {
+    const user = await apiLoginByPhone(phone, code);
+    get().setUser(user);
+    return user;
+  },
+
+  // H5：手机号 + 密码登录
+  loginByPassword: async (phone, password) => {
+    const user = await apiLoginByPassword(phone, password);
+    get().setUser(user);
+    return user;
+  },
+
+  // H5：微信网页授权登录（返回 null 表示正跳转授权页，页面即将卸载）
+  loginByWechatH5: async () => {
+    const user = await apiWechatLoginH5();
+    if (user) get().setUser(user);
+    return user;
   },
 
   // 启动时优先用缓存的登录态；token 失效(401)则清掉重新登录

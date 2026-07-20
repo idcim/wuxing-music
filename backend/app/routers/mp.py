@@ -6,8 +6,10 @@
 """
 import json
 import logging
+import re
 import uuid
 from datetime import datetime, timedelta
+from typing import NoReturn
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
@@ -15,10 +17,11 @@ from jose import JWTError, jwt
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app import storage, wxpay
+from app import ratelimit, sms, storage, wxpay
 from app.config import settings
 from app.database import get_db
-from app.models import Cdkey, CdkeyRedeemLog, Element, Order, PlayHistory, Plan, Setting, Track, User
+from app.models import Cdkey, CdkeyRedeemLog, Element, Order, PlayHistory, Plan, Setting, SmsCode, Track, User
+from app.security import hash_password, verify_password
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -27,6 +30,18 @@ router = APIRouter(prefix="/api/mp", tags=["miniprogram"])
 
 def ok(data=None, msg="ok"):
     return {"code": 0, "data": data, "msg": msg}
+
+
+# 大陆手机号：1 开头 11 位
+PHONE_RE = re.compile(r"^1\d{10}$")
+
+
+def _client_ip(request: Request) -> str:
+    """取客户端 IP：经反向代理时优先 X-Forwarded-For 首段，否则连接对端。"""
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else ""
 
 
 # ── 用户 JWT（与管理员区分，sub 前缀 user:）──
@@ -141,19 +156,32 @@ def _jscode2session(db: Session, code: str) -> dict:
 
 @router.post("/login")
 def mp_login(body: LoginIn, db: Session = Depends(get_db)):
-    """登录：用 code 换稳定 openid（配置了小程序密钥时）；否则回退前端直传的 openid。
-    识别优先级：unionid > openid。"""
-    openid = body.openid
+    """登录：已配置小程序密钥时必须用 code 换取真实 openid（绝不接受前端直传 openid，
+    否则可冒充任意用户顶号）；仅未配置时回退前端游客 openid（dev）。识别优先级：unionid > openid。"""
+    row = db.query(Setting).filter(Setting.key == "mp_config").first()
+    mp_cfg = json.loads(row.value) if row and row.value else {}
+    configured = bool(mp_cfg.get("app_id") and mp_cfg.get("app_secret"))
+
     unionid = body.unionid
-
-    # 优先用 code 换取真实、稳定的 openid/unionid
-    sess = _jscode2session(db, body.code)
-    if sess:
-        openid = sess["openid"]
+    if configured:
+        # 已配置：必须用真实 code 换 openid，忽略前端直传（防顶号）
+        if not body.code:
+            raise HTTPException(status_code=400, detail="缺少登录 code")
+        sess = _jscode2session(db, body.code)
+        openid = sess.get("openid", "")
         unionid = sess.get("unionid") or unionid
+        if not openid:
+            raise HTTPException(status_code=400, detail="微信登录失败，请重试")
+    else:
+        # 未配置小程序密钥：仅开发态允许前端稳定游客标识兜底；生产拒绝
+        if not settings.debug:
+            raise HTTPException(status_code=503, detail="登录服务未配置")
+        openid = (body.openid or "").strip()
 
-    if not openid:
-        raise HTTPException(status_code=400, detail="缺少登录凭证")
+    # 合成前缀 openid 属手机号等其它登录路径的用户（phone:<手机号> 可猜），
+    # 不可经本端点的 openid 直信路径换取，防止顶号。
+    if not openid or openid.startswith("phone:"):
+        raise HTTPException(status_code=400, detail="登录凭证无效")
 
     user = None
     if unionid:
@@ -185,6 +213,396 @@ def mp_login(body: LoginIn, db: Session = Depends(get_db)):
 
     token = create_user_token(user.id)
     return ok({"token": token, "user": _user_dict(user)})
+
+
+# ── 手机号登录（短信验证码 / 密码）──
+class SmsSendIn(BaseModel):
+    phone: str
+    scene: str = "login"
+
+
+# 短信发送限频阈值
+SMS_IP_HOURLY = 20        # 同 IP 每小时最多发起（防批量盗刷不同号码）
+SMS_PHONE_DAILY = 10      # 同手机号每日最多发送（防对单号短信轰炸）
+
+
+@router.post("/sms/send")
+def mp_sms_send(body: SmsSendIn, request: Request, db: Session = Depends(get_db)):
+    """发送短信验证码。防刷多重把关：手机号格式 + 同号 60 秒限频 + 同号每日上限
+    + 同 IP 每小时上限。短信未配置时：开发态走直通并回传 devCode 便于联调；
+    生产态直接拒绝（避免验证码形同虚设）。"""
+    phone = (body.phone or "").strip()
+    if not PHONE_RE.match(phone):
+        raise HTTPException(status_code=400, detail="手机号格式不正确")
+    scene = (body.scene or "login").strip()
+
+    # 生产未配短信：拒绝而非明文回传（dev fail-open 仅限开发态）
+    if not settings.debug and not sms.is_configured(db):
+        logger.error("短信服务未配置，生产环境拒绝下发验证码")
+        raise HTTPException(status_code=500, detail="短信服务未配置")
+
+    # 同 IP 每小时上限
+    ip = _client_ip(request)
+    if ip and not ratelimit.check_and_record(f"sms_ip:{ip}", SMS_IP_HOURLY, 3600):
+        raise HTTPException(status_code=429, detail="操作过于频繁，请稍后再试")
+
+    now = datetime.utcnow()
+    # 同手机号 60 秒限频
+    last = (
+        db.query(SmsCode)
+        .filter(SmsCode.phone == phone)
+        .order_by(SmsCode.id.desc())
+        .first()
+    )
+    if last and last.created_at and (now - last.created_at) < timedelta(seconds=60):
+        raise HTTPException(status_code=429, detail="发送过于频繁，请稍后再试")
+
+    # 同手机号每日上限
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    sent_today = (
+        db.query(SmsCode)
+        .filter(SmsCode.phone == phone, SmsCode.created_at >= day_start)
+        .count()
+    )
+    if sent_today >= SMS_PHONE_DAILY:
+        raise HTTPException(status_code=429, detail="今日发送次数已达上限，请明日再试")
+
+    code = sms.gen_code()
+    db.add(SmsCode(phone=phone, code=code, scene=scene, expire_at=now + timedelta(minutes=10)))
+    db.commit()
+
+    result = sms.send_code(db, phone, code)
+    data: dict = {"sent": True}
+    if result.get("dev") and settings.debug:
+        # 仅开发直通且开发态才回传，便于无短信通道联调；生产不返回
+        data["devCode"] = result.get("code", code)
+    return ok(data)
+
+
+class PhoneLoginIn(BaseModel):
+    phone: str
+    code: str
+
+
+@router.post("/login/phone")
+def mp_login_phone(body: PhoneLoginIn, db: Session = Depends(get_db)):
+    """短信验证码登录：校验最新未用验证码，按手机号 upsert 用户。"""
+    phone = (body.phone or "").strip()
+    code = (body.code or "").strip()
+    if not phone or not code:
+        raise HTTPException(status_code=400, detail="手机号或验证码不能为空")
+
+    now = datetime.utcnow()
+    row = (
+        db.query(SmsCode)
+        .filter(
+            SmsCode.phone == phone,
+            SmsCode.scene == "login",
+            SmsCode.used == False,  # noqa: E712
+        )
+        .order_by(SmsCode.id.desc())
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=400, detail="验证码错误")
+    if row.expire_at and row.expire_at < now:
+        raise HTTPException(status_code=400, detail="验证码已过期")
+    if row.code != code:
+        # 校验失败计数，达 5 次即作废该码（防暴力猜测），需重新获取
+        row.attempts += 1
+        if row.attempts >= 5:
+            row.used = True
+        db.commit()
+        raise HTTPException(status_code=400, detail="验证码错误")
+    row.used = True
+    db.commit()
+
+    # 按手机号匹配；无则新建（openid 用合成唯一值满足 NOT NULL/unique）
+    user = db.query(User).filter(User.phone == phone).first()
+    if not user:
+        user = User(
+            openid=f"phone:{phone}",
+            phone=phone,
+            nickname=_default_nickname(),
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    token = create_user_token(user.id)
+    return ok({"token": token, "user": _user_dict(user)})
+
+
+class PasswordLoginIn(BaseModel):
+    phone: str
+    password: str
+
+
+# 密码登录失败锁定：同号 10 分钟连错上限、同 IP 更宽上限（防撞库/暴力）
+PWD_FAIL_MAX = 5
+PWD_FAIL_IP_MAX = 20
+PWD_FAIL_WINDOW = 600
+
+
+@router.post("/login/password")
+def mp_login_password(body: PasswordLoginIn, request: Request, db: Session = Depends(get_db)):
+    """手机号 + 密码登录。失败限频：同号 10 分钟连错 5 次、同 IP 连错 20 次即锁定。"""
+    phone = (body.phone or "").strip()
+    password = body.password or ""
+    if not phone or not password:
+        raise HTTPException(status_code=400, detail="手机号或密码不能为空")
+
+    ip = _client_ip(request)
+    phone_key = f"pwd_fail:{phone}"
+    ip_key = f"pwd_fail_ip:{ip}"
+    if ratelimit.fail_count(phone_key, PWD_FAIL_WINDOW) >= PWD_FAIL_MAX or (
+        ip and ratelimit.fail_count(ip_key, PWD_FAIL_WINDOW) >= PWD_FAIL_IP_MAX
+    ):
+        raise HTTPException(status_code=429, detail="尝试过于频繁，请稍后再试")
+
+    def _note_fail() -> None:
+        ratelimit.record_fail(phone_key)
+        if ip:
+            ratelimit.record_fail(ip_key)
+
+    user = db.query(User).filter(User.phone == phone).first()
+    if not user or not user.password_hash:
+        _note_fail()
+        raise HTTPException(status_code=400, detail="账号不存在或未设置密码")
+    if not verify_password(password, user.password_hash):
+        _note_fail()
+        raise HTTPException(status_code=400, detail="手机号或密码错误")
+
+    ratelimit.clear_fail(phone_key)
+    token = create_user_token(user.id)
+    return ok({"token": token, "user": _user_dict(user)})
+
+
+class SetPasswordIn(BaseModel):
+    password: str
+
+
+@router.post("/set-password")
+def mp_set_password(
+    body: SetPasswordIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """设置/修改登录密码（需登录态）。"""
+    pwd = body.password or ""
+    if len(pwd) < 6:
+        raise HTTPException(status_code=400, detail="密码至少 6 位")
+    user.password_hash = hash_password(pwd)
+    db.commit()
+    return ok({"ok": True})
+
+
+# ── 公众号 H5（网页授权 / JSSDK）──
+def _oa_cfg(db: Session) -> dict:
+    row = db.query(Setting).filter(Setting.key == "oa_config").first()
+    return json.loads(row.value) if row and row.value else {}
+
+
+def _oauth2_access_token(app_id: str, app_secret: str, code: str) -> dict:
+    """公众号网页授权：用 code 换 openid(+unionid)。失败返回 {}。"""
+    import httpx
+    try:
+        resp = httpx.get(
+            "https://api.weixin.qq.com/sns/oauth2/access_token",
+            params={
+                "appid": app_id,
+                "secret": app_secret,
+                "code": code,
+                "grant_type": "authorization_code",
+            },
+            timeout=10,
+        )
+        data = resp.json()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("公众号 oauth2 换取失败：%s", e)
+        return {}
+    if data.get("openid"):
+        return {"openid": data["openid"], "unionid": data.get("unionid", "")}
+    logger.warning("公众号 oauth2 返回异常：%s", data)
+    return {}
+
+
+@router.get("/h5/oauth-url")
+def h5_oauth_url(redirect: str, db: Session = Depends(get_db)):
+    """返回公众号网页授权跳转地址（snsapi_base，静默授权）。未配公众号则 configured=False。"""
+    from urllib.parse import quote
+
+    cfg = _oa_cfg(db)
+    app_id = cfg.get("app_id")
+    if not app_id:
+        return ok({"url": "", "configured": False})
+    url = (
+        "https://open.weixin.qq.com/connect/oauth2/authorize"
+        f"?appid={app_id}&redirect_uri={quote(redirect, safe='')}"
+        "&response_type=code&scope=snsapi_base&state=wx#wechat_redirect"
+    )
+    return ok({"url": url, "configured": True})
+
+
+class H5LoginIn(BaseModel):
+    code: str = ""       # 公众号网页授权 code
+    guestId: str = ""    # 未配公众号时的 dev 兜底稳定标识
+
+
+@router.post("/h5/login")
+def h5_login(body: H5LoginIn, db: Session = Depends(get_db)):
+    """H5（公众号内）登录：有 code 且已配公众号则换取真实 openid；否则用 guestId 兜底。
+    身份匹配：unionid > oa_openid > 新建；oa_openid 供 H5 JSAPI 支付 payer 用。"""
+    cfg = _oa_cfg(db)
+    app_id = cfg.get("app_id")
+    app_secret = cfg.get("app_secret")
+    configured = bool(app_id and app_secret)
+
+    oa_openid = ""
+    unionid = ""
+    if configured:
+        # 已配公众号：必须用真实 code 换取 openid，绝不接受前端直传的 guestId
+        # （否则带任意 guestId 即可绕过授权、甚至冒充他人 oa_openid 顶号）。
+        if not body.code:
+            raise HTTPException(status_code=400, detail="缺少授权 code")
+        sess = _oauth2_access_token(app_id, app_secret, body.code)
+        oa_openid = sess.get("openid", "")
+        unionid = sess.get("unionid", "")
+        if not oa_openid:
+            raise HTTPException(status_code=400, detail="微信授权失败，请重试")
+    else:
+        # 未配公众号：仅开发态允许前端稳定游客标识兜底；生产拒绝
+        if not settings.debug:
+            raise HTTPException(status_code=503, detail="微信登录未配置")
+        oa_openid = (body.guestId or "").strip()
+        if not oa_openid:
+            raise HTTPException(status_code=400, detail="缺少登录凭证")
+
+    user = None
+    if unionid:
+        user = db.query(User).filter(User.unionid == unionid).first()
+    if not user:
+        user = db.query(User).filter(User.oa_openid == oa_openid).first()
+
+    if not user:
+        user = User(
+            openid=oa_openid,       # 新建时 openid 用公众号 openid 填充（满足 NOT NULL/unique）
+            oa_openid=oa_openid,
+            unionid=unionid,
+            nickname=_default_nickname(),
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    else:
+        changed = False
+        if not user.oa_openid:
+            user.oa_openid = oa_openid
+            changed = True
+        if unionid and not user.unionid:
+            user.unionid = unionid
+            changed = True
+        if changed:
+            db.commit()
+            db.refresh(user)
+
+    token = create_user_token(user.id)
+    return ok({"token": token, "user": _user_dict(user)})
+
+
+# 公众号 access_token / jsapi_ticket 缓存（与小程序 _access_token_cache 独立）
+_oa_token_cache = {"token": "", "exp": 0.0}
+_oa_ticket_cache = {"ticket": "", "exp": 0.0}
+
+
+def _oa_access_token(db: Session) -> str:
+    """获取并缓存公众号 access_token（用 oa_config 的 appid/secret）。"""
+    import time as _t
+    if _oa_token_cache["token"] and _oa_token_cache["exp"] > _t.time():
+        return _oa_token_cache["token"]
+
+    cfg = _oa_cfg(db)
+    app_id = cfg.get("app_id")
+    app_secret = cfg.get("app_secret")
+    if not (app_id and app_secret):
+        raise HTTPException(status_code=400, detail="未配置公众号 AppID/AppSecret")
+
+    import httpx
+    try:
+        resp = httpx.get(
+            "https://api.weixin.qq.com/cgi-bin/token",
+            params={"grant_type": "client_credential", "appid": app_id, "secret": app_secret},
+            timeout=10,
+        )
+        data = resp.json()
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"获取公众号 access_token 失败：{e}")
+
+    token = data.get("access_token")
+    if not token:
+        logger.warning("获取公众号 access_token 失败：%s", data)
+        raise HTTPException(status_code=502, detail="获取微信凭证失败")
+    _oa_token_cache["token"] = token
+    _oa_token_cache["exp"] = _t.time() + int(data.get("expires_in", 7200)) - 300
+    return token
+
+
+def _oa_jsapi_ticket(db: Session) -> str:
+    """获取并缓存公众号 jsapi_ticket。"""
+    import time as _t
+    if _oa_ticket_cache["ticket"] and _oa_ticket_cache["exp"] > _t.time():
+        return _oa_ticket_cache["ticket"]
+
+    token = _oa_access_token(db)
+    import httpx
+    try:
+        resp = httpx.get(
+            "https://api.weixin.qq.com/cgi-bin/ticket/getticket",
+            params={"access_token": token, "type": "jsapi"},
+            timeout=10,
+        )
+        data = resp.json()
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"获取 jsapi_ticket 失败：{e}")
+
+    ticket = data.get("ticket")
+    if not ticket:
+        logger.warning("获取 jsapi_ticket 失败：%s", data)
+        raise HTTPException(status_code=502, detail="获取微信签名失败")
+    _oa_ticket_cache["ticket"] = ticket
+    _oa_ticket_cache["exp"] = _t.time() + int(data.get("expires_in", 7200)) - 300
+    return ticket
+
+
+@router.get("/h5/jssdk-config")
+def h5_jssdk_config(url: str, db: Session = Depends(get_db)):
+    """返回 wx.config 所需签名参数。url 为当前页完整 URL（含 query，不含 #）。
+    未配公众号则 configured=False。"""
+    import hashlib
+    import secrets as _secrets
+    import time as _t
+
+    cfg = _oa_cfg(db)
+    app_id = cfg.get("app_id")
+    app_secret = cfg.get("app_secret")
+    if not (app_id and app_secret):
+        return ok({
+            "appId": "", "timestamp": "", "nonceStr": "",
+            "signature": "", "configured": False,
+        })
+
+    ticket = _oa_jsapi_ticket(db)
+    timestamp = str(int(_t.time()))
+    nonce_str = _secrets.token_hex(8)
+    raw = f"jsapi_ticket={ticket}&noncestr={nonce_str}&timestamp={timestamp}&url={url}"
+    signature = hashlib.sha1(raw.encode("utf-8")).hexdigest()
+    return ok({
+        "appId": app_id,
+        "timestamp": timestamp,
+        "nonceStr": nonce_str,
+        "signature": signature,
+        "configured": True,
+    })
 
 
 # ── 我的资料 ──
@@ -267,9 +685,20 @@ def bind_phone(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if not body.phone or len(body.phone) < 6:
-        raise HTTPException(status_code=400, detail="手机号不合法")
-    user.phone = body.phone
+    """绑定/改绑手机号：强制格式校验 + 手机号唯一（不可绑到他人已占用的号）。
+    注：scene=bind 短信验证码校验待前端配合下发后叠加（见安全清单）。"""
+    phone = (body.phone or "").strip()
+    if not PHONE_RE.match(phone):
+        raise HTTPException(status_code=400, detail="手机号格式不正确")
+    # 唯一性：该号已被其他账号绑定则拒绝（排除自身，允许重复绑定本人号码）
+    exists = (
+        db.query(User)
+        .filter(User.phone == phone, User.id != user.id)
+        .first()
+    )
+    if exists:
+        raise HTTPException(status_code=400, detail="该手机号已被其他账号绑定")
+    user.phone = phone
     db.commit()
     db.refresh(user)
     return ok({"phone": user.phone})
@@ -401,22 +830,36 @@ class RedeemIn(BaseModel):
     code: str
 
 
+# CDKEY 兑换失败限频：单用户每分钟最多 5 次失败（CLAUDE.md 约定，防暴力猜码）
+CDKEY_FAIL_MAX = 5
+CDKEY_FAIL_WINDOW = 60
+
+
 @router.post("/cdkey/redeem")
 def mp_redeem(
     body: RedeemIn,
+    request: Request,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    fail_key = f"cdkey_fail:{user.id}"
+    if ratelimit.fail_count(fail_key, CDKEY_FAIL_WINDOW) >= CDKEY_FAIL_MAX:
+        raise HTTPException(status_code=429, detail="兑换过于频繁，请稍后再试")
+
+    def _reject(detail: str) -> NoReturn:
+        ratelimit.record_fail(fail_key)
+        raise HTTPException(status_code=400, detail=detail)
+
     code = body.code.strip().upper()
     key = db.query(Cdkey).filter(Cdkey.code == code).first()
     if not key:
-        raise HTTPException(status_code=400, detail="兑换码不存在")
+        _reject("兑换码不存在")
     if key.status == "used":
-        raise HTTPException(status_code=400, detail="兑换码已被使用")
+        _reject("兑换码已被使用")
     if key.status in ("disabled", "expired"):
-        raise HTTPException(status_code=400, detail="兑换码不可用")
+        _reject("兑换码不可用")
     if key.expire_at and key.expire_at < datetime.utcnow():
-        raise HTTPException(status_code=400, detail="兑换码已过期")
+        _reject("兑换码已过期")
 
     # 发放权益：剩余期叠加
     now = datetime.utcnow()
@@ -430,9 +873,10 @@ def mp_redeem(
     key.status = "used"
     key.used_by = user.id
     key.used_at = now
-    db.add(CdkeyRedeemLog(user_id=user.id, cdkey_id=key.id))
+    db.add(CdkeyRedeemLog(user_id=user.id, cdkey_id=key.id, ip=_client_ip(request)))
     db.commit()
     db.refresh(user)
+    ratelimit.clear_fail(fail_key)
 
     return ok({
         "plan": key.plan_name,
@@ -465,8 +909,23 @@ def _grant_membership(db: Session, user: User, plan: Plan, source: str = "purcha
     db.refresh(user)
 
 
+def _resolve_pay_payer(db: Session, user: User, channel: str, order: Order):
+    """按下单渠道确定 JSAPI payer openid 与 appid。
+    h5：用公众号 oa_openid + oa_config.app_id（未微信登录则订单置失败并 400）。
+    weapp/缺省：用小程序 openid + 默认 appid（app_id=None，wxpay 内部用 wx_app_id）。
+    返回 (payer_openid, pay_app_id)。"""
+    if (channel or "weapp") == "h5":
+        if not user.oa_openid:
+            order.status = "failed"
+            db.commit()
+            raise HTTPException(status_code=400, detail="请先微信登录")
+        return user.oa_openid, (_oa_cfg(db).get("app_id") or None)
+    return user.openid, None
+
+
 class CreateOrderIn(BaseModel):
     planId: str
+    channel: str = "weapp"   # weapp（小程序）| h5（公众号网页 JSAPI）
 
 
 @router.post("/pay/create-order")
@@ -496,7 +955,12 @@ def mp_create_order(
     db.refresh(order)
 
     if not pay_enabled:
-        # 开发期/未配置支付：直接开通，便于联调
+        if not settings.debug:
+            # 生产未配支付：拒绝，绝不免付开通
+            order.status = "failed"
+            db.commit()
+            raise HTTPException(status_code=400, detail="支付未配置")
+        # 开发期：直接开通，便于联调
         _grant_membership(db, user, plan)
         order.status = "paid"
         order.paid_at = datetime.utcnow()
@@ -508,18 +972,23 @@ def mp_create_order(
         })
 
     # 生产：调微信 JSAPI 统一下单，返回前端 requestPayment 参数
+    payer_openid, pay_app_id = _resolve_pay_payer(db, user, body.channel, order)
+
     try:
         pay_params = wxpay.create_jsapi_order(
             cfg,
-            openid=user.openid,
+            openid=payer_openid,
             order_no=order.order_no,
             amount_fen=int(round(plan.price * 100)),
             description=f"五行律音 · {plan.name}",
+            app_id=pay_app_id,
         )
     except wxpay.WxPayError as e:
+        # 上游原文仅入日志，对外返回通用文案（避免泄露商户/接口细节）
+        logger.warning("微信下单失败（订单 %s）：%s", order.order_no, e)
         order.status = "failed"
         db.commit()
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="支付下单失败，请稍后重试")
 
     return ok({
         "dev_opened": False,
@@ -610,6 +1079,7 @@ def _issue_gift_cdkey(db: Session, plan: Plan, order_no: str) -> str:
 
 class GiftOrderIn(BaseModel):
     planId: str
+    channel: str = "weapp"   # weapp（小程序）| h5（公众号网页 JSAPI）
 
 
 @router.post("/gift/create-order")
@@ -640,6 +1110,11 @@ def mp_gift_create_order(
     db.refresh(order)
 
     if not pay_enabled:
+        if not settings.debug:
+            # 生产未配支付：拒绝，绝不免付发码
+            order.status = "failed"
+            db.commit()
+            raise HTTPException(status_code=400, detail="支付未配置")
         # 开发期：直接生成礼物码
         order.gift_code = _issue_gift_cdkey(db, plan, order.order_no)
         order.status = "paid"
@@ -652,18 +1127,22 @@ def mp_gift_create_order(
             "planName": plan.name,
         })
 
+    payer_openid, pay_app_id = _resolve_pay_payer(db, user, body.channel, order)
+
     try:
         pay_params = wxpay.create_jsapi_order(
             cfg,
-            openid=user.openid,
+            openid=payer_openid,
             order_no=order.order_no,
             amount_fen=int(round(plan.price * 100)),
             description=f"五行律音礼物卡 · {plan.name}",
+            app_id=pay_app_id,
         )
     except wxpay.WxPayError as e:
+        logger.warning("礼物卡下单失败（订单 %s）：%s", order.order_no, e)
         order.status = "failed"
         db.commit()
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="支付下单失败，请稍后重试")
 
     return ok({
         "dev_opened": False,
@@ -853,7 +1332,8 @@ def _get_access_token(db: Session) -> str:
 
     token = data.get("access_token")
     if not token:
-        raise HTTPException(status_code=502, detail=f"获取 access_token 失败：{data}")
+        logger.warning("获取小程序 access_token 失败：%s", data)
+        raise HTTPException(status_code=502, detail="获取微信凭证失败")
     _access_token_cache["token"] = token
     _access_token_cache["exp"] = _t.time() + int(data.get("expires_in", 7200)) - 300
     return token
@@ -893,8 +1373,9 @@ def mp_qrcode(
 
     ctype = resp.headers.get("content-type", "")
     if "image" not in ctype:
-        # 返回的是 JSON 错误
-        raise HTTPException(status_code=400, detail=f"生成小程序码失败：{resp.text}")
+        # 返回的是 JSON 错误：原文入日志，对外通用文案
+        logger.warning("生成小程序码失败：%s", resp.text)
+        raise HTTPException(status_code=400, detail="生成小程序码失败，请稍后重试")
 
     try:
         result = storage.save_bytes(db, resp.content, ".png", base_url=str(request.base_url))

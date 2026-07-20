@@ -68,14 +68,17 @@ def _authorization(cfg: dict, method: str, url_path: str, body: str) -> str:
 
 
 def create_jsapi_order(
-    cfg: dict, *, openid: str, order_no: str, amount_fen: int, description: str
+    cfg: dict, *, openid: str, order_no: str, amount_fen: int, description: str,
+    app_id: Optional[str] = None,
 ) -> dict:
-    """调用 JSAPI 下单，返回前端 wx.requestPayment 所需参数（已二次签名）。"""
+    """调用 JSAPI 下单，返回前端 wx.requestPayment 所需参数（已二次签名）。
+    app_id 可选：H5 公众号支付传公众号 AppID；缺省用 pay_config 的小程序 wx_app_id。"""
     _require(cfg, "wx_app_id", "wx_mch_id", "wx_key_pem", "wx_cert_serial", "notify_url")
 
+    appid = app_id or cfg["wx_app_id"]
     url_path = "/v3/pay/transactions/jsapi"
     payload = {
-        "appid": cfg["wx_app_id"],
+        "appid": appid,
         "mchid": cfg["wx_mch_id"],
         "description": description,
         "out_trade_no": order_no,
@@ -100,17 +103,18 @@ def create_jsapi_order(
     if not prepay_id:
         raise WxPayError(f"微信下单未返回 prepay_id：{resp.text}")
 
-    return _build_pay_params(cfg, prepay_id)
+    return _build_pay_params(cfg, prepay_id, app_id=appid)
 
 
-def _build_pay_params(cfg: dict, prepay_id: str) -> dict:
-    """对 prepay_id 二次签名，生成 requestPayment 参数。"""
+def _build_pay_params(cfg: dict, prepay_id: str, app_id: Optional[str] = None) -> dict:
+    """对 prepay_id 二次签名，生成 requestPayment 参数。
+    app_id 缺省用 pay_config 的小程序 wx_app_id（H5 支付传公众号 AppID）。"""
     private_key = _load_private_key(cfg["wx_key_pem"])
-    app_id = cfg["wx_app_id"]
+    appid = app_id or cfg["wx_app_id"]
     ts = str(int(time.time()))
     nonce = uuid.uuid4().hex.upper()
     pkg = f"prepay_id={prepay_id}"
-    message = f"{app_id}\n{ts}\n{nonce}\n{pkg}\n"
+    message = f"{appid}\n{ts}\n{nonce}\n{pkg}\n"
     pay_sign = _rsa_sign(private_key, message)
     return {
         "timeStamp": ts,

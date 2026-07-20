@@ -98,7 +98,9 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     openid: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     unionid: Mapped[str] = mapped_column(String(64), default="", index=True)
+    oa_openid: Mapped[str] = mapped_column(String(64), default="", index=True)  # 公众号 openid（H5 网页授权/JSAPI 支付 payer）
     phone: Mapped[str] = mapped_column(String(20), default="", index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), default="")         # 手机号密码登录（bcrypt）
     nickname: Mapped[str] = mapped_column(String(64), default="律音用户")
     avatar: Mapped[str] = mapped_column(Text, default="")
     element: Mapped[str] = mapped_column(String(2), default="")
@@ -191,3 +193,18 @@ class PlayHistory(Base):
     user_id: Mapped[int] = mapped_column(Integer, index=True)
     track_id: Mapped[int] = mapped_column(Integer, index=True)
     played_at: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)
+
+
+class SmsCode(Base):
+    """短信验证码：手机号登录/注册用，10 分钟有效、一次性。"""
+
+    __tablename__ = "sms_code"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    phone: Mapped[str] = mapped_column(String(20), index=True)
+    code: Mapped[str] = mapped_column(String(8))
+    scene: Mapped[str] = mapped_column(String(16), default="login")  # login/bind/...
+    expire_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    used: Mapped[bool] = mapped_column(Boolean, default=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)  # 校验失败次数，达上限即作废（防暴力）
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)

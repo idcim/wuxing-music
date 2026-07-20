@@ -90,4 +90,113 @@
     color: $text-quaternary;
     letter-spacing: 1rpx;
   }
+
+  // ── H5 手机登录表单 ──
+  &__form {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  &__tabs {
+    display: flex;
+    align-items: center;
+    gap: 48rpx;
+    margin-bottom: 48rpx;
+  }
+
+  &__tab {
+    position: relative;
+    padding-bottom: 12rpx;
+    font-size: 30rpx;
+    color: $text-tertiary;
+    letter-spacing: 2rpx;
+
+    &--active {
+      color: $text-primary;
+
+      &::after {
+        content: '';
+        position: absolute;
+        left: 50%;
+        bottom: 0;
+        width: 40rpx;
+        height: 3rpx;
+        border-radius: 2rpx;
+        background: #38bdf8;
+        transform: translateX(-50%);
+      }
+    }
+  }
+
+  &__field {
+    width: 100%;
+    margin-bottom: 24rpx;
+
+    &--row {
+      display: flex;
+      align-items: center;
+      gap: 20rpx;
+    }
+  }
+
+  &__input {
+    width: 100%;
+    height: 96rpx;
+    box-sizing: border-box;
+    padding: 0 32rpx;
+    border-radius: $radius-md;
+    background: $surface;
+    border: 1px solid $border;
+    color: $text-primary;
+    font-size: 30rpx;
+    letter-spacing: 1rpx;
+
+    &--flex {
+      flex: 1;
+      width: auto;
+    }
+  }
+
+  &__code-btn {
+    flex-shrink: 0;
+    height: 96rpx;
+    padding: 0 28rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: $radius-md;
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    background: rgba(56, 189, 248, 0.08);
+
+    &--disabled {
+      opacity: 0.5;
+    }
+
+    &-text {
+      font-size: 26rpx;
+      color: #38bdf8;
+      letter-spacing: 1rpx;
+      white-space: nowrap;
+    }
+  }
+
+  &__form &__btn {
+    margin-top: 8rpx;
+  }
+
+  &__wechat {
+    margin-top: 44rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14rpx;
+
+    &-text {
+      font-size: 28rpx;
+      color: $text-secondary;
+      letter-spacing: 2rpx;
+    }
+  }
 }

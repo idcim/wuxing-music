@@ -62,5 +62,13 @@ export const migrateStorage = (rewrite_db = true) =>
 export const getMpSetting = () => req.get('/api/admin/settings/mp');
 export const updateMpSetting = (data: any) => req.put('/api/admin/settings/mp', data);
 
+// ── 公众号配置（H5 网页授权/JSSDK/JSAPI 支付 appid）──
+export const getOaSetting = () => req.get('/api/admin/settings/oa');
+export const updateOaSetting = (data: any) => req.put('/api/admin/settings/oa', data);
+
+// ── 短信配置 ──
+export const getSmsSetting = () => req.get('/api/admin/settings/sms');
+export const updateSmsSetting = (data: any) => req.put('/api/admin/settings/sms', data);
+
 // 上传接口地址（el-upload 直传用）
 export const UPLOAD_URL = '/api/admin/upload';
