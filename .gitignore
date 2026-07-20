@@ -10,3 +10,5 @@ lib/
 .vscode/
 deploy_versions/
 .codegraph/
+.omc/
+SLEEP.md

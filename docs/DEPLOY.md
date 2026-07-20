@@ -54,8 +54,8 @@ H5 相关域名散落三处，逐一配好：
 ## 首次部署（1Panel + Docker）
 
 ```bash
-git clone https://github.com/idcim/wuxing-music.git /opt/wuxing-music
-cd /opt/wuxing-music
+git clone https://github.com/idcim/wuxing-music.git /opt/1panel/www/sites/app/index/wuxing-music
+cd /opt/1panel/www/sites/app/index/wuxing-music
 cp backend/.env.example backend/.env      # 按上表填真实值
 docker compose up -d --build              # 起 后端 + 后台 + H5
 docker compose logs -f
@@ -78,8 +78,8 @@ docker compose logs -f
 3. 执行周期：如**每 1 分钟**（无更新几乎零开销）
 4. 脚本内容：
    ```bash
-   export WUXING_REPO_DIR=/opt/wuxing-music
-   bash /opt/wuxing-music/scripts/auto-deploy.sh
+   export WUXING_REPO_DIR=/opt/1panel/www/sites/app/index/wuxing-music
+   bash /opt/1panel/www/sites/app/index/wuxing-music/scripts/auto-deploy.sh
    ```
 
 之后**只要 `git push` 到 GitHub `master`，1 分钟内服务器自动拉取重建**。

@@ -2,13 +2,13 @@
 # 五行律音 · 自动部署（单次幂等，供 1Panel「计划任务」定时调用）
 # ================================================================
 # 作用：检查 git 远程，只要有新提交就 拉取 → 重建 → 重启 docker compose
-#       服务（wuxing-backend + wuxing-admin）→ 健康检查 → 失败自动回滚。
+#       服务（wuxing-backend + wuxing-admin + wuxing-h5）→ 健康检查 → 失败自动回滚。
 #       无更新则直接退出（幂等，可高频调用）；带文件锁防并发重入。
 #
 # 用法（1Panel）：计划任务 → 创建 → 类型「Shell 脚本」→ 周期如每 1 分钟 →
 #   脚本内容：
-#       export WUXING_REPO_DIR=/opt/wuxing-music
-#       bash /opt/wuxing-music/scripts/auto-deploy.sh
+#       export WUXING_REPO_DIR=/opt/1panel/www/sites/app/index/wuxing-music
+#       bash /opt/1panel/www/sites/app/index/wuxing-music/scripts/auto-deploy.sh
 #   手动验证一次：  ./scripts/auto-deploy.sh
 #
 # 前提：服务器已 git clone 本仓库、配好 backend/.env（未跟踪，安全）、
@@ -18,7 +18,7 @@
 set -uo pipefail
 
 # ── 可配置项（环境变量覆盖，在 1Panel 计划任务里 export 即可）──
-REPO_DIR="${WUXING_REPO_DIR:-/opt/wuxing-music}"                 # 仓库路径
+REPO_DIR="${WUXING_REPO_DIR:-/opt/1panel/www/sites/app/index/wuxing-music}"   # 仓库路径（1Panel 站点目录）
 BRANCH="${WUXING_BRANCH:-master}"                                # 部署分支
 HEALTH_URL="${WUXING_HEALTH_URL:-http://127.0.0.1:8000/api/health}"
 LOG_FILE="${WUXING_LOG:-/var/log/wuxing-deploy.log}"
