@@ -176,13 +176,35 @@
     background: $surface;
     border: 1px solid $border;
     color: $text-primary;
-    font-size: 30rpx;
+    // 32rpx = 0.8rem，在 ≤375px 视口（根字号被钳在 20px）下正好 16px。
+    // 低于 16px 时 iOS Safari / 微信 WKWebView 聚焦输入框会强制放大整个页面。
+    font-size: 32rpx;
     letter-spacing: 1rpx;
+    transition: border-color 0.2s ease, background 0.2s ease;
+
+    // 聚焦高亮：深色底上原本毫无反馈，看不出光标落在哪一个框。
+    // 小程序端类名落在原生 input 上用 :focus；H5 端落在外层 taro-input-core
+    // （真正的 input 是它的子节点）故需 :focus-within。两端各命中一条，互不干扰。
+    &:focus,
+    &:focus-within {
+      border-color: rgba(56, 189, 248, 0.45);
+      background: rgba(56, 189, 248, 0.06);
+    }
 
     &--flex {
       flex: 1;
       width: auto;
     }
+  }
+
+  // H5 桌面浏览器下 type=number 会带上下调节箭头，挤占输入区且毫无意义
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+  input::-webkit-outer-spin-button,
+  input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
   }
 
   &__code-btn {

@@ -11,6 +11,8 @@ type LoginTab = 'code' | 'password';
 type LoginMode = 'wechat' | 'phone';
 
 const PHONE_RE = /^1\d{10}$/;
+// placeholder 颜色（小程序端只认 placeholderStyle，不吃 ::placeholder）
+const PLACEHOLDER_STYLE = 'color:#475569';
 
 export default function Login() {
   const loggingIn = useUserStore((s) => s.loggingIn);
@@ -217,46 +219,60 @@ export default function Login() {
             type="number"
             maxlength={11}
             placeholder="请输入手机号"
-            placeholderStyle="color:#475569"
+            placeholderStyle={PLACEHOLDER_STYLE}
+            confirmType="next"
             value={phone}
             onInput={(e) => setPhone(e.detail.value)}
           />
         </View>
 
-        {/* 验证码 / 密码 */}
-        {tab === 'code' ? (
-          <View className="login__field login__field--row">
-            <Input
-              className="login__input login__input--flex"
-              type="number"
-              maxlength={6}
-              placeholder="请输入验证码"
-              placeholderStyle="color:#475569"
-              value={code}
-              onInput={(e) => setCode(e.detail.value)}
-            />
-            <View
-              className={`login__code-btn ${countdown > 0 ? 'login__code-btn--disabled' : ''}`}
-              onClick={onSendCode}
-            >
-              <Text className="login__code-btn-text">
-                {countdown > 0 ? `${countdown}s 后重发` : '发送验证码'}
-              </Text>
-            </View>
+        {/* 验证码 / 密码：两个框都常驻，切 tab 只切显隐。
+            不能用条件渲染——Taro H5 的 taro-input-core 有两个坑：
+            ① 复用同一节点时不会刷新 type/placeholder（切到密码登录仍显示
+               「请输入验证码」，且密码明文可见）；
+            ② 首屏之后才挂载的实例不会渲染出内部 input（整个框消失）。
+            常驻 + display 切换可同时绕开这两条。 */}
+        <View
+          className="login__field login__field--row"
+          style={{ display: tab === 'code' ? undefined : 'none' }}
+        >
+          <Input
+            className="login__input login__input--flex"
+            type="number"
+            maxlength={6}
+            placeholder="请输入验证码"
+            placeholderStyle={PLACEHOLDER_STYLE}
+            confirmType="done"
+            value={code}
+            onInput={(e) => setCode(e.detail.value)}
+            onConfirm={onSubmit}
+          />
+          <View
+            className={`login__code-btn ${countdown > 0 ? 'login__code-btn--disabled' : ''}`}
+            onClick={onSendCode}
+          >
+            <Text className="login__code-btn-text">
+              {countdown > 0 ? `${countdown}s 后重发` : '发送验证码'}
+            </Text>
           </View>
-        ) : (
-          <View className="login__field">
-            <Input
-              className="login__input"
-              password
-              maxlength={32}
-              placeholder="请输入密码"
-              placeholderStyle="color:#475569"
-              value={password}
-              onInput={(e) => setPassword(e.detail.value)}
-            />
-          </View>
-        )}
+        </View>
+
+        <View
+          className="login__field"
+          style={{ display: tab === 'password' ? undefined : 'none' }}
+        >
+          <Input
+            className="login__input"
+            password
+            maxlength={32}
+            placeholder="请输入密码"
+            placeholderStyle={PLACEHOLDER_STYLE}
+            confirmType="done"
+            value={password}
+            onInput={(e) => setPassword(e.detail.value)}
+            onConfirm={onSubmit}
+          />
+        </View>
 
         {/* 提交 */}
         <View
