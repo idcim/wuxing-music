@@ -5,6 +5,7 @@ import { usePlayerStore } from '@/stores/player';
 import { useUserStore } from '@/stores/user';
 import { WUXING } from '@/constants/wuxing';
 import { A } from '@/utils/color';
+import { rpx } from '@/utils/unit';
 import { resolveUrl } from '@/utils/url';
 import Icon from '@/components/Icon';
 import SleepTimer from '@/components/SleepTimer';
@@ -58,7 +59,7 @@ export default function MiniPlayer() {
       className="mini-player"
       style={{
         borderColor: A.a40(el.primary),
-        boxShadow: `0 -20rpx 80rpx ${el.glow}`
+        boxShadow: `0 ${rpx(-20)} ${rpx(80)} ${el.glow}`
       }}
     >
       <View className="mini-player__body">

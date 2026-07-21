@@ -5,6 +5,7 @@ import type { IconName } from '@/components/Icon/paths';
 import { WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
 import { A } from '@/utils/color';
+import { rpx } from '@/utils/unit';
 import type { ElementId, ElementScores } from '@/types';
 import './index.scss';
 
@@ -46,12 +47,12 @@ export default function Result() {
         style={{
           animationDelay: '0.15s',
           background: `radial-gradient(circle, ${A.a25(el.primary)}, transparent 70%)`,
-          border: `2rpx solid ${A.a40(el.primary)}`
+          border: `${rpx(2)} solid ${A.a40(el.primary)}`
         }}
       >
         <View
           className="result__orb-ring"
-          style={{ border: `2rpx dashed ${A.a20(el.primary)}` }}
+          style={{ border: `${rpx(2)} dashed ${A.a20(el.primary)}` }}
         />
         <Icon name={el.icon as IconName} size={112} color={el.primary} strokeWidth={1} />
       </View>
@@ -100,7 +101,7 @@ export default function Result() {
         style={{
           animationDelay: '0.55s',
           background: `linear-gradient(135deg, ${A.a10(el.primary)}, transparent)`,
-          border: `2rpx solid ${A.a25(el.primary)}`
+          border: `${rpx(2)} solid ${A.a25(el.primary)}`
         }}
       >
         <View className="result__heal-head">
@@ -115,7 +116,7 @@ export default function Result() {
       {/* CTA */}
       <View
         className="result__cta"
-        style={{ boxShadow: `0 20rpx 80rpx ${el.glow}` }}
+        style={{ boxShadow: `0 ${rpx(20)} ${rpx(80)} ${el.glow}` }}
         onClick={enter}
       >
         <Text className="result__cta-text">进入律音馆</Text>

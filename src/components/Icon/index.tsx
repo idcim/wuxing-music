@@ -1,4 +1,5 @@
 import { View } from '@tarojs/components';
+import { rpx } from '@/utils/unit';
 import { ICON_PATHS, type IconName } from './paths';
 
 interface Props {
@@ -44,8 +45,8 @@ export default function Icon({
     <View
       className={className}
       style={{
-        width: `${size}rpx`,
-        height: `${size}rpx`,
+        width: rpx(size),
+        height: rpx(size),
         backgroundImage: bg,
         backgroundRepeat: 'no-repeat',
         backgroundPosition: 'center',

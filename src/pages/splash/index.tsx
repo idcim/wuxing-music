@@ -2,6 +2,7 @@ import { View, Text } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import Icon from '@/components/Icon';
 import { useUserStore } from '@/stores/user';
+import { rpx } from '@/utils/unit';
 import './index.scss';
 
 // 模块级预生成星点（一次性，固定）。避免在组件内用 useMemo——
@@ -30,8 +31,8 @@ export default function Splash() {
           key={i}
           className="splash__star"
           style={{
-            width: `${s.size * 2}rpx`,
-            height: `${s.size * 2}rpx`,
+            width: rpx(s.size * 2),
+            height: rpx(s.size * 2),
             top: `${s.top}%`,
             left: `${s.left}%`,
             animationDuration: `${s.dur}s`,

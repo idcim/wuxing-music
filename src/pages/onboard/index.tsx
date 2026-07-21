@@ -3,6 +3,7 @@ import Taro from '@tarojs/taro';
 import Icon from '@/components/Icon';
 import { ELEMENT_LIST } from '@/constants/wuxing';
 import { A } from '@/utils/color';
+import { rpx } from '@/utils/unit';
 import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
 
@@ -66,8 +67,8 @@ export default function Onboard() {
             key={el.id}
             className="onboard__node"
             style={{
-              left: `${x - 56}rpx`,
-              top: `${y - 56}rpx`,
+              left: rpx(x - 56),
+              top: rpx(y - 56),
               background: `radial-gradient(circle, ${A.a25(el.primary)}, transparent 70%)`,
               borderColor: A.a40(el.primary)
             }}
