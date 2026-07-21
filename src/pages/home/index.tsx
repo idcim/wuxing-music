@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, Button } from '@tarojs/components';
+import { View, Text, Button } from '@tarojs/components';
 import Taro, { useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/taro';
 import { openShareMenu } from '@/utils/share';
 import { WUXING, ELEMENT_LIST } from '@/constants/wuxing';
@@ -162,7 +162,7 @@ export default function Home() {
         <Text className="home__section-en cormorant italic">Five Elements</Text>
         <Text className="home__section-zh cormorant">五音律</Text>
       </View>
-      <ScrollView scrollX className="home__elements" showScrollbar={false}>
+      <View className="home__elements">
         {ELEMENT_LIST.map((w) => {
           const active = w.id === el.id;
           return (
@@ -191,7 +191,7 @@ export default function Home() {
             </View>
           );
         })}
-      </ScrollView>
+      </View>
 
       {/* 专属曲目 */}
       <View className="home__section-head">

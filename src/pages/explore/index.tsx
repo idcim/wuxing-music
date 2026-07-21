@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, ScrollView } from '@tarojs/components';
+import { View, Text } from '@tarojs/components';
 import Taro, { useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/taro';
 import { ELEMENT_LIST, WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
@@ -60,8 +60,8 @@ export default function Explore() {
         <Text className="explore__title">探索律音</Text>
       </View>
 
-      {/* 筛选 chip 横滑 */}
-      <ScrollView scrollX className="explore__chips" showScrollbar={false}>
+      {/* 五行筛选：一行铺满，不横滑 */}
+      <View className="explore__chips">
         {ELEMENT_LIST.map((w) => {
           const active = selected === w.id;
           return (
@@ -89,7 +89,7 @@ export default function Explore() {
             </View>
           );
         })}
-      </ScrollView>
+      </View>
 
       {/* 选中元素信息卡 + 曲目列表（背景跟随选中元素） */}
       <View key={we.id}>

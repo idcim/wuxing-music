@@ -27,28 +27,27 @@
   }
 
   // ── 筛选 chip ──
+  // 5 个等分铺满一行，不横滑
   &__chips {
-    white-space: nowrap;
+    display: flex;
+    flex-wrap: wrap; // 兜底：真放不下就换行，绝不横向滚动
+    gap: 12rpx;
     margin-bottom: 56rpx;
   }
 
   &__chip {
-    display: inline-flex;
+    flex: 1 1 0; // 5 等分，宽度随屏宽走
+    display: flex;
     align-items: center;
-    gap: 12rpx;
+    justify-content: center;
+    gap: 8rpx;
     border: 2rpx solid;
     border-radius: 48rpx;
-    padding: 20rpx 36rpx;
-    margin-right: 16rpx;
-    vertical-align: top;
-
-    &:last-child {
-      margin-right: 0;
-    }
+    padding: 20rpx 12rpx;
 
     &-text {
       font-size: 26rpx;
-      letter-spacing: 2rpx;
+      white-space: nowrap; // 「木音」不许折成两行
     }
   }
 
