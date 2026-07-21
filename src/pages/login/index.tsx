@@ -4,10 +4,11 @@ import Taro, { useDidShow } from '@tarojs/taro';
 import Icon from '@/components/Icon';
 import { useUserStore } from '@/stores/user';
 import { sendSmsCode } from '@/services/auth';
-import { isWeapp } from '@/utils/platform';
+import { isWeapp, isInWeChat } from '@/utils/platform';
 import './index.scss';
 
 type LoginTab = 'code' | 'password';
+type LoginMode = 'wechat' | 'phone';
 
 const PHONE_RE = /^1\d{10}$/;
 
@@ -18,6 +19,8 @@ export default function Login() {
   const loginByPassword = useUserStore((s) => s.loginByPassword);
   const loginByWechatH5 = useUserStore((s) => s.loginByWechatH5);
 
+  // 微信内以微信登录为主入口；外部浏览器完不成公众号授权，仍以手机号登录为主
+  const [mode, setMode] = useState<LoginMode>(isInWeChat ? 'wechat' : 'phone');
   const [tab, setTab] = useState<LoginTab>('code');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
@@ -156,7 +159,37 @@ export default function Login() {
     );
   }
 
-  // ── H5 端 ──
+  // ── H5 端 · 微信内：微信登录为主，其余方式收成下方小字 ──
+  if (mode === 'wechat') {
+    const toPhone = (t: LoginTab) => () => {
+      setTab(t);
+      setMode('phone');
+    };
+    return (
+      <View className="login">
+        {brand}
+        <View className="login__actions fade-up" style={{ animationDelay: '0.2s' }}>
+          <View
+            className={`login__btn login__btn--wechat ${submitting ? 'login__btn--loading' : ''}`}
+            onClick={onWechatLogin}
+          >
+            <Icon name="messageCircle" size={38} color="#0a0e1a" strokeWidth={2} />
+            <Text className="login__btn-text">{submitting ? '登录中…' : '微信登录'}</Text>
+          </View>
+
+          <View className="login__alts">
+            <Text className="login__alt" onClick={toPhone('code')}>验证码登录</Text>
+            <Text className="login__alt-sep">·</Text>
+            <Text className="login__alt" onClick={toPhone('password')}>密码登录</Text>
+          </View>
+
+          <Text className="login__terms">登录即同意服务条款与隐私政策</Text>
+        </View>
+      </View>
+    );
+  }
+
+  // ── H5 端 · 手机号登录 ──
   return (
     <View className="login">
       {brand}

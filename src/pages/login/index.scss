@@ -69,6 +69,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 14rpx; // 图标 + 文字（微信登录按钮用；纯文字按钮无影响）
     background: linear-gradient(135deg, #f1f5f9, #cbd5e1);
     box-shadow: 0 8rpx 32rpx rgba(203, 213, 225, 0.18);
 
@@ -76,11 +77,36 @@
       opacity: 0.6;
     }
 
+    // 微信内的主按钮：沿用「木」色，避免撞进原生微信绿又保持可识别
+    &--wechat {
+      background: linear-gradient(135deg, #a3e635, #84cc16);
+      box-shadow: 0 8rpx 32rpx rgba(132, 204, 22, 0.22);
+    }
+
     &-text {
       color: #0a0e1a;
       font-size: 30rpx;
       font-weight: 500;
       letter-spacing: 4rpx;
+    }
+  }
+
+  // 微信内：次要登录方式（小字）
+  &__alts {
+    margin-top: 40rpx;
+    display: flex;
+    align-items: center;
+    gap: 20rpx;
+  }
+
+  &__alt {
+    font-size: 24rpx;
+    color: $text-tertiary;
+    letter-spacing: 2rpx;
+
+    &-sep {
+      font-size: 22rpx;
+      color: $text-quaternary;
     }
   }
 
