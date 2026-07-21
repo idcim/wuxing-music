@@ -11,9 +11,11 @@ from app.models import (
     Order,
     Plan,
     QuizQuestion,
+    Role,
     Track,
     User,
 )
+from app.permissions import ALL_PERMISSIONS, SUPER_ROLE_NAME
 from app.security import hash_password
 
 # 五行配置（与小程序 constants/wuxing.ts 对齐）
@@ -155,12 +157,40 @@ TEST_CDKEYS = [
 
 
 def seed(db: Session) -> None:
+    # 内置「超级管理员」角色：每次启动同步为全量权限，新增模块自动覆盖
+    super_role = db.query(Role).filter(Role.name == SUPER_ROLE_NAME).first()
+    perms_json = json.dumps(ALL_PERMISSIONS, ensure_ascii=False)
+    if not super_role:
+        super_role = Role(
+            name=SUPER_ROLE_NAME,
+            remark="内置角色，拥有全部权限，不可删除或修改",
+            permissions=perms_json,
+            is_builtin=True,
+        )
+        db.add(super_role)
+        db.flush()  # 拿到 super_role.id
+    else:
+        super_role.permissions = perms_json
+        super_role.is_builtin = True
+
     # 管理员
     if not db.query(Admin).filter(Admin.username == settings.admin_username).first():
         db.add(Admin(
             username=settings.admin_username,
             password_hash=hash_password(settings.admin_password),
+            role_id=super_role.id,
+            is_super=True,
         ))
+        db.flush()
+
+    # 存量兜底：老库升级后 is_super 新列默认为 0，若一个超管都没有，
+    # 就把现存管理员全部提为超管，避免所有人被锁在后台之外。
+    # 条件天然幂等——只要已存在任意超管就永不再执行，因此不会误提日后新建的普通管理员。
+    if db.query(Admin).filter(Admin.is_super.is_(True)).count() == 0:
+        for a in db.query(Admin).all():
+            a.is_super = True
+            if not a.role_id:
+                a.role_id = super_role.id
 
     # 五行 + 曲目
     if db.query(Element).count() == 0:

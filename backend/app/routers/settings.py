@@ -16,7 +16,7 @@ from app.schemas import (
     StorageSettingIn,
     ok,
 )
-from app.security import get_current_admin
+from app.security import require_perm
 
 router = APIRouter(prefix="/api/admin/settings", tags=["settings"])
 
@@ -68,7 +68,7 @@ def _merge_secrets(incoming: dict, current: dict, secrets: set[str]) -> dict:
 
 # ── 支付设置 ──
 @router.get("/pay")
-def get_pay(db: Session = Depends(get_db), _: Admin = Depends(get_current_admin)):
+def get_pay(db: Session = Depends(get_db), _: Admin = Depends(require_perm("settings:view"))):
     return ok(_mask(_get_setting(db, PAY_KEY), PAY_SECRETS))
 
 
@@ -76,7 +76,7 @@ def get_pay(db: Session = Depends(get_db), _: Admin = Depends(get_current_admin)
 def update_pay(
     body: PaySettingIn,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("settings:edit")),
 ):
     current = _get_setting(db, PAY_KEY)
     incoming = _merge_secrets(body.model_dump(), current, PAY_SECRETS)
@@ -86,7 +86,7 @@ def update_pay(
 
 # ── 站点设置 ──
 @router.get("/site")
-def get_site(db: Session = Depends(get_db), _: Admin = Depends(get_current_admin)):
+def get_site(db: Session = Depends(get_db), _: Admin = Depends(require_perm("settings:view"))):
     return ok(_get_setting(db, SITE_KEY))
 
 
@@ -94,7 +94,7 @@ def get_site(db: Session = Depends(get_db), _: Admin = Depends(get_current_admin
 def update_site(
     body: SiteSettingIn,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("settings:edit")),
 ):
     _save_setting(db, SITE_KEY, body.model_dump())
     return ok({"saved": True})
@@ -102,7 +102,7 @@ def update_site(
 
 # ── 存储设置 ──
 @router.get("/storage")
-def get_storage(db: Session = Depends(get_db), _: Admin = Depends(get_current_admin)):
+def get_storage(db: Session = Depends(get_db), _: Admin = Depends(require_perm("settings:view"))):
     return ok(_mask(_get_setting(db, STORAGE_KEY), STORAGE_SECRETS))
 
 
@@ -110,7 +110,7 @@ def get_storage(db: Session = Depends(get_db), _: Admin = Depends(get_current_ad
 def update_storage(
     body: StorageSettingIn,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("settings:edit")),
 ):
     current = _get_setting(db, STORAGE_KEY)
     incoming = _merge_secrets(body.model_dump(), current, STORAGE_SECRETS)
@@ -126,7 +126,7 @@ class MigrateIn(BaseModel):
 def migrate_storage(
     body: MigrateIn,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("settings:edit")),
 ):
     """把本地 ./uploads 文件迁移到 OSS（需已切换 provider=oss 并保存配置）。
     不删除本地文件；可选把数据库里引用的旧 URL 改写为 OSS URL。"""
@@ -148,7 +148,7 @@ def migrate_storage(
 
 # ── 小程序配置 ──
 @router.get("/mp")
-def get_mp(db: Session = Depends(get_db), _: Admin = Depends(get_current_admin)):
+def get_mp(db: Session = Depends(get_db), _: Admin = Depends(require_perm("settings:view"))):
     return ok(_mask(_get_setting(db, MP_KEY), MP_SECRETS))
 
 
@@ -156,7 +156,7 @@ def get_mp(db: Session = Depends(get_db), _: Admin = Depends(get_current_admin))
 def update_mp(
     body: MpSettingIn,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("settings:edit")),
 ):
     current = _get_setting(db, MP_KEY)
     incoming = _merge_secrets(body.model_dump(), current, MP_SECRETS)
@@ -166,7 +166,7 @@ def update_mp(
 
 # ── 公众号配置（H5 网页授权 / JSSDK / JSAPI 支付）──
 @router.get("/oa")
-def get_oa(db: Session = Depends(get_db), _: Admin = Depends(get_current_admin)):
+def get_oa(db: Session = Depends(get_db), _: Admin = Depends(require_perm("settings:view"))):
     return ok(_mask(_get_setting(db, OA_KEY), OA_SECRETS))
 
 
@@ -174,7 +174,7 @@ def get_oa(db: Session = Depends(get_db), _: Admin = Depends(get_current_admin))
 def update_oa(
     body: OaSettingIn,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("settings:edit")),
 ):
     current = _get_setting(db, OA_KEY)
     incoming = _merge_secrets(body.model_dump(), current, OA_SECRETS)
@@ -184,7 +184,7 @@ def update_oa(
 
 # ── 短信配置 ──
 @router.get("/sms")
-def get_sms(db: Session = Depends(get_db), _: Admin = Depends(get_current_admin)):
+def get_sms(db: Session = Depends(get_db), _: Admin = Depends(require_perm("settings:view"))):
     return ok(_mask(_get_setting(db, SMS_KEY), SMS_SECRETS))
 
 
@@ -192,7 +192,7 @@ def get_sms(db: Session = Depends(get_db), _: Admin = Depends(get_current_admin)
 def update_sms(
     body: SmsSettingIn,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("settings:edit")),
 ):
     current = _get_setting(db, SMS_KEY)
     incoming = _merge_secrets(body.model_dump(), current, SMS_SECRETS)

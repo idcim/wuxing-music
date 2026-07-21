@@ -4,15 +4,15 @@
       <div class="layout__logo">五行律音</div>
       <el-menu :default-active="route.path" router class="layout__menu" background-color="#0a0e1a"
         text-color="#94a3b8" active-text-color="#fff">
-        <el-menu-item index="/dashboard"><el-icon><DataLine /></el-icon><span>仪表盘</span></el-menu-item>
-        <el-menu-item index="/tracks"><el-icon><Headset /></el-icon><span>歌曲管理</span></el-menu-item>
-        <el-menu-item index="/elements"><el-icon><MagicStick /></el-icon><span>五行管理</span></el-menu-item>
-        <el-menu-item index="/plans"><el-icon><Goods /></el-icon><span>套餐管理</span></el-menu-item>
-        <el-menu-item index="/cdkeys"><el-icon><Ticket /></el-icon><span>兑换码</span></el-menu-item>
-        <el-menu-item index="/quiz"><el-icon><EditPen /></el-icon><span>测评管理</span></el-menu-item>
-        <el-menu-item index="/orders"><el-icon><List /></el-icon><span>订单管理</span></el-menu-item>
-        <el-menu-item index="/users"><el-icon><User /></el-icon><span>用户</span></el-menu-item>
-        <el-menu-item index="/settings"><el-icon><Setting /></el-icon><span>站点设置</span></el-menu-item>
+        <el-menu-item v-for="item in mainNav" :key="item.path" :index="item.path">
+          <el-icon><component :is="item.icon" /></el-icon><span>{{ item.title }}</span>
+        </el-menu-item>
+        <el-sub-menu v-if="systemNav.length" index="system">
+          <template #title><el-icon><Tools /></el-icon><span>系统管理</span></template>
+          <el-menu-item v-for="item in systemNav" :key="item.path" :index="item.path">
+            <el-icon><component :is="item.icon" /></el-icon><span>{{ item.title }}</span>
+          </el-menu-item>
+        </el-sub-menu>
       </el-menu>
     </el-aside>
     <el-container>
@@ -20,7 +20,10 @@
         <span class="layout__title">{{ route.meta.title || '' }}</span>
         <el-dropdown @command="onCommand">
           <span class="layout__user">
-            {{ auth.nickname || '管理员' }}<el-icon><ArrowDown /></el-icon>
+            {{ auth.nickname || '管理员' }}
+            <el-tag v-if="auth.isSuper" size="small" type="danger" effect="plain">超管</el-tag>
+            <el-tag v-else-if="auth.roleName" size="small" effect="plain">{{ auth.roleName }}</el-tag>
+            <el-icon><ArrowDown /></el-icon>
           </span>
           <template #dropdown>
             <el-dropdown-menu>
@@ -37,12 +40,22 @@
 </template>
 
 <script setup lang="ts">
+import { computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { NAV_MAIN, NAV_SYSTEM } from '@/menu';
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+
+// 无权限的模块不进菜单（拦截以后端 require_perm 为准，这里只是体验）
+const mainNav = computed(() => NAV_MAIN.filter((n) => auth.can(n.perm)));
+const systemNav = computed(() => NAV_SYSTEM.filter((n) => auth.can(n.perm)));
+
+onMounted(() => {
+  if (!auth.loaded) auth.loadMe().catch(() => {});
+});
 
 function onCommand(cmd: string) {
   if (cmd === 'logout') {

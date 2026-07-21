@@ -18,6 +18,21 @@ def now() -> datetime:
     return datetime.utcnow()
 
 
+class Role(Base):
+    """后台角色：一组权限点的集合，管理员通过 role_id 绑定。"""
+
+    __tablename__ = "role"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    remark: Mapped[str] = mapped_column(String(255), default="")
+    # 权限点 JSON 数组，取值见 app/permissions.py 的 ALL_PERMISSIONS
+    permissions: Mapped[str] = mapped_column(Text, default="[]")
+    # 内置角色（超级管理员）：禁止删除与改权限，避免把自己锁在门外
+    is_builtin: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
 class Admin(Base):
     __tablename__ = "admin"
 
@@ -26,6 +41,10 @@ class Admin(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     nickname: Mapped[str] = mapped_column(String(64), default="管理员")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # 绑定角色；超管可不绑（is_super 已覆盖全部权限）
+    role_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 超级管理员旁路开关：恒定拥有全部权限，不依赖 role 表内容
+    is_super: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
 

@@ -2,9 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Admin
+from app.models import Admin, Role
 from app.schemas import LoginIn, ok
-from app.security import create_access_token, get_current_admin, verify_password
+from app.security import (
+    admin_permissions,
+    create_access_token,
+    get_current_admin,
+    verify_password,
+)
 
 router = APIRouter(prefix="/api/admin", tags=["admin-auth"])
 
@@ -21,5 +26,20 @@ def login(body: LoginIn, db: Session = Depends(get_db)):
 
 
 @router.get("/me")
-def me(admin: Admin = Depends(get_current_admin)):
-    return ok({"username": admin.username, "nickname": admin.nickname})
+def me(
+    admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """后台前端据此显隐菜单与路由（真正的拦截在各接口的 require_perm）。"""
+    role = (
+        db.query(Role).filter(Role.id == admin.role_id).first()
+        if admin.role_id
+        else None
+    )
+    return ok({
+        "username": admin.username,
+        "nickname": admin.nickname,
+        "is_super": bool(admin.is_super),
+        "role_name": role.name if role else "",
+        "permissions": admin_permissions(admin, db),
+    })

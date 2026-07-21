@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Admin, Track
 from app.schemas import TrackIn, ok
-from app.security import get_current_admin
+from app.security import require_perm
 
 router = APIRouter(prefix="/api/admin/tracks", tags=["tracks"])
 
@@ -34,7 +34,7 @@ def list_tracks(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("tracks:view")),
 ):
     q = db.query(Track)
     if element_id:
@@ -53,7 +53,7 @@ def list_tracks(
 def create_track(
     body: TrackIn,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("tracks:edit")),
 ):
     track = Track(**body.model_dump())
     db.add(track)
@@ -67,7 +67,7 @@ def update_track(
     track_id: int,
     body: TrackIn,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("tracks:edit")),
 ):
     track = db.query(Track).filter(Track.id == track_id).first()
     if not track:
@@ -83,7 +83,7 @@ def update_track(
 def delete_track(
     track_id: int,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("tracks:edit")),
 ):
     track = db.query(Track).filter(Track.id == track_id).first()
     if not track:

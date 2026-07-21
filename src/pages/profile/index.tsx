@@ -136,22 +136,22 @@ export default function Profile() {
         <Text className="profile__title">我的</Text>
       </View>
 
-      {/* 用户卡 */}
+      {/* 用户卡：整块可点——已登录进个人信息页，未登录去登录页 */}
       <View
         className="profile__user fade-up"
         style={{
           background: `linear-gradient(135deg, ${A.a15(el.primary)}, transparent)`,
           borderColor: A.a25(el.primary)
         }}
+        onClick={user ? goUserInfo : goLogin}
       >
-        {/* 头像：已登录点整卡进个人信息页编辑；未登录显示元素图标 */}
+        {/* 头像：未登录时退化为元素图标 */}
         <View
           className="profile__avatar"
           style={{
             background: `radial-gradient(circle, ${A.a25(el.primary)}, transparent)`,
             borderColor: A.a50(el.primary)
           }}
-          onClick={user ? goUserInfo : undefined}
         >
           {user?.avatar ? (
             <Image className="profile__avatar-img" src={resolveUrl(user.avatar)} mode="aspectFill" />
@@ -160,7 +160,7 @@ export default function Profile() {
           )}
         </View>
 
-        <View className="profile__user-info" onClick={user ? goUserInfo : undefined}>
+        <View className="profile__user-info">
           {user ? (
             <>
               <Text className="profile__user-name">{user.nickname || '律音用户'}</Text>
@@ -172,16 +172,14 @@ export default function Profile() {
           ) : (
             <>
               <Text className="profile__user-name">未登录</Text>
-              <Text className="profile__user-action" onClick={goLogin}>微信登录 ›</Text>
+              <Text className="profile__user-action">点击登录 ›</Text>
             </>
           )}
         </View>
 
-        {user && (
-          <View className="profile__user-edit" onClick={goUserInfo}>
-            <Icon name="chevronRight" size={30} color="#64748b" strokeWidth={1.5} />
-          </View>
-        )}
+        <View className="profile__user-edit">
+          <Icon name="chevronRight" size={30} color="#64748b" strokeWidth={1.5} />
+        </View>
       </View>
 
       {/* 会员卡片 */}

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Admin, Element
 from app.schemas import ok
-from app.security import get_current_admin
+from app.security import require_perm
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/admin/elements", tags=["elements"])
@@ -33,7 +33,7 @@ def _to_dict(e: Element) -> dict:
 
 
 @router.get("")
-def list_elements(db: Session = Depends(get_db), _: Admin = Depends(get_current_admin)):
+def list_elements(db: Session = Depends(get_db), _: Admin = Depends(require_perm("elements:view"))):
     rows = db.query(Element).order_by(Element.sort).all()
     return ok([_to_dict(e) for e in rows])
 
@@ -42,7 +42,7 @@ def list_elements(db: Session = Depends(get_db), _: Admin = Depends(get_current_
 def upsert_element(
     body: ElementIn,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("elements:edit")),
 ):
     e = db.query(Element).filter(Element.id == body.id).first()
     if e:
@@ -60,7 +60,7 @@ def upsert_element(
 def delete_element(
     element_id: str,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("elements:edit")),
 ):
     e = db.query(Element).filter(Element.id == element_id).first()
     if not e:

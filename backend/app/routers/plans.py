@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Admin, Plan
 from app.schemas import PlanIn, ok
-from app.security import get_current_admin
+from app.security import require_perm
 
 router = APIRouter(prefix="/api/admin/plans", tags=["plans"])
 
@@ -29,7 +29,7 @@ def _to_dict(p: Plan) -> dict:
 
 
 @router.get("")
-def list_plans(db: Session = Depends(get_db), _: Admin = Depends(get_current_admin)):
+def list_plans(db: Session = Depends(get_db), _: Admin = Depends(require_perm("plans:view"))):
     rows = db.query(Plan).order_by(Plan.sort).all()
     return ok([_to_dict(p) for p in rows])
 
@@ -38,7 +38,7 @@ def list_plans(db: Session = Depends(get_db), _: Admin = Depends(get_current_adm
 def upsert_plan(
     body: PlanIn,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("plans:edit")),
 ):
     plan = db.query(Plan).filter(Plan.id == body.id).first()
     data = body.model_dump()
@@ -58,7 +58,7 @@ def upsert_plan(
 def delete_plan(
     plan_id: str,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("plans:edit")),
 ):
     plan = db.query(Plan).filter(Plan.id == plan_id).first()
     if not plan:

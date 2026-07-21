@@ -70,5 +70,18 @@ export const updateOaSetting = (data: any) => req.put('/api/admin/settings/oa', 
 export const getSmsSetting = () => req.get('/api/admin/settings/sms');
 export const updateSmsSetting = (data: any) => req.put('/api/admin/settings/sms', data);
 
+// ── 管理员与角色权限 ──
+export const listAdmins = (params: any) => req.get('/api/admin/admins', { params });
+export const createAdmin = (data: any) => req.post('/api/admin/admins', data);
+export const updateAdmin = (id: number, data: any) => req.put(`/api/admin/admins/${id}`, data);
+export const resetAdminPassword = (id: number, password: string) =>
+  req.post(`/api/admin/admins/${id}/password`, { password });
+export const deleteAdmin = (id: number) => req.delete(`/api/admin/admins/${id}`);
+
+export const listRoles = () => req.get('/api/admin/roles');
+export const upsertRole = (data: any) => req.post('/api/admin/roles', data);
+export const deleteRole = (id: number) => req.delete(`/api/admin/roles/${id}`);
+export const listPermissions = () => req.get('/api/admin/permissions');
+
 // 上传接口地址（el-upload 直传用）
 export const UPLOAD_URL = '/api/admin/upload';

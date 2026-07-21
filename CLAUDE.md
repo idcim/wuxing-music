@@ -125,7 +125,8 @@ wuxing-music/
 │       ├── main.py             #   应用入口 + 路由挂载 + 建表
 │       ├── config.py           #   .env 配置（DATABASE_URL / JWT / 管理员）
 │       ├── database.py         #   引擎 / Session / Base
-│       ├── models.py           #   ★ 11 张表（见「后端数据模型」）
+│       ├── models.py           #   ★ 13 张表（见「后端数据模型」）
+│       ├── permissions.py      #   ★ 后台权限点定义（RBAC 唯一来源）
 │       ├── schemas.py          #   Pydantic 出入参 + ok() 信封
 │       ├── security.py         #   密码哈希 / JWT / 管理员依赖
 │       ├── seed.py             #   启动种子数据（五行/曲目/套餐/测评/测试兑换码/管理员）
@@ -139,7 +140,8 @@ wuxing-music/
 │       ├── api/                #   接口封装（index.ts / request.ts）
 │       ├── stores/auth.ts      #   Pinia 登录态
 │       ├── router/             #   路由
-│       └── views/              #   15 视图（Dashboard / Users / Orders / Plans / Elements
+│       └── views/              #   17 视图（Dashboard / Users / Orders / Plans / Elements
+│                               #           Admins / Roles
 │                               #           Tracks / Cdkeys / Quiz / Site / Storage / MpPanel …）
 ├── prototype/
 │   └── wuxing-music-app.jsx    # 原型参考（Web React 版）
@@ -410,17 +412,28 @@ GET/POST /quiz  PUT/DELETE /quiz/{id}
 GET/PUT /settings/pay | /settings/site | /settings/storage | /settings/mp
 POST /settings/storage/migrate      # 存储迁移
 POST /upload                        # 后台文件/封面/证书上传
+GET/POST /admins  PUT/DELETE /admins/{id}  POST /admins/{id}/password   # 管理员账号
+GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色 + 权限点清单
 ```
+
+**权限（RBAC）**：权限点定义在 `backend/app/permissions.py`（「模块:动作」，如 `tracks:edit`），
+角色持有一组权限点，管理员绑角色；`admin.is_super` 为旁路开关，恒定拥有全部权限。
+接口侧统一用 `security.require_perm("x:y")` 替代裸 `get_current_admin` 鉴权
+（例外：`POST /upload` 仍是任意登录管理员可用——它同时服务歌曲与站点设置两边的上传）。
+`GET /me` 返回 `{is_super, role_name, permissions}`，后台据此显隐菜单与路由，
+但**真正的拦截在后端**，前端隐藏只是体验。
+存量库升级由 `seed()` 兜底：若一个超管都没有，则把现存管理员全部提为超管，避免升级后被锁在门外。
 
 ------
 
 ## 后端数据模型（`backend/app/models.py`，SQLAlchemy）
 
-> 早期文档写的是手工 MySQL DDL；**实际由 SQLAlchemy 模型声明，启动自动建表 + 种子数据**（`main.py::_auto_migrate` 会为已存在的表自动补加新列）。以下为 12 张表要点（`order` 是 MySQL 保留字，订单表名 `app_order`）：
+> 早期文档写的是手工 MySQL DDL；**实际由 SQLAlchemy 模型声明，启动自动建表 + 种子数据**（`main.py::_auto_migrate` 会为已存在的表自动补加新列）。以下为 13 张表要点（`order` 是 MySQL 保留字，订单表名 `app_order`）：
 
 | 表 | 说明 | 关键字段 |
 | -- | ---- | -------- |
-| `admin` | 管理员 | username / password_hash / is_active |
+| `admin` | 管理员 | username / password_hash / is_active / **role_id** / **is_super** |
+| `role` | 后台角色 | name / remark / permissions(JSON 权限点数组) / is_builtin |
 | `element` | 五行配置（id=木火土金水） | primary/accent/glow/bg、note/organ/season、sleep_tip |
 | `track` | 曲目 | element_id(FK)、hz、audio_url、cover_url、is_premium、preview_sec、is_online |
 | `plan` | 套餐 | id(free/month/year/trial)、price、duration_days、features(JSON) |
@@ -437,7 +450,9 @@ POST /upload                        # 后台文件/封面/证书上传
 
 ## 管理后台 `admin/`（Vue3 + Element Plus）
 
-页面（`admin/src/views/`）：登录、仪表盘、歌曲（分页/筛选/音频封面上传）、五行、套餐、兑换码（批量生成/导出/禁用）、测评、订单（详情+退单）、用户（详情+开通会员）、站点设置（站点/小程序/文件存储/支付，含 LOGO/证书上传）。默认管理员 `admin` / `admin123`（由 `backend/.env` 覆盖）。
+页面（`admin/src/views/`）：登录、仪表盘、歌曲（分页/筛选/音频封面上传）、五行、套餐、兑换码（批量生成/导出/禁用）、测评、订单（详情+退单）、用户（详情+开通会员）、站点设置（站点/小程序/文件存储/支付，含 LOGO/证书上传）、**系统管理（管理员账号 + 角色权限矩阵）**。默认管理员 `admin` / `admin123`（由 `backend/.env` 覆盖），首次启动即为超级管理员。
+
+侧边栏导航定义在 `admin/src/menu.ts`，**路由守卫与 MainLayout 共用同一份**（含各项所需权限点），避免菜单与鉴权走偏；新增后台模块时改这一处即可。
 
 ------
 

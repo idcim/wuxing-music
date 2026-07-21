@@ -9,7 +9,7 @@ from app import wxpay
 from app.database import get_db
 from app.models import Admin, Order, Setting, User
 from app.schemas import RefundIn, ok
-from app.security import get_current_admin
+from app.security import require_perm
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -64,7 +64,7 @@ def list_orders(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("orders:view")),
 ):
     q = db.query(Order)
     if status:
@@ -80,7 +80,7 @@ def list_orders(
 def get_order(
     order_id: int,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("orders:view")),
 ):
     o = db.query(Order).filter(Order.id == order_id).first()
     if not o:
@@ -96,7 +96,7 @@ def start_refund(
     order_id: int,
     body: RefundIn,
     db: Session = Depends(get_db),
-    admin: Admin = Depends(get_current_admin),
+    admin: Admin = Depends(require_perm("orders:refund")),
 ):
     """发起退款：仅已支付订单可退，标记为退款中。"""
     o = db.query(Order).filter(Order.id == order_id).first()
@@ -122,7 +122,7 @@ def start_refund(
 def confirm_refund(
     order_id: int,
     db: Session = Depends(get_db),
-    admin: Admin = Depends(get_current_admin),
+    admin: Admin = Depends(require_perm("orders:refund")),
 ):
     """确认退款完成：标记已退款，并回收该用户会员权益。"""
     o = db.query(Order).filter(Order.id == order_id).first()

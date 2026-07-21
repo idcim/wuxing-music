@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Admin, Cdkey
 from app.schemas import CdkeyGenerateIn, ok
-from app.security import get_current_admin
+from app.security import require_perm
 
 router = APIRouter(prefix="/api/admin/cdkeys", tags=["cdkeys"])
 
@@ -47,7 +47,7 @@ def list_cdkeys(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("cdkeys:view")),
 ):
     q = db.query(Cdkey)
     if status:
@@ -68,7 +68,7 @@ def list_cdkeys(
 def generate_cdkeys(
     body: CdkeyGenerateIn,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("cdkeys:manage")),
 ):
     batch_id = uuid.uuid4().hex[:12]
     expire_at = None
@@ -112,7 +112,7 @@ def generate_cdkeys(
 def disable_cdkey(
     cdkey_id: int,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("cdkeys:manage")),
 ):
     c = db.query(Cdkey).filter(Cdkey.id == cdkey_id).first()
     if not c:

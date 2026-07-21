@@ -14,6 +14,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.config import DEFAULT_JWT_SECRET, settings
 from app.database import Base, SessionLocal, engine
 from app.routers import (
+    admins,
     auth,
     cdkeys,
     elements,
@@ -150,6 +151,7 @@ async def validation_exc_handler(_: Request, exc: RequestValidationError):
 
 
 app.include_router(auth.router)
+app.include_router(admins.router)
 app.include_router(plans.router)
 app.include_router(tracks.router)
 app.include_router(cdkeys.router)

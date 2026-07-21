@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Admin, Cdkey, Order, Plan, Track, User
 from app.schemas import ok
-from app.security import get_current_admin
+from app.security import require_perm
 
 router = APIRouter(prefix="/api/admin", tags=["users-stats"])
 
@@ -38,7 +38,7 @@ def list_users(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("users:view")),
 ):
     q = db.query(User)
     if keyword:
@@ -52,7 +52,7 @@ def list_users(
 def get_user(
     user_id: int,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("users:view")),
 ):
     u = db.query(User).filter(User.id == user_id).first()
     if not u:
@@ -93,7 +93,7 @@ def grant_membership(
     user_id: int,
     body: GrantIn,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_perm("users:grant")),
 ):
     """后台给用户开通/赠送会员（不走支付，source=gift）。"""
     user = db.query(User).filter(User.id == user_id).first()
@@ -130,7 +130,7 @@ def grant_membership(
 
 
 @router.get("/dashboard")
-def dashboard(db: Session = Depends(get_db), _: Admin = Depends(get_current_admin)):
+def dashboard(db: Session = Depends(get_db), _: Admin = Depends(require_perm("dashboard:view"))):
     return ok({
         "users": db.query(User).count(),
         "premium_users": db.query(User).filter(User.membership_type != "free").count(),
