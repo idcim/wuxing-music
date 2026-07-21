@@ -12,6 +12,15 @@ body {
   line-height: 1.6;
 }
 
+// H5 路由会在运行时往 <head> 注入 `.taro_router > .taro_page { background-color: #fff }`，
+// 页面容器盖在 body 之上，导致没写自身背景的页（首页/探律/会员/我的/result/element/player）
+// 露白底。注入的 style 排在 <link> 之后，同权重会赢，这里必须提权覆盖。
+// 保持不透明（而非 transparent）：Taro 切页是左右滑动，透明会让前后两页内容互相透出。
+// 小程序端 body 编译成 .h5-body，选择器永不命中，无副作用。
+body .taro_router > .taro_page {
+  background-color: $bg-deep;
+}
+
 view,
 text,
 button {
