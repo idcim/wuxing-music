@@ -572,7 +572,7 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 
 ### 版本
 
-根 `version.json` 是**机读的唯一版本源**（`current.app` / `current.api` + 各端 `channels` + `changelog`），前端常量 `src/constants/version.ts` 与之对齐，APP 更新接口契约见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。**当前 v1.5.0**。发版时同步改**四处**：`version.json`、`package.json`、`src/constants/version.ts`、`docs/ROADMAP.md`（v1.2.0 曾漏改 `version.ts` 的 `API_VERSION`）。
+根 `version.json` 是**机读的唯一版本源**（`current.app` / `current.api` + 各端 `channels` + `changelog`），前端常量 `src/constants/version.ts` 与之对齐，APP 更新接口契约见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。**当前 v1.5.1**。发版时同步改**四处**：`version.json`、`package.json`、`src/constants/version.ts`、`docs/ROADMAP.md`（v1.2.0 曾漏改 `version.ts` 的 `API_VERSION`）。
 
 ⚠️ **`channels.weapp` 是唯一会与源码版本脱节的一栏**：H5/后端/后台推 `master` 即自动部署，
 小程序包却要手工上传，所以该栏另有 `published` 字段记录**线上实际发布的版本**；
@@ -684,6 +684,8 @@ iOS 端订阅类商品**必须走 Apple IAP**（苹果抽 30%，禁止引导外�
 19. **H5 上 `redirectTo` = `history.replaceState`，切页不留历史**：TabBar 四个 tab 原本一律 `redirectTo`，H5（hash 路由）下用户「归处→探律→会员」后按微信/浏览器后退键会**直接退出整个站点**而不是回到上一个 tab。现按端分支：小程序仍 `redirectTo`（对齐原生 tabBar 语义），H5 改为「目标 tab 已在 `Taro.getCurrentPages()` 里就 `navigateBack(delta)`、否则 `navigateTo`」——既留历史又不会把页面栈撑爆。注意 `getCurrentPages()` 里的 `route` **带前导斜杠**（`/pages/home/index`），比对前要归一化。
 20. **二级页的返回键必须兜底**：H5 可由分享链接/刷新直接进任意二级页，此时页面栈只有当前页，裸 `Taro.navigateBack()` 会**静默失败**（且 Taro H5 的 `navigateBack` 不保证 reject，`.catch()` 兜底也不会触发），用户被困在页面里。统一用 `utils/nav.ts` 的 `goBack(fallback)`：栈深 ≤1 时 `reLaunch` 回首页。
 
+21. **别再用 `Taro.createCanvasContext`（旧画布 API）**：它在 H5 shim 里**设置立即生效、绘制却入队**——`setFontSize` / `setTextAlign` 直接写 `ctx`，`fillText` 却排队等 `ctx.draw()` 回放。于是回放时所有文字都用**最后一次**设的字号，整张海报的字全变成同一个大小（v1.5.1 前 H5 海报正是如此，「木」140px 被压成 24px）。另外 H5 的 `canvasToTempFilePath` 源码里写着 `@todo 暂未支持尺寸相关功能`，**`destWidth/destHeight` 是无效参数**，导出恒为 1x。一律改用 **Canvas 2D**（`<Canvas type="2d">` + `getContext('2d')`，立即模式）：小程序用 `createSelectorQuery().fields({node:true})` 取节点、导出传 `{canvas}`；H5 直接拿 DOM 里的 `<canvas>`、`toDataURL()` 导出。两端都要自己按 `pixelRatio`/`devicePixelRatio` 设背板再 `ctx.scale(dpr,dpr)`，否则一样糊。⚠️ H5 上 Taro 的 Canvas 组件会在 `componentDidRender` 里按计算样式**回写** `canvas.width/height`，DPR 背板必须在**取到节点之后**再设一次。另：`ctx.roundRect` 在小程序 2D 不保证有，圆角自己用 `arcTo` 画。参考实现见 `src/services/poster/`。
+
 > 本地验证的坑：`npm run dev:h5` 起的 dev server 与 `python -m http.server` 托管的 `build:h5` 产物里，`taro-input-core` 都**不渲染内部 `<input>`**（新建实例也一样，`document.querySelectorAll('input').length === 0`），登录页这个已上线可用的页面同样如此。也就是说**输入框相关的行为无法在本地浏览器复现验证**，只能上真机/真环境看。排查 Input 问题时别被本地现象误导。
 
 ------
@@ -740,7 +742,7 @@ ZEROER-GIFT-7DAY      → 7日体验卡
 
 ------
 
-**最后更新**：代理分成升级二级（抽成从下级那份里扣）、下属视图、后台独立代理菜单。
-**当前版本**：v1.5.0（见根 `version.json`）。
+**最后更新**：推广海报改 Canvas 2D（修 H5 字号坍塌）+ 卡片式版式；站点设置移入系统管理。
+**当前版本**：v1.5.1（见根 `version.json`）。
 **当前阶段**：小程序 + H5（微信内）前端、后端管理/公开接口、管理后台均已完成，三容器已上服务器且推 `master` 即自动部署；微信支付/公众号授权/短信/OSS 待真实配置上线验证。
 ⚠️ **小程序包不随自动部署**，欠账（合法域名、待真机验证项、未接的微信原生能力、审核合规）单独记在 [`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)。
