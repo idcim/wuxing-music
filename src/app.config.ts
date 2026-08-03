@@ -15,6 +15,7 @@ export default defineAppConfig({
     'pages/orders/index',
     'pages/history/index',
     'pages/player/index',
+    'pages/agent/index',
     'pages/about/index'
   ],
   window: {

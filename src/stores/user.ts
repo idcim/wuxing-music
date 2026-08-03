@@ -11,6 +11,7 @@ import {
   wechatLoginH5 as apiWechatLoginH5,
   type WechatH5LoginResult
 } from '@/services/auth';
+import { bindPendingAgent } from '@/services/agent';
 
 interface UserStore {
   user: User | null;
@@ -54,6 +55,10 @@ export const useUserStore = create<UserStore>((set, get) => ({
       element: user.element ?? get().element,
       isPremium: computePremium(user.membership)
     });
+    // 补交扫码带进来的代理推广码。放这里而不是逐个登录入口：
+    // 微信/手机验证码/密码/H5 网页授权/缓存恢复共五条路径都会走到 setUser，
+    // 挂在每条路径上迟早会漏一条。无待绑码时内部直接返回，不发请求。
+    void bindPendingAgent();
   },
 
   setElement: (element, scores) => {

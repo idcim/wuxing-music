@@ -4,6 +4,7 @@ import Taro, { useDidShow } from '@tarojs/taro';
 import { WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
 import { getWeeklyStats, emptyWeekly, type WeeklyStats } from '@/services/stats';
+import { getAgentMe } from '@/services/agent';
 import Icon from '@/components/Icon';
 import { A } from '@/utils/color';
 import { resolveUrl } from '@/utils/url';
@@ -32,12 +33,18 @@ export default function Profile() {
 
   const [cdkeyOpen, setCdkeyOpen] = useState(false);
   const [weekly, setWeekly] = useState<WeeklyStats>(emptyWeekly());
+  // 代理身份：只有确实是代理才显示「代理中心」。
+  // 模块整体关闭时接口回 404，getAgentMe 内部降级成 isAgent:false，
+  // 因此普通用户与关闭状态下都不会看到任何入口。
+  const [isAgent, setIsAgent] = useState(false);
 
   useDidShow(() => {
     if (useUserStore.getState().user) {
       getWeeklyStats().then(setWeekly).catch(() => {});
+      getAgentMe().then((d) => setIsAgent(!!d.isAgent)).catch(() => setIsAgent(false));
     } else {
       setWeekly(emptyWeekly());
+      setIsAgent(false);
     }
   });
 
@@ -57,6 +64,10 @@ export default function Profile() {
   const goOrders = () => {
     if (!requireLogin()) return;
     Taro.navigateTo({ url: '/pages/orders/index' });
+  };
+  const goAgent = () => {
+    if (!requireLogin()) return;
+    Taro.navigateTo({ url: '/pages/agent/index' });
   };
 
   // 会员剩余天数
@@ -90,11 +101,14 @@ export default function Profile() {
     });
   };
 
-  // 账号类操作
+  // 账号类操作。代理中心只对代理本人出现，其余人完全看不到这一项。
   const accountMenu: MenuItem[] = [
     { icon: 'user', text: '个人信息', onClick: goUserInfo },
     { icon: 'receipt', text: '我的订单', onClick: goOrders },
-    { icon: 'history', text: '聆听历史', onClick: goHistory }
+    { icon: 'history', text: '聆听历史', onClick: goHistory },
+    ...(isAgent
+      ? [{ icon: 'award' as IconName, text: '代理中心', onClick: goAgent, highlight: true }]
+      : [])
   ];
 
   // 功能类操作

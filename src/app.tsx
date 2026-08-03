@@ -5,10 +5,14 @@ import { useContentStore } from '@/stores/content';
 import { usePlayerStore } from '@/stores/player';
 import { isH5, isInWeChat } from '@/utils/platform';
 import { getToken } from '@/services/auth';
+import { captureAgentCode } from '@/services/agent';
 import './app.scss';
 
 function App({ children }: PropsWithChildren) {
   useLaunch(() => {
+    // 先取扫码带进来的代理推广码再走登录：此刻多半还没登录态，
+    // captureAgentCode 只落本地，真正的绑定在登录成功后由 store 提交。
+    captureAgentCode();
     bootstrapAuth();
     // 从后端拉取五行/曲目（mock 下用本地常量）
     useContentStore.getState().hydrate();

@@ -98,6 +98,55 @@ export interface User {
   createdAt: string;
 }
 
+// ─── 代理分成 ────────────────────────────────────────
+// 整个模块默认关闭：关闭时 /api/mp/agent/* 一律 404，前端不渲染任何入口。
+export type CommissionStatus = 'pending' | 'available' | 'withdrawing' | 'paid' | 'void';
+export type WithdrawalStatus = 'pending' | 'approved' | 'paid' | 'rejected' | 'failed';
+
+export interface AgentBalance {
+  available: number;   // 可提现
+  frozen: number;      // 冻结中（未过冻结期）
+  withdrawing: number; // 提现处理中
+  paid: number;        // 已到账
+}
+
+export interface AgentInfo {
+  id: number;
+  code: string;                    // 推广码，进海报二维码的 a=<code>
+  name: string;
+  type: 'store' | 'promoter';
+  effectiveRate: number | null;    // 实际生效比例（已把「跟随默认」解析掉）
+  status: string;
+}
+
+export interface AgentMe {
+  isAgent: boolean;
+  agent?: AgentInfo;
+  balance?: AgentBalance;
+  month?: { count: number; amount: number; gmv: number };
+  minWithdraw?: number;
+  freezeDays?: number;
+}
+
+export interface CommissionItem {
+  id: number;
+  amount: number;
+  orderAmount: number;
+  rate: number;
+  status: CommissionStatus;
+  availableAt: string | null;
+  createdAt: string | null;
+}
+
+export interface WithdrawalItem {
+  id: number;
+  amount: number;
+  status: WithdrawalStatus;
+  failReason?: string;
+  paidAt: string | null;
+  createdAt: string | null;
+}
+
 // ─── CDKEY ──────────────────────────────────────────
 export type CdkeyStatus = 'idle' | 'loading' | 'success' | 'error' | 'used';
 

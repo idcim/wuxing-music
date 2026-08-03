@@ -1,0 +1,295 @@
+@import '../../styles/variables.scss';
+
+.agent {
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 0 $pad-outer 80rpx;
+  background: $bg-deep;
+
+  &__nav {
+    display: flex;
+    align-items: center;
+    padding-bottom: 24rpx;
+  }
+
+  &__back {
+    font-size: 56rpx;
+    color: $text-primary;
+    line-height: 1;
+    width: 80rpx;
+  }
+
+  &__nav-title {
+    flex: 1;
+    text-align: center;
+    font-size: 30rpx;
+    color: $text-primary;
+  }
+
+  &__nav-spacer {
+    width: 80rpx;
+  }
+
+  &__body {
+    margin-top: 8rpx;
+  }
+
+  // ── 余额卡 ──
+  &__card {
+    background: linear-gradient(150deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+    border: 2rpx solid rgba(255, 255, 255, 0.07);
+    border-radius: $radius-lg;
+    padding: 40rpx $pad-card;
+    text-align: center;
+
+    &-label {
+      display: block;
+      font-size: 24rpx;
+      color: $text-tertiary;
+    }
+
+    &-amount {
+      display: block;
+      margin-top: 12rpx;
+      font-size: 76rpx;
+      color: $text-primary;
+      letter-spacing: 2rpx;
+    }
+
+    &-sub {
+      display: flex;
+      margin-top: 32rpx;
+      padding-top: 28rpx;
+      border-top: 2rpx solid $border;
+
+      &-item {
+        flex: 1;
+        text-align: center;
+      }
+
+      &-num {
+        display: block;
+        font-size: 30rpx;
+        color: $text-secondary;
+      }
+
+      &-label {
+        display: block;
+        margin-top: 8rpx;
+        font-size: 22rpx;
+        color: $text-quaternary;
+      }
+    }
+
+    &-tip {
+      display: block;
+      margin-top: 20rpx;
+      font-size: 22rpx;
+      color: $text-quaternary;
+      line-height: 1.6;
+    }
+  }
+
+  &__withdraw {
+    margin-top: 32rpx;
+    height: 88rpx;
+    border-radius: $radius-pill;
+    background: rgba(255, 255, 255, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &--busy {
+      opacity: 0.6;
+    }
+
+    &-text {
+      font-size: 28rpx;
+      color: #0a0e1a;
+      letter-spacing: 2rpx;
+    }
+  }
+
+  // ── 本月业绩 ──
+  &__stats {
+    display: flex;
+    margin-top: 24rpx;
+    background: $surface;
+    border: 2rpx solid $border;
+    border-radius: $radius-lg;
+    padding: 32rpx 0;
+  }
+
+  &__stat {
+    flex: 1;
+    text-align: center;
+
+    &-num {
+      display: block;
+      font-size: 40rpx;
+      color: $text-primary;
+    }
+
+    &-label {
+      display: block;
+      margin-top: 10rpx;
+      font-size: 22rpx;
+      color: $text-tertiary;
+    }
+  }
+
+  // ── 推广码 ──
+  &__promo {
+    margin-top: 24rpx;
+    background: $surface;
+    border: 2rpx solid $border;
+    border-radius: $radius-lg;
+    padding: $pad-card;
+
+    &-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    &-title {
+      font-size: 28rpx;
+      color: $text-primary;
+    }
+
+    &-type {
+      font-size: 22rpx;
+      color: $text-tertiary;
+      padding: 6rpx 18rpx;
+      border-radius: $radius-pill;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    &-code {
+      display: block;
+      margin-top: 24rpx;
+      font-size: 64rpx;
+      letter-spacing: 10rpx;
+      color: $text-primary;
+      text-align: center;
+    }
+
+    &-tip {
+      display: block;
+      margin-top: 16rpx;
+      font-size: 22rpx;
+      color: $text-quaternary;
+      line-height: 1.6;
+      text-align: center;
+    }
+
+    &-actions {
+      display: flex;
+      margin-top: 28rpx;
+      padding-top: 24rpx;
+      border-top: 2rpx solid $border;
+    }
+
+    &-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10rpx;
+
+      &-text {
+        font-size: 24rpx;
+        color: $text-secondary;
+      }
+    }
+  }
+
+  // ── 明细 ──
+  &__tabs {
+    display: flex;
+    gap: 40rpx;
+    margin: 40rpx 0 8rpx;
+  }
+
+  &__tab {
+    font-size: 28rpx;
+    color: $text-quaternary;
+    padding-bottom: 12rpx;
+
+    &--on {
+      color: $text-primary;
+      border-bottom: 3rpx solid $text-primary;
+    }
+  }
+
+  &__list {
+    margin-top: 16rpx;
+  }
+
+  &__none {
+    display: block;
+    padding: 80rpx 0;
+    text-align: center;
+    font-size: 24rpx;
+    color: $text-quaternary;
+  }
+
+  &__item {
+    background: rgba(255, 255, 255, 0.02);
+    border: 2rpx solid rgba(255, 255, 255, 0.05);
+    border-radius: $radius-md;
+    padding: 28rpx $pad-card;
+    margin-bottom: 16rpx;
+
+    &-main {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    &-amount {
+      font-size: 34rpx;
+      color: $text-primary;
+    }
+
+    &-status {
+      font-size: 22rpx;
+      color: $text-tertiary;
+
+      &--available {
+        color: #84cc16;
+      }
+
+      &--pending {
+        color: #eab308;
+      }
+
+      &--paid {
+        color: $text-tertiary;
+      }
+
+      &--void,
+      &--rejected,
+      &--failed {
+        color: #f87171;
+      }
+    }
+
+    &-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 12rpx;
+    }
+
+    &-desc {
+      font-size: 22rpx;
+      color: $text-quaternary;
+    }
+
+    &-time {
+      font-size: 22rpx;
+      color: $text-quaternary;
+    }
+  }
+}
