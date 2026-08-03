@@ -20,6 +20,10 @@ const router = createRouter({
         { path: 'quiz', component: () => import('@/views/Quiz.vue'), meta: { title: '测评管理', perm: 'quiz:view' } },
         { path: 'orders', component: () => import('@/views/Orders.vue'), meta: { title: '订单管理', perm: 'orders:view' } },
         { path: 'users', component: () => import('@/views/Users.vue'), meta: { title: '用户', perm: 'users:view' } },
+        // 代理分成三页：meta.feature 与 menu.ts 的同名字段是同一道门
+        { path: 'agents', component: () => import('@/views/Agents.vue'), meta: { title: '代理管理', perm: 'agents:view', feature: 'agent' } },
+        { path: 'commissions', component: () => import('@/views/Commissions.vue'), meta: { title: '分成明细', perm: 'agents:view', feature: 'agent' } },
+        { path: 'withdrawals', component: () => import('@/views/Withdrawals.vue'), meta: { title: '提现审核', perm: 'agents:view', feature: 'agent' } },
         { path: 'settings', component: () => import('@/views/SettingsCenter.vue'), meta: { title: '站点设置', perm: 'settings:view' } },
         { path: 'admins', component: () => import('@/views/Admins.vue'), meta: { title: '管理员', perm: 'admins:manage' } },
         { path: 'roles', component: () => import('@/views/Roles.vue'), meta: { title: '角色权限', perm: 'admins:manage' } },
@@ -31,9 +35,13 @@ const router = createRouter({
   ]
 });
 
-/** 该管理员有权访问的第一个页面；一个都没有则返回 null。 */
-function firstAllowed(can: (p: string) => boolean): string | null {
-  return NAV_ALL.find((n) => can(n.perm))?.path ?? null;
+/** 该管理员有权访问的第一个页面；一个都没有则返回 null。
+ *  同时要过 feature 这道门，否则会把人改道到一个已关闭模块的页面。 */
+function firstAllowed(
+  can: (p: string) => boolean,
+  hasFeature: (f?: string) => boolean
+): string | null {
+  return NAV_ALL.find((n) => can(n.perm) && hasFeature(n.feature))?.path ?? null;
 }
 
 router.beforeEach(async (to) => {
@@ -52,9 +60,15 @@ router.beforeEach(async (to) => {
     }
   }
 
+  // 模块未开启：直接当作不存在（哪怕有权限），改道走开
+  const feature = to.meta.feature as string | undefined;
+  if (feature && !auth.hasFeature(feature)) {
+    return firstAllowed(auth.can, auth.hasFeature) ?? '/dashboard';
+  }
+
   const perm = to.meta.perm as string | undefined;
   if (perm && !auth.can(perm)) {
-    const fallback = firstAllowed(auth.can);
+    const fallback = firstAllowed(auth.can, auth.hasFeature);
     if (!fallback) {
       ElMessage.error('当前账号没有任何后台权限，请联系管理员');
       auth.logout();

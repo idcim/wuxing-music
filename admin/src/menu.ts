@@ -5,6 +5,9 @@ export interface NavItem {
   title: string;
   perm: string;
   icon: string; // Element Plus 图标组件名（main.ts 已全局注册）
+  /** 可选模块开关（后端 /me 的 features）。填了就要该模块已开启才显示。
+   *  与 perm 是两道独立的门：有权限但模块没开，同样不显示。 */
+  feature?: string;
 }
 
 export const NAV_MAIN: NavItem[] = [
@@ -16,6 +19,10 @@ export const NAV_MAIN: NavItem[] = [
   { path: '/quiz', title: '测评管理', perm: 'quiz:view', icon: 'EditPen' },
   { path: '/orders', title: '订单管理', perm: 'orders:view', icon: 'List' },
   { path: '/users', title: '用户', perm: 'users:view', icon: 'User' },
+  // 代理分成：默认关闭，开启前整组都不出现（设置中心里的「代理分成」面板常驻，那是开启入口）
+  { path: '/agents', title: '代理管理', perm: 'agents:view', icon: 'Shop', feature: 'agent' },
+  { path: '/commissions', title: '分成明细', perm: 'agents:view', icon: 'Money', feature: 'agent' },
+  { path: '/withdrawals', title: '提现审核', perm: 'agents:view', icon: 'Wallet', feature: 'agent' },
   { path: '/settings', title: '站点设置', perm: 'settings:view', icon: 'Setting' }
 ];
 

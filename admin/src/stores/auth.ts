@@ -9,6 +9,8 @@ export const useAuthStore = defineStore('auth', () => {
   const isSuper = ref(false);
   const roleName = ref('');
   const permissions = ref<string[]>([]);
+  // 可选模块开关（后端 /me 下发）。与权限是两回事：有权限但模块没开，菜单一样不该出现。
+  const features = ref<Record<string, boolean>>({});
   // 刷新页面后权限尚未拉回来，此时不能把菜单全判成无权限
   const loaded = ref(false);
 
@@ -21,6 +23,7 @@ export const useAuthStore = defineStore('auth', () => {
     isSuper.value = !!data.is_super;
     roleName.value = data.role_name || '';
     permissions.value = data.permissions || [];
+    features.value = data.features || {};
     loaded.value = true;
     localStorage.setItem('admin_nickname', nickname.value);
   }
@@ -41,6 +44,7 @@ export const useAuthStore = defineStore('auth', () => {
     isSuper.value = false;
     roleName.value = '';
     permissions.value = [];
+    features.value = {};
     loaded.value = false;
     localStorage.removeItem('admin_token');
     localStorage.removeItem('admin_nickname');
@@ -53,5 +57,15 @@ export const useAuthStore = defineStore('auth', () => {
     return permissions.value.includes(perm);
   }
 
-  return { token, nickname, username, isSuper, roleName, permissions, loaded, login, logout, loadMe, can };
+  /** 可选模块是否开启。与 can() 不同：**未加载完时判为关闭**——
+   *  宁可菜单晚一拍出现，也不能让关闭的模块闪一下。 */
+  function hasFeature(name?: string): boolean {
+    if (!name) return true;
+    return !!features.value[name];
+  }
+
+  return {
+    token, nickname, username, isSuper, roleName, permissions, features, loaded,
+    login, logout, loadMe, can, hasFeature,
+  };
 });

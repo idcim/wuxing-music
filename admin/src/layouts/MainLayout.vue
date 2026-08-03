@@ -49,9 +49,12 @@ const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 
-// 无权限的模块不进菜单（拦截以后端 require_perm 为准，这里只是体验）
-const mainNav = computed(() => NAV_MAIN.filter((n) => auth.can(n.perm)));
-const systemNav = computed(() => NAV_SYSTEM.filter((n) => auth.can(n.perm)));
+// 无权限、或所属可选模块未开启的，都不进菜单
+//（拦截以后端 require_perm / require_enabled 为准，这里只是体验）
+const visible = (n: { perm: string; feature?: string }) =>
+  auth.can(n.perm) && auth.hasFeature(n.feature);
+const mainNav = computed(() => NAV_MAIN.filter(visible));
+const systemNav = computed(() => NAV_SYSTEM.filter(visible));
 
 onMounted(() => {
   if (!auth.loaded) auth.loadMe().catch(() => {});

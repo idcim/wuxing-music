@@ -74,6 +74,26 @@ export const updateOaSetting = (data: any) => req.put('/api/admin/settings/oa', 
 export const getSmsSetting = () => req.get('/api/admin/settings/sms');
 export const updateSmsSetting = (data: any) => req.put('/api/admin/settings/sms', data);
 
+// ── 代理分成（模块默认关闭；未开启时以下接口一律 404）──
+export const getAgentSetting = () => req.get('/api/admin/settings/agent');
+export const updateAgentSetting = (data: any) => req.put('/api/admin/settings/agent', data);
+
+export const listAgents = (params: any) => req.get('/api/admin/agents', { params });
+export const createAgent = (data: any) => req.post('/api/admin/agents', data);
+export const updateAgent = (id: number, data: any) => req.put(`/api/admin/agents/${id}`, data);
+export const toggleAgent = (id: number) => req.post(`/api/admin/agents/${id}/disable`);
+export const agentsSummary = () => req.get('/api/admin/agents-summary');
+
+export const listCommissions = (params: any) => req.get('/api/admin/commissions', { params });
+
+export const listWithdrawals = (params: any) => req.get('/api/admin/withdrawals', { params });
+export const approveWithdrawal = (id: number, remark = '') =>
+  req.post(`/api/admin/withdrawals/${id}/approve`, { remark });
+export const rejectWithdrawal = (id: number, remark = '') =>
+  req.post(`/api/admin/withdrawals/${id}/reject`, { remark });
+export const markWithdrawalPaid = (id: number, remark = '') =>
+  req.post(`/api/admin/withdrawals/${id}/paid`, { remark });
+
 // ── 管理员与角色权限 ──
 export const listAdmins = (params: any) => req.get('/api/admin/admins', { params });
 export const createAdmin = (data: any) => req.post('/api/admin/admins', data);
