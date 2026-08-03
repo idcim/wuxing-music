@@ -2,6 +2,7 @@
 
 .userinfo {
   min-height: 100vh;
+  min-height: 100dvh;
   padding: 0 $pad-outer 80rpx;
   background: $bg-deep;
 
@@ -27,6 +28,31 @@
 
   &__nav-spacer {
     width: 80rpx;
+  }
+
+  // ── 未登录空态 ──
+  &__empty {
+    padding-top: 200rpx;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 32rpx;
+  }
+
+  &__empty-text {
+    font-size: 28rpx;
+    color: $text-tertiary;
+  }
+
+  &__empty-btn {
+    padding: 22rpx 64rpx;
+    border-radius: $radius-pill;
+    background: linear-gradient(135deg, #f8fafc, #cbd5e1);
+  }
+
+  &__empty-btn-text {
+    font-size: 28rpx;
+    color: #0a0e1a;
   }
 
   // ── 信息分组 ──

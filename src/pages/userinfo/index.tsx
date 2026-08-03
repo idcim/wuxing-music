@@ -3,8 +3,11 @@ import Taro, { useDidShow } from '@tarojs/taro';
 import { useState } from 'react';
 import { WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
-import { bindPhone, updateProfile, uploadAvatar } from '@/services/user';
+import { pickAvatar, updateProfile, uploadAvatar } from '@/services/user';
+import { isWeapp } from '@/utils/platform';
+import { goBack } from '@/utils/nav';
 import Icon from '@/components/Icon';
+import UserEditSheet, { type EditField } from '@/components/UserEditSheet';
 import { A } from '@/utils/color';
 import { resolveUrl } from '@/utils/url';
 import type { ElementId } from '@/types';
@@ -18,21 +21,17 @@ export default function UserInfo() {
   const setProfile = useUserStore((s) => s.setProfile);
   const el = WUXING[(element as ElementId) || '木'];
 
-  // 未登录则退回登录页
+  const [editing, setEditing] = useState<EditField>(null);
+
+  // 登录态变化时刷新（不再 redirectTo 到登录页——那会销毁本页，
+  // 而登录成功后一律 reLaunch 回首页，用户再也回不到「个人信息」）
   const [, force] = useState(0);
-  useDidShow(() => {
-    if (!useUserStore.getState().user) {
-      Taro.redirectTo({ url: '/pages/login/index' });
-    } else {
-      force((n) => n + 1);
-    }
-  });
+  useDidShow(() => force((n) => n + 1));
 
-  const back = () => Taro.navigateBack();
+  const goLogin = () => Taro.navigateTo({ url: '/pages/login/index' });
 
-  // 微信头像授权 → 先上传临时图换正式 URL，再落库，最后更新本地
-  const onChooseAvatar = async (e: any) => {
-    const tmp = e?.detail?.avatarUrl;
+  // 上传头像临时图 → 换正式 URL → 落库 → 更新本地
+  const saveAvatar = async (tmp: string) => {
     if (!tmp) return;
     Taro.showLoading({ title: '上传中', mask: true });
     try {
@@ -41,113 +40,113 @@ export default function UserInfo() {
       setProfile({ avatar: saved.avatar ?? url });
       Taro.hideLoading();
       Taro.showToast({ title: '头像已更新', icon: 'success' });
-    } catch {
+    } catch (e: any) {
       Taro.hideLoading();
-      Taro.showToast({ title: '上传失败', icon: 'none' });
+      // 后端会给「仅支持图片」「图片不能超过 5MB」等具体原因
+      Taro.showToast({ title: e?.message || '上传失败', icon: 'none' });
     }
   };
 
-  // 修改昵称 → 调后端落库，成功后更新本地
-  const onEditNickname = () => {
-    Taro.showModal({
-      title: '修改昵称',
-      editable: true,
-      placeholderText: '输入新昵称',
-      content: user?.nickname || '',
-      success: async (res: any) => {
-        const name = String(res?.content || '').trim();
-        if (!res.confirm || !name) return;
-        Taro.showLoading({ title: '保存中', mask: true });
-        try {
-          const saved = await updateProfile({ nickname: name });
-          setProfile({ nickname: saved.nickname ?? name });
-          Taro.hideLoading();
-          Taro.showToast({ title: '已更新', icon: 'success' });
-        } catch {
-          Taro.hideLoading();
-          Taro.showToast({ title: '保存失败', icon: 'none' });
-        }
-      }
-    } as any);
-  };
+  // 小程序：微信原生头像授权回调
+  const onChooseAvatar = (e: any) => saveAvatar(e?.detail?.avatarUrl || '');
 
-  // 绑定手机号（真实环境用 getPhoneNumber 授权；此处弹窗输入模拟）
-  const onBindPhone = () => {
-    Taro.showModal({
-      title: user?.phone ? '修改手机号' : '绑定手机号',
-      editable: true,
-      placeholderText: '请输入手机号',
-      content: user?.phone || '',
-      success: async (res: any) => {
-        if (!res.confirm || !res.content) return;
-        const phone = String(res.content).trim();
-        if (!/^1\d{10}$/.test(phone)) {
-          Taro.showToast({ title: '手机号格式不对', icon: 'none' });
-          return;
-        }
-        try {
-          const bound = await bindPhone(Number(user!.id), phone);
-          setPhone(bound);
-          Taro.showToast({ title: '绑定成功', icon: 'success' });
-        } catch {
-          Taro.showToast({ title: '绑定失败', icon: 'none' });
-        }
-      }
-    } as any);
-  };
+  // H5：openType="chooseAvatar" 是小程序专有能力，H5 下按钮点了毫无反应，
+  // 因此改走 chooseImage（内部即 <input type="file">）取图。
+  const onPickAvatar = async () => saveAvatar(await pickAvatar());
 
+  const avatarInner = (
+    <>
+      <Text className="userinfo__label">头像</Text>
+      <View className="userinfo__row-right">
+        <View
+          className="userinfo__avatar"
+          style={{
+            background: `radial-gradient(circle, ${A.a25(el.primary)}, transparent)`,
+            borderColor: A.a50(el.primary)
+          }}
+        >
+          {user?.avatar ? (
+            <Image
+              className="userinfo__avatar-img"
+              src={resolveUrl(user.avatar)}
+              mode="aspectFill"
+            />
+          ) : (
+            <Icon name={el.icon as IconName} size={36} color={el.primary} strokeWidth={1.2} />
+          )}
+        </View>
+        <Icon name="chevronRight" size={28} color="#334155" strokeWidth={1.5} />
+      </View>
+    </>
+  );
+
+  const nav = (
+    <View className="userinfo__nav">
+      <Text className="userinfo__back" onClick={() => goBack()}>‹</Text>
+      <Text className="userinfo__nav-title">个人信息</Text>
+      <View className="userinfo__nav-spacer" />
+    </View>
+  );
+
+  // 编辑抽屉：无论登录与否都挂在首屏。
+  // 若放进「已登录」分支，用户登录回来后抽屉才首次挂载，
+  // 其中的 Input 会踩到「首屏之后挂载不渲染内部 input」那条坑（陷阱 14）。
+  const sheet = (
+    <UserEditSheet
+      field={editing}
+      nickname={user?.nickname || ''}
+      phone={user?.phone || ''}
+      onClose={() => setEditing(null)}
+      onSaved={(patch) => {
+        if (patch.nickname !== undefined) setProfile({ nickname: patch.nickname });
+        if (patch.hasPassword !== undefined) setProfile({ hasPassword: patch.hasPassword });
+        if (patch.phone !== undefined) setPhone(patch.phone);
+      }}
+    />
+  );
+
+  // 未登录：给出明确的登录入口，而不是一片空白
   if (!user) {
     return (
       <View className="userinfo">
-        <View className="userinfo__nav">
-          <Text className="userinfo__back" onClick={back}>‹</Text>
-          <Text className="userinfo__nav-title">个人信息</Text>
-          <View className="userinfo__nav-spacer" />
+        {nav}
+        <View className="userinfo__empty fade-up">
+          <Icon name="user" size={72} color="#334155" strokeWidth={1.2} />
+          <Text className="userinfo__empty-text">登录后可查看与编辑个人信息</Text>
+          <View className="userinfo__empty-btn" onClick={goLogin}>
+            <Text className="userinfo__empty-btn-text">去登录</Text>
+          </View>
         </View>
+        {sheet}
       </View>
     );
   }
 
   return (
     <View className="userinfo">
-      <View className="userinfo__nav">
-        <Text className="userinfo__back" onClick={back}>‹</Text>
-        <Text className="userinfo__nav-title">个人信息</Text>
-        <View className="userinfo__nav-spacer" />
-      </View>
+      {nav}
 
       <View className="userinfo__list fade-up">
-        {/* 头像 */}
-        <Button
-          className="userinfo__row userinfo__row--btn"
-          openType="chooseAvatar"
-          onChooseAvatar={onChooseAvatar}
-        >
-          <Text className="userinfo__label">头像</Text>
-          <View className="userinfo__row-right">
-            <View
-              className="userinfo__avatar"
-              style={{
-                background: `radial-gradient(circle, ${A.a25(el.primary)}, transparent)`,
-                borderColor: A.a50(el.primary)
-              }}
-            >
-              {user.avatar ? (
-                <Image
-                  className="userinfo__avatar-img"
-                  src={resolveUrl(user.avatar)}
-                  mode="aspectFill"
-                />
-              ) : (
-                <Icon name={el.icon as IconName} size={36} color={el.primary} strokeWidth={1.2} />
-              )}
-            </View>
-            <Icon name="chevronRight" size={28} color="#334155" strokeWidth={1.5} />
+        {/* 头像：小程序用微信原生头像授权，H5 走相册/拍照 */}
+        {isWeapp ? (
+          <Button
+            className="userinfo__row userinfo__row--btn"
+            openType="chooseAvatar"
+            onChooseAvatar={onChooseAvatar}
+          >
+            {avatarInner}
+          </Button>
+        ) : (
+          <View className="userinfo__row" onClick={onPickAvatar}>
+            {avatarInner}
           </View>
-        </Button>
+        )}
 
         {/* 昵称 */}
-        <View className="userinfo__row userinfo__row--divider" onClick={onEditNickname}>
+        <View
+          className="userinfo__row userinfo__row--divider"
+          onClick={() => setEditing('nickname')}
+        >
           <Text className="userinfo__label">昵称</Text>
           <View className="userinfo__row-right">
             <Text className="userinfo__value">{user.nickname || '律音用户'}</Text>
@@ -156,11 +155,25 @@ export default function UserInfo() {
         </View>
 
         {/* 手机号 */}
-        <View className="userinfo__row" onClick={onBindPhone}>
+        <View
+          className="userinfo__row userinfo__row--divider"
+          onClick={() => setEditing('phone')}
+        >
           <Text className="userinfo__label">手机号</Text>
           <View className="userinfo__row-right">
             <Text className={`userinfo__value ${user.phone ? '' : 'userinfo__value--muted'}`}>
               {user.phone || '未绑定'}
+            </Text>
+            <Icon name="chevronRight" size={28} color="#334155" strokeWidth={1.5} />
+          </View>
+        </View>
+
+        {/* 登录密码：设置后可用「手机号 + 密码」登录 */}
+        <View className="userinfo__row" onClick={() => setEditing('password')}>
+          <Text className="userinfo__label">登录密码</Text>
+          <View className="userinfo__row-right">
+            <Text className="userinfo__value userinfo__value--muted">
+              {user.hasPassword ? '已设置' : '未设置'}
             </Text>
             <Icon name="chevronRight" size={28} color="#334155" strokeWidth={1.5} />
           </View>
@@ -180,6 +193,8 @@ export default function UserInfo() {
           <Text className="userinfo__value">{user.membership.name}</Text>
         </View>
       </View>
+
+      {sheet}
     </View>
   );
 }

@@ -1,0 +1,121 @@
+@import '../../styles/variables.scss';
+
+.edit-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: fadeIn 0.3s ease forwards;
+}
+
+.edit-sheet {
+  width: 100%;
+  max-width: 840rpx;
+  background: linear-gradient(180deg, #0a1018, #050810);
+  border-top-left-radius: $radius-xl;
+  border-top-right-radius: $radius-xl;
+  border: 2rpx solid $border;
+  border-bottom: none;
+  padding: 48rpx $pad-outer 56rpx;
+  padding-bottom: calc(56rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(56rpx + env(safe-area-inset-bottom));
+  animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+
+  &__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 40rpx;
+  }
+
+  &__title {
+    font-size: 34rpx;
+    color: $text-primary;
+  }
+
+  &__close {
+    padding: 8rpx;
+  }
+
+  &__field {
+    margin-bottom: 24rpx;
+
+    &--row {
+      display: flex;
+      align-items: center;
+      gap: 20rpx;
+    }
+  }
+
+  &__input {
+    width: 100%;
+    box-sizing: border-box;
+    height: 96rpx;
+    line-height: 96rpx;
+    background: rgba(255, 255, 255, 0.04);
+    border: 2rpx solid rgba(255, 255, 255, 0.1);
+    border-radius: $radius-md;
+    padding: 0 32rpx;
+    color: $text-primary;
+    // 不得低于 32rpx：更小的字号在 ≤400px 视口下算出来不到 16px，
+    // iOS Safari / 微信 WKWebView 聚焦时会强制放大整个页面。
+    font-size: 32rpx;
+
+    // 聚焦高亮走纯 CSS（禁止 onFocus + setState，会把渲染进程卡死）。
+    // 小程序端类名落在原生 input 上用 :focus；H5 端落在外层 taro-input-core
+    // （真正的 input 是它的子节点）故需 :focus-within。
+    &:focus,
+    &:focus-within {
+      border-color: rgba(148, 163, 184, 0.4);
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    &--flex {
+      flex: 1;
+      width: auto;
+    }
+  }
+
+  &__code-btn {
+    flex-shrink: 0;
+    height: 96rpx;
+    display: flex;
+    align-items: center;
+    padding: 0 28rpx;
+    border-radius: $radius-md;
+    background: rgba(255, 255, 255, 0.06);
+    border: 2rpx solid rgba(255, 255, 255, 0.1);
+
+    &--disabled {
+      opacity: 0.5;
+    }
+  }
+
+  &__code-btn-text {
+    font-size: 26rpx;
+    color: $text-secondary;
+    white-space: nowrap;
+  }
+
+  &__action {
+    margin-top: 32rpx;
+    border-radius: $radius-md;
+    padding: 28rpx 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #f8fafc, #cbd5e1);
+
+    &--disabled {
+      opacity: 0.5;
+    }
+  }
+
+  &__action-text {
+    font-size: 30rpx;
+    color: #0a0e1a;
+  }
+}

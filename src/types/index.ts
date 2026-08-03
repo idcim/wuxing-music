@@ -76,6 +76,7 @@ export interface User {
   openid: string;
   unionid?: string;
   phone?: string;
+  hasPassword?: boolean;     // 是否已设置登录密码（决定「手机号 + 密码」登录可用与否）
   nickname: string;
   avatar: string;
   element: ElementId | null;
