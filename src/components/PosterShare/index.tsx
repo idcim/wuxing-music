@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, Canvas, Image } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { getQrcode } from '@/services/share';
+import { renderPoster, POSTER_CANVAS_ID } from '@/services/poster';
+import { POSTER_H, POSTER_W } from '@/services/poster/types';
 import { isWeapp } from '@/utils/platform';
-import { WUXING } from '@/constants/wuxing';
 import Icon from '@/components/Icon';
 import type { ElementId } from '@/types';
 import './index.scss';
@@ -15,165 +16,67 @@ interface Props {
   title?: string;          // 主标题，如「年藏会员」
   subtitle?: string;       // 副文案
   cdkey?: string;          // 礼物码（买卡送人时显示）
-  scene?: string;          // 小程序码 scene
+  scene?: string;          // 二维码参数（如 a=<推广码>）
 }
 
-const CANVAS_ID = 'poster-canvas';
-// 画布像素尺寸（设计稿基准）
-const W = 600;
-const H = 960;
-
+/**
+ * 海报弹层。**只管 UI 与调用**——画布怎么取、怎么按屏幕倍率出图，
+ * 都在 services/poster 里分端实现，本文件不碰任何画布 API。
+ */
 export default function PosterShare({
   open, onClose, element, title = '五行律音', subtitle = '按体质定制的助眠音律', cdkey, scene
 }: Props) {
-  const el = WUXING[(element as ElementId) || '木'];
-  const [poster, setPoster] = useState('');   // 生成后的图片临时路径
+  const [poster, setPoster] = useState('');
   const [loading, setLoading] = useState(false);
-  const [started, setStarted] = useState(false);  // 防止重复绘制
 
-  // hex -> rgba
-  const rgba = (hex: string, a: number) => {
-    const h = hex.replace('#', '');
-    const r = parseInt(h.slice(0, 2), 16);
-    const g = parseInt(h.slice(2, 4), 16);
-    const b = parseInt(h.slice(4, 6), 16);
-    return `rgba(${r},${g},${b},${a})`;
-  };
-
-  // 下载图片为本地路径（canvas drawImage 需要本地路径）
-  const toLocal = (url: string): Promise<string> =>
-    new Promise((resolve) => {
-      if (!url) return resolve('');
-      Taro.getImageInfo({
-        src: url,
-        success: (r) => resolve(r.path),
-        fail: () => resolve('')
-      });
-    });
-
-  const draw = async () => {
-    setLoading(true);
-    setPoster('');
-    try {
-      const qrUrl = await getQrcode(scene || '', 'pages/home/index');
-      const qrLocal = await toLocal(qrUrl);
-
-      const ctx = Taro.createCanvasContext(CANVAS_ID);
-
-      // 背景：深色渐变
-      const grad = ctx.createLinearGradient(0, 0, W, H);
-      grad.addColorStop(0, '#0a1018');
-      grad.addColorStop(1, '#03050a');
-      ctx.setFillStyle(grad as any);
-      ctx.fillRect(0, 0, W, H);
-
-      // 顶部五行光晕
-      ctx.setFillStyle(rgba(el.primary, 0.14));
-      ctx.beginPath();
-      ctx.arc(W / 2, 150, 220, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 五行大字
-      ctx.setFillStyle(el.primary);
-      ctx.setFontSize(140);
-      ctx.setTextAlign('center');
-      ctx.fillText(el.id, W / 2, 230);
-
-      // 英文小标
-      ctx.setFillStyle(rgba(el.accent, 0.9));
-      ctx.setFontSize(26);
-      ctx.fillText(`${el.en} · ${el.notePinyin}`, W / 2, 290);
-
-      // 主标题
-      ctx.setFillStyle('#e2e8f0');
-      ctx.setFontSize(48);
-      ctx.fillText(title, W / 2, 380);
-
-      // 副文案
-      ctx.setFillStyle('#94a3b8');
-      ctx.setFontSize(26);
-      ctx.fillText(subtitle, W / 2, 430);
-
-      // 礼物码（可选）
-      let qrTop = 560;
-      if (cdkey) {
-        ctx.setFillStyle(rgba(el.primary, 0.12));
-        ctx.fillRect(80, 480, W - 160, 90);
-        ctx.setFillStyle(el.accent);
-        ctx.setFontSize(22);
-        ctx.fillText('礼物兑换码', W / 2, 512);
-        ctx.setFillStyle('#e2e8f0');
-        ctx.setFontSize(34);
-        ctx.fillText(cdkey, W / 2, 552);
-        qrTop = 610;
-      }
-
-      // 小程序码
-      const qrSize = 220;
-      const qrX = (W - qrSize) / 2;
-      if (qrLocal) {
-        // 白底圆角衬底
-        ctx.setFillStyle('#ffffff');
-        ctx.fillRect(qrX - 16, qrTop - 16, qrSize + 32, qrSize + 32);
-        ctx.drawImage(qrLocal, qrX, qrTop, qrSize, qrSize);
-      } else {
-        ctx.setFillStyle(rgba('#ffffff', 0.06));
-        ctx.fillRect(qrX, qrTop, qrSize, qrSize);
-        ctx.setFillStyle('#64748b');
-        ctx.setFontSize(22);
-        ctx.fillText('扫码体验', W / 2, qrTop + qrSize / 2);
-      }
-
-      // 底部提示
-      ctx.setFillStyle('#64748b');
-      ctx.setFontSize(24);
-      ctx.fillText('长按识别 · 开启你的助眠音律', W / 2, qrTop + qrSize + 56);
-
-      // ctx.draw 的回调是小程序语义，H5 shim 不保证回调；不设兜底会 await 到天荒地老，
-      // finally 里的 setLoading(false) 永远执行不到，弹层就卡在「海报生成中…」。
-      // H5 的 draw 是同步落到 2D context 的，超时后继续取图即可。
-      await new Promise<void>((resolve) => {
-        const t = setTimeout(resolve, 1000);
-        ctx.draw(false, () => {
-          clearTimeout(t);
-          resolve();
-        });
-      });
-
-      const res = await Taro.canvasToTempFilePath({
-        canvasId: CANVAS_ID,
-        width: W,
-        height: H,
-        destWidth: W * 2,
-        destHeight: H * 2
-      });
-      setPoster(res.tempFilePath);
-    } catch (e: any) {
-      console.error('[poster]', e);
-      // 跨域图片会污染 canvas，canvasToTempFilePath 随即抛 SecurityError。
-      // 常见于存储切到 OSS 之后：封面/二维码变成跨域地址，而 OSS 桶没配 CORS。
-      const msg = String(e?.message || e?.errMsg || '');
-      const tainted = /security|taint|cross-origin/i.test(msg);
-      Taro.showToast({
-        title: tainted ? '图片跨域，无法生成海报' : '海报生成失败',
-        icon: 'none',
-        duration: 2500
-      });
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (!open) {
+      setPoster('');
+      return;
     }
-  };
+    let cancelled = false;
 
-  // 弹层打开时只绘制一次
-  if (open && !started) {
-    setStarted(true);
-    setTimeout(draw, 80);   // 延迟确保 canvas 已挂载
-  }
+    const run = async () => {
+      setLoading(true);
+      setPoster('');
+      try {
+        const qrUrl = await getQrcode(scene || '', 'pages/home/index');
+        if (cancelled) return;
+        // 画布刚挂载，等一帧再取节点（小程序的 selector query 尤其需要）
+        await new Promise((r) => setTimeout(r, 80));
+        if (cancelled) return;
+        const img = await renderPoster({
+          element: element || null, title, subtitle, cdkey, qrUrl
+        });
+        if (!cancelled) setPoster(img);
+      } catch (e: any) {
+        if (cancelled) return;
+        console.error('[poster]', e);
+        const msg = String(e?.message || e?.errMsg || '');
+        // 二维码跨域是最常见的失败原因：存储切到 OSS 而桶没配 CORS。
+        // 单独给一句能指向原因的提示，别笼统报「生成失败」。
+        const cors = /QR_LOAD_FAILED|security|taint|cross-origin/i.test(msg);
+        Taro.showToast({
+          title: cors ? '二维码跨域，无法生成海报' : '海报生成失败',
+          icon: 'none',
+          duration: 2500
+        });
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, scene, cdkey, title, subtitle, element]);
 
   const savePoster = () => {
     if (!poster) return;
     // H5 没有相册可写：Taro 的 saveImageToPhotosAlbum 在 H5 是 <a download> 合成点击，
-    // 微信内置浏览器会拦掉，但它**总是回调 success**——之前会提示「已保存到相册」而其实什么都没存。
+    // 微信内置浏览器会拦掉，但它**总是回调 success**——会提示「已保存」而其实什么都没存。
     // 浏览器里正确的做法是让用户长按图片调系统菜单保存。
     if (!isWeapp) {
       Taro.showToast({ title: '长按上方图片即可保存', icon: 'none', duration: 2500 });
@@ -197,26 +100,23 @@ export default function PosterShare({
     });
   };
 
-  const close = () => {
-    setPoster('');
-    setStarted(false);
-    onClose();
-  };
-
   if (!open) return null;
 
   return (
-    <View className="poster-mask" onClick={close}>
+    <View className="poster-mask" onClick={onClose}>
       <View className="poster" onClick={(e) => e.stopPropagation()}>
-        <View className="poster__close" onClick={close}>
+        <View className="poster__close" onClick={onClose}>
           <Icon name="x" size={28} color="#94a3b8" strokeWidth={2} />
         </View>
 
-        {/* 离屏画布：定位到屏幕外但保持可绘制 */}
+        {/* 离屏画布：定位到屏幕外但保持可绘制。
+            type="2d" 时取节点靠 id，不是 canvasId。 */}
         <Canvas
-          canvasId={CANVAS_ID}
+          type="2d"
+          id={POSTER_CANVAS_ID}
+          canvasId={POSTER_CANVAS_ID}
           className="poster__canvas"
-          style={{ width: `${W}px`, height: `${H}px` }}
+          style={{ width: `${POSTER_W}px`, height: `${POSTER_H}px` }}
         />
 
         {loading && (
