@@ -62,15 +62,13 @@
         <el-form-item label="播放量"><el-input v-model="form.plays" placeholder="12.4k" /></el-form-item>
         <el-form-item label="音频">
           <div class="up-row">
+            <!-- 音频用自定义上传：配了 OSS 就浏览器直传，不经服务器中转。
+                 曲目 WAV 母版可达数百 MB，走服务器要多占一份带宽/内存/磁盘，
+                 还会顶到 nginx 的 body 上限。 -->
             <el-upload
-              :action="UPLOAD_URL"
-              :headers="uploadHeaders"
               :show-file-list="false"
               accept="audio/*,.mp3,.m4a,.wav"
-              :before-upload="() => { audioUploading = true; audioPct = 0; }"
-              :on-progress="(e: any) => { audioPct = Math.round(e.percent || 0); }"
-              :on-success="onAudioSuccess"
-              :on-error="onUploadError"
+              :http-request="uploadAudio"
             >
               <el-button :icon="Upload" :loading="audioUploading" :disabled="audioUploading">
                 {{ audioUploading ? `上传中 ${audioPct}%` : '上传音频' }}
@@ -125,7 +123,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { Plus, Upload, Loading } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { listTracks, createTrack, updateTrack, deleteTrack, listElements, UPLOAD_URL } from '@/api';
+import { listTracks, createTrack, updateTrack, deleteTrack, listElements, UPLOAD_URL, ossSign } from '@/api';
 
 const uploadHeaders = computed(() => ({
   Authorization: `Bearer ${localStorage.getItem('admin_token')}`
@@ -147,15 +145,87 @@ const filterElement = ref('');
 const dialog = ref(false);
 const form = ref<any>({});
 
-function onAudioSuccess(res: any) {
-  audioUploading.value = false;
-  if (res?.code === 0) {
-    form.value.audio_url = res.data.url;
+/**
+ * 音频上传：优先 OSS 直传，否则回退服务器中转。
+ *
+ * 直传的意义在大文件上：曲目 WAV 母版可达数百 MB，经服务器要多占一份带宽、
+ * 一份内存、一份磁盘，还受 nginx client_max_body_size 约束；
+ * 直传由浏览器把文件送进 OSS，后端只签一张限定对象键与体积的准入条。
+ */
+async function uploadAudio(opt: any) {
+  const file: File = opt.file;
+  audioUploading.value = true;
+  audioPct.value = 0;
+  try {
+    let finalUrl = '';
+    let probeUrl = '';
+
+    let sign: any = null;
+    try {
+      sign = await ossSign(file.name);
+    } catch {
+      sign = null;   // 未配 OSS / 非 OSS provider：走服务器中转
+    }
+
+    if (sign?.provider === 'oss') {
+      const fd = new FormData();
+      fd.append('key', sign.key);
+      fd.append('policy', sign.policy);
+      fd.append('OSSAccessKeyId', sign.OSSAccessKeyId);
+      fd.append('signature', sign.signature);
+      fd.append('success_action_status', '200');
+      fd.append('file', file);
+      await xhrUpload(sign.host, fd, (p) => { audioPct.value = p; });
+      finalUrl = sign.url;
+      probeUrl = sign.url;
+    } else {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await xhrUpload(UPLOAD_URL, fd, (p) => { audioPct.value = p; }, {
+        Authorization: `Bearer ${localStorage.getItem('admin_token')}`
+      });
+      const body = JSON.parse(res);
+      if (body?.code !== 0) throw new Error(body?.msg || '上传失败');
+      finalUrl = body.data.url;
+      probeUrl = body.data.full_url || body.data.url;
+    }
+
+    form.value.audio_url = finalUrl;
     ElMessage.success('音频已上传');
-    readAudioDuration(res.data.full_url || res.data.url);
-  } else {
-    ElMessage.error(res?.msg || '上传失败');
+    readAudioDuration(probeUrl);
+    opt.onSuccess?.({});
+  } catch (e: any) {
+    ElMessage.error(e?.message || '上传失败');
+    opt.onError?.(e);
+  } finally {
+    audioUploading.value = false;
   }
+}
+
+// 用 XHR 而不是 fetch：需要 upload.onprogress 来显示百分比，
+// 大文件上传没有进度反馈体验很差（用户不知道是在传还是卡死了）。
+function xhrUpload(
+  url: string,
+  fd: FormData,
+  onProgress: (pct: number) => void,
+  headers?: Record<string, string>
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    if (headers) {
+      Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+    }
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.responseText);
+      else reject(new Error(`上传失败 HTTP ${xhr.status}`));
+    };
+    xhr.onerror = () => reject(new Error('网络错误，上传失败'));
+    xhr.send(fd);
+  });
 }
 
 // 读取音频时长，自动填 duration_sec 与 duration(MM:SS)

@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     admin_username: str = "admin"
     admin_password: str = "admin123"
 
+    # 后台单文件上传上限（MB）。曲目 WAV 母版可达数百 MB，
+    # 但**服务器中转**这条路径要与 nginx client_max_body_size 对齐；
+    # 更大的文件建议走 OSS 直传（/api/admin/upload/oss-sign），不受此限。
+    upload_max_mb: int = 500
+
     # CORS 允许的后台前端地址
     cors_origins: list[str] = [
         "http://localhost:5173",

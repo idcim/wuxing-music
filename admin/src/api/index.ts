@@ -85,3 +85,7 @@ export const listPermissions = () => req.get('/api/admin/permissions');
 
 // 上传接口地址（el-upload 直传用）
 export const UPLOAD_URL = '/api/admin/upload';
+// OSS 直传签名：返回 provider='oss' 时带 host/key/policy/signature；
+// 未配 OSS 则返回 { provider: 'local' }，调用方回退服务器中转。
+export const ossSign = (filename: string) =>
+  req.post('/api/admin/upload/oss-sign', { filename });
