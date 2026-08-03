@@ -20,10 +20,12 @@ const router = createRouter({
         { path: 'quiz', component: () => import('@/views/Quiz.vue'), meta: { title: '测评管理', perm: 'quiz:view' } },
         { path: 'orders', component: () => import('@/views/Orders.vue'), meta: { title: '订单管理', perm: 'orders:view' } },
         { path: 'users', component: () => import('@/views/Users.vue'), meta: { title: '用户', perm: 'users:view' } },
-        // 代理分成三页：meta.feature 与 menu.ts 的同名字段是同一道门
+        // 代理分成：meta.feature 与 menu.ts 的同名字段是同一道门。
+        // 「分成设置」刻意不带 feature——它是开启入口，挡住就没人能打开模块了。
         { path: 'agents', component: () => import('@/views/Agents.vue'), meta: { title: '代理管理', perm: 'agents:view', feature: 'agent' } },
         { path: 'commissions', component: () => import('@/views/Commissions.vue'), meta: { title: '分成明细', perm: 'agents:view', feature: 'agent' } },
         { path: 'withdrawals', component: () => import('@/views/Withdrawals.vue'), meta: { title: '提现审核', perm: 'agents:view', feature: 'agent' } },
+        { path: 'agent-settings', component: () => import('@/views/AgentPanel.vue'), meta: { title: '分成设置', perm: 'settings:view' } },
         { path: 'settings', component: () => import('@/views/SettingsCenter.vue'), meta: { title: '站点设置', perm: 'settings:view' } },
         { path: 'admins', component: () => import('@/views/Admins.vue'), meta: { title: '管理员', perm: 'admins:manage' } },
         { path: 'roles', component: () => import('@/views/Roles.vue'), meta: { title: '角色权限', perm: 'admins:manage' } },

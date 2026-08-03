@@ -13,7 +13,14 @@
           </el-avatar>
         </template>
       </el-table-column>
-      <el-table-column prop="nickname" label="昵称" min-width="110" />
+      <el-table-column label="昵称" min-width="140">
+        <template #default="{ row }">
+          {{ row.nickname }}
+          <el-tag v-if="row.agent" size="small" type="success" effect="plain" class="src">
+            代理 {{ row.agent.code }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="phone" label="手机号" width="130">
         <template #default="{ row }">{{ row.phone || '-' }}</template>
       </el-table-column>
@@ -33,10 +40,15 @@
       <el-table-column label="注册时间" width="170">
         <template #default="{ row }">{{ fmt(row.created_at) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="180" fixed="right">
+      <el-table-column label="操作" width="270" fixed="right">
         <template #default="{ row }">
           <el-button size="small" @click="openDetail(row)">详情</el-button>
           <el-button size="small" type="primary" @click="openGrant(row)">开通会员</el-button>
+          <el-button v-if="agentEnabled && !row.agent" size="small" type="success"
+            @click="openSetAgent(row)">设为代理</el-button>
+          <el-button v-else-if="agentEnabled" size="small" @click="$router.push('/agents')">
+            查看代理
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -61,6 +73,15 @@
         <el-descriptions-item label="测评体质">{{ detail.element || '未测评' }}</el-descriptions-item>
         <el-descriptions-item label="生日">{{ birthText(detail) }}</el-descriptions-item>
         <el-descriptions-item label="本命五行">{{ lunarText(detail.lunar) }}</el-descriptions-item>
+        <el-descriptions-item label="代理身份">
+          <el-tag v-if="detail.agent" size="small" type="success">
+            {{ detail.agent.name }} · {{ detail.agent.code }}
+          </el-tag>
+          <span v-else>-</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="推广来源">
+          {{ detail.referrer ? detail.referrer.name : '-' }}
+        </el-descriptions-item>
         <el-descriptions-item label="会员">{{ detail.membership_name }}</el-descriptions-item>
         <el-descriptions-item label="来源">{{ srcText(detail.membership_source) }}</el-descriptions-item>
         <el-descriptions-item label="到期">{{ fmt(detail.membership_expire_at) }}</el-descriptions-item>
@@ -93,6 +114,37 @@
       </template>
     </el-dialog>
 
+    <!-- 设为代理 -->
+    <el-dialog v-model="agentDialog" title="设为代理" width="460px">
+      <el-form label-width="90px">
+        <el-form-item label="用户">{{ current.nickname }}（ID {{ current.id }}）</el-form-item>
+        <el-form-item label="代理名称">
+          <el-input v-model="agentForm.name" :placeholder="current.nickname || '不填则用昵称'" />
+        </el-form-item>
+        <el-form-item label="类型">
+          <el-radio-group v-model="agentForm.type">
+            <el-radio label="promoter">网络推手</el-radio>
+            <el-radio label="store">实体店</el-radio>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+      <el-alert type="info" :closable="false" show-icon>
+        <template #title>
+          系统会自动生成推广码。
+          <template v-if="current.referrer">
+            该用户是<b>「{{ current.referrer.name }}」</b>推广来的，
+            将<b>自动成为其下级</b>，对方可从他的分成里抽成。
+          </template>
+          <template v-else>该用户没有推荐人，将作为独立代理（无上级）。</template>
+          <b>上下级关系一旦确定不可更改。</b>
+        </template>
+      </el-alert>
+      <template #footer>
+        <el-button @click="agentDialog = false">取消</el-button>
+        <el-button type="success" :loading="submitting" @click="onSetAgent">确认设为代理</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="grantDialog" title="开通 / 赠送会员" width="440px">
       <el-form label-width="90px">
         <el-form-item label="用户">{{ current.nickname }}（ID {{ current.id }}）</el-form-item>
@@ -122,7 +174,12 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
-import { listUsers, grantMembership, listPlans, getUser } from '@/api';
+import { listUsers, grantMembership, listPlans, getUser, setUserAsAgent } from '@/api';
+import { useAuthStore } from '@/stores/auth';
+
+const auth = useAuthStore();
+// 代理模块没开时，「设为代理」按钮不出现（后端也会 404）
+const agentEnabled = computed(() => auth.hasFeature('agent'));
 
 const rows = ref<any[]>([]);
 const total = ref(0);
@@ -141,6 +198,31 @@ const scoreList = computed(() =>
 async function openDetail(row: any) {
   detail.value = await getUser(row.id);
   detailDialog.value = true;
+}
+
+// ── 设为代理 ──
+const agentDialog = ref(false);
+const agentForm = reactive({ name: '', type: 'promoter' });
+
+async function openSetAgent(row: any) {
+  // 拉一次详情才知道他是谁推广来的（列表里没有 referrer），
+  // 好在弹窗里把「将成为谁的下级」讲清楚——这关系定了就不能改。
+  current.value = await getUser(row.id).catch(() => row);
+  agentForm.name = '';
+  agentForm.type = 'promoter';
+  agentDialog.value = true;
+}
+
+async function onSetAgent() {
+  submitting.value = true;
+  try {
+    const d = await setUserAsAgent(current.value.id, { ...agentForm });
+    ElMessage.success(`已设为代理，推广码 ${d.code}`);
+    agentDialog.value = false;
+    load();
+  } finally {
+    submitting.value = false;
+  }
 }
 
 function srcText(s?: string) {

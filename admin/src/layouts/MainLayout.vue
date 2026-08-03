@@ -7,6 +7,12 @@
         <el-menu-item v-for="item in mainNav" :key="item.path" :index="item.path">
           <el-icon><component :is="item.icon" /></el-icon><span>{{ item.title }}</span>
         </el-menu-item>
+        <el-sub-menu v-if="agentNav.length" index="agent">
+          <template #title><el-icon><Shop /></el-icon><span>代理分成</span></template>
+          <el-menu-item v-for="item in agentNav" :key="item.path" :index="item.path">
+            <el-icon><component :is="item.icon" /></el-icon><span>{{ item.title }}</span>
+          </el-menu-item>
+        </el-sub-menu>
         <el-sub-menu v-if="systemNav.length" index="system">
           <template #title><el-icon><Tools /></el-icon><span>系统管理</span></template>
           <el-menu-item v-for="item in systemNav" :key="item.path" :index="item.path">
@@ -43,7 +49,7 @@
 import { computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
-import { NAV_MAIN, NAV_SYSTEM } from '@/menu';
+import { NAV_MAIN, NAV_AGENT, NAV_SYSTEM } from '@/menu';
 
 const route = useRoute();
 const router = useRouter();
@@ -54,6 +60,8 @@ const auth = useAuthStore();
 const visible = (n: { perm: string; feature?: string }) =>
   auth.can(n.perm) && auth.hasFeature(n.feature);
 const mainNav = computed(() => NAV_MAIN.filter(visible));
+// 逐项过滤：模块关闭时这一组只剩「分成设置」，整组为空才隐藏
+const agentNav = computed(() => NAV_AGENT.filter(visible));
 const systemNav = computed(() => NAV_SYSTEM.filter(visible));
 
 onMounted(() => {

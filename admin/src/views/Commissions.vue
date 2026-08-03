@@ -11,6 +11,10 @@
         <el-option label="已到账" value="paid" />
         <el-option label="已作废" value="void" />
       </el-select>
+      <el-select v-model="filterLevel" placeholder="按层级筛选" clearable style="width: 140px" @change="reload">
+        <el-option label="直推" :value="1" />
+        <el-option label="下级抽成" :value="2" />
+      </el-select>
       <el-button :icon="Search" @click="reload">查询</el-button>
     </div>
 
@@ -22,8 +26,25 @@
       <el-table-column label="比例" width="90">
         <template #default="{ row }">{{ (Number(row.rate || 0) * 100).toFixed(1) }}%</template>
       </el-table-column>
-      <el-table-column label="分成" width="110">
-        <template #default="{ row }"><b>¥{{ money(row.amount) }}</b></template>
+      <el-table-column label="层级" width="150">
+        <template #default="{ row }">
+          <el-tag v-if="row.level === 2" size="small" type="warning" effect="plain">
+            下级抽成
+          </el-tag>
+          <el-tag v-else size="small" effect="plain">直推</el-tag>
+          <span v-if="row.level === 2 && row.sourceAgentName" class="muted src">
+            来自 {{ row.sourceAgentName }}
+          </span>
+        </template>
+      </el-table-column>
+      <el-table-column label="分成" width="170">
+        <template #default="{ row }">
+          <b>¥{{ money(row.amount) }}</b>
+          <!-- 直推被上级抽走过就把差额标出来，否则「为什么只拿到 15」没人解释得清 -->
+          <span v-if="row.level === 1 && row.baseAmount > row.amount" class="muted src">
+            (基数 {{ money(row.baseAmount) }})
+          </span>
+        </template>
       </el-table-column>
       <el-table-column label="状态" width="180">
         <template #default="{ row }">
@@ -66,6 +87,7 @@ const size = 20;
 const loading = ref(false);
 const filterAgent = ref<number | ''>('');
 const filterStatus = ref('');
+const filterLevel = ref<number | ''>('');
 
 const money = (v: any) => Number(v || 0).toFixed(2);
 const fmt = (s: string) => (s ? s.replace('T', ' ').slice(0, 16) : '—');
@@ -95,6 +117,7 @@ async function reload() {
       page: page.value, size,
       agent_id: filterAgent.value || 0,
       status: filterStatus.value,
+      level: filterLevel.value || 0,
     });
     rows.value = d.items || [];
     total.value = d.total || 0;
@@ -128,5 +151,12 @@ onMounted(async () => {
 }
 .note {
   margin-top: 16px;
+}
+.muted {
+  color: #909399;
+}
+.src {
+  margin-left: 6px;
+  font-size: 12px;
 }
 </style>

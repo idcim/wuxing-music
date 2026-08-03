@@ -14,6 +14,8 @@ export const getDashboard = () => req.get('/api/admin/dashboard');
 export const listUsers = (params: any) => req.get('/api/admin/users', { params });
 export const getUser = (id: number) => req.get(`/api/admin/users/${id}`);
 export const grantMembership = (id: number, data: any) => req.post(`/api/admin/users/${id}/grant`, data);
+// 把用户设为代理（上级按其推广来源自动落定，不可更改）
+export const setUserAsAgent = (id: number, data: any) => req.post(`/api/admin/users/${id}/agent`, data);
 
 // ── 订单 ──
 export const listOrders = (params: any) => req.get('/api/admin/orders', { params });
@@ -83,6 +85,8 @@ export const createAgent = (data: any) => req.post('/api/admin/agents', data);
 export const updateAgent = (id: number, data: any) => req.put(`/api/admin/agents/${id}`, data);
 export const toggleAgent = (id: number) => req.post(`/api/admin/agents/${id}/disable`);
 export const agentsSummary = () => req.get('/api/admin/agents-summary');
+// 代理的下属：直接下级代理 + 名下用户（只看一层）
+export const agentDownline = (id: number) => req.get(`/api/admin/agents/${id}/downline`);
 
 export const listCommissions = (params: any) => req.get('/api/admin/commissions', { params });
 

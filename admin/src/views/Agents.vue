@@ -35,12 +35,33 @@
           <span class="code" @click="copy(row.code)" title="点击复制">{{ row.code }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="分成比例" width="120">
+      <el-table-column label="一级比例" width="120">
         <template #default="{ row }">
           <span v-if="row.rate === null || row.rate === undefined" class="muted">
             {{ pct(row.effectiveRate) }}（默认）
           </span>
           <span v-else>{{ pct(row.rate) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="二级抽成" width="120">
+        <template #default="{ row }">
+          <span v-if="row.rate2 === null || row.rate2 === undefined" class="muted">
+            {{ pct(row.effectiveRate2) }}（默认）
+          </span>
+          <span v-else>{{ pct(row.rate2) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="上级" width="130">
+        <template #default="{ row }">
+          <span v-if="row.parentName">{{ row.parentName }}</span>
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="下属" width="120">
+        <template #default="{ row }">
+          <el-link type="primary" :underline="false" @click="openDownline(row)">
+            {{ row.subAgentCount || 0 }} 代理 / {{ row.userCount || 0 }} 用户
+          </el-link>
         </template>
       </el-table-column>
       <el-table-column label="可提现" width="110">
@@ -84,14 +105,38 @@
             <el-radio label="promoter">网络推手</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="分成比例">
+        <el-form-item label="一级比例">
           <el-input-number v-model="ratePct" :min="0" :max="100" :step="1" :precision="1" />
           <span class="unit">%</span>
           <el-checkbox v-model="useDefaultRate" style="margin-left: 12px">跟随默认</el-checkbox>
           <div class="tip">
-            勾选「跟随默认」即随设置里的全局比例变动；填 0 表示不分成，两者不同。
-            改比例<b>只影响之后的新订单</b>，历史分成按成交时点快照，不回溯。
+            他作为<b>直推人</b>时按订单金额提的比例。勾「跟随默认」即随全局设置变动；
+            填 0 表示不分成，两者不同。改比例<b>只影响之后的新订单</b>，历史按成交时点快照，不回溯。
           </div>
+        </el-form-item>
+        <el-form-item label="二级抽成">
+          <el-input-number v-model="rate2Pct" :min="0" :max="100" :step="1" :precision="1" />
+          <span class="unit">%</span>
+          <el-checkbox v-model="useDefaultRate2" style="margin-left: 12px">跟随默认</el-checkbox>
+          <div class="tip">
+            他作为<b>上级</b>时，能从下级那份分成里抽走的占比（基数是下级的分成，不是订单额）。
+            平台总支出不变——抽的是下级的钱。
+          </div>
+        </el-form-item>
+        <el-form-item label="上级代理">
+          <template v-if="form.parentName">
+            <el-tag type="warning" effect="plain">{{ form.parentName }}</el-tag>
+            <div class="tip">上下级关系一旦确定<b>不可更改</b>，改指向等于把别人的下级抢走，历史分成也会讲不清。</div>
+          </template>
+          <template v-else>
+            <el-select v-model="parentIdSel" clearable filterable placeholder="无上级（独立代理）" style="width: 240px">
+              <el-option v-for="a in parentOptions" :key="a.id" :label="`${a.name}（${a.code}）`" :value="a.id" />
+            </el-select>
+            <div class="tip">
+              通常不用手填——用「用户」页的「设为代理」创建时会按推广来源自动落定。
+              此处仅用于补录，<b>选定后不可更改</b>。
+            </div>
+          </template>
         </el-form-item>
         <el-form-item label="手机号">
           <el-input v-model="form.phone" placeholder="用于联系与核对" />
@@ -120,6 +165,45 @@
         <el-button type="primary" :loading="saving" @click="onSave">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 下属 -->
+    <el-drawer v-model="downlineDrawer" :title="`${downlineOf.name || ''} 的下属`" size="640px">
+      <el-alert type="info" :closable="false" class="dl-note">
+        <template #title>
+          只显示<b>直接</b>下级。下级的下级与他无关——计酬封顶两级，第三层拿不到钱。
+        </template>
+      </el-alert>
+
+      <div class="dl-title">下级代理（{{ downline.subAgentCount || 0 }}）</div>
+      <el-table v-if="downline.subAgents && downline.subAgents.length" :data="downline.subAgents" size="small" border>
+        <el-table-column prop="name" label="代理" min-width="120" />
+        <el-table-column prop="code" label="推广码" width="100" />
+        <el-table-column label="类型" width="90">
+          <template #default="{ row }">{{ row.type === 'store' ? '实体店' : '网络推手' }}</template>
+        </el-table-column>
+        <el-table-column label="名下用户" width="90">
+          <template #default="{ row }">{{ row.userCount }}</template>
+        </el-table-column>
+        <el-table-column label="为我带来" width="110">
+          <template #default="{ row }"><b>¥{{ money(row.contributed) }}</b></template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-else description="暂无下级代理" :image-size="60" />
+
+      <div class="dl-title">名下用户（{{ downline.userCount || 0 }}）</div>
+      <el-table v-if="downline.users && downline.users.length" :data="downline.users" size="small" border max-height="320">
+        <el-table-column prop="id" label="ID" width="70" />
+        <el-table-column prop="nickname" label="昵称" min-width="120" />
+        <el-table-column label="手机号" width="130">
+          <template #default="{ row }">{{ row.phone || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="membershipName" label="会员" width="90" />
+        <el-table-column label="绑定时间" width="160">
+          <template #default="{ row }">{{ fmtTime(row.boundAt) }}</template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-else description="暂无名下用户" :image-size="60" />
+    </el-drawer>
   </div>
 </template>
 
@@ -144,16 +228,34 @@ const filterStatus = ref('');
 const form = reactive<any>({
   id: 0, name: '', type: 'store', phone: '', real_name: '',
   contact: '', remark: '', commission_rate: null, status: 'active', user_id: null,
+  parentName: '',
 });
 
 // 比例在界面上用百分数，存的是小数；「跟随默认」= commission_rate 为 null
 const ratePct = ref(20);
 const useDefaultRate = ref(true);
+const rate2Pct = ref(25);
+const useDefaultRate2 = ref(true);
 // el-input-number 不接受 null，用 0 表示未关联
 const userIdNum = ref(0);
+// 上级只在为空时可选，选项里排除自己
+const parentIdSel = ref<number | ''>('');
+const parentOptions = computed(() => rows.value.filter((a) => a.id !== form.id && a.status === 'active'));
+
+const downlineDrawer = ref(false);
+const downlineOf = ref<any>({});
+const downline = ref<any>({});
 
 const money = (v: any) => Number(v || 0).toFixed(2);
 const pct = (v: any) => `${(Number(v || 0) * 100).toFixed(1)}%`;
+const fmtTime = (s: string) => (s ? s.replace('T', ' ').slice(0, 16) : '-');
+
+async function openDownline(row: any) {
+  downlineOf.value = row;
+  downline.value = {};
+  downlineDrawer.value = true;
+  downline.value = await api.agentDownline(row.id);
+}
 
 async function reload() {
   loading.value = true;
@@ -179,10 +281,14 @@ function openCreate() {
   Object.assign(form, {
     id: 0, name: '', type: 'store', phone: '', real_name: '',
     contact: '', remark: '', commission_rate: null, status: 'active', user_id: null,
+    parentName: '',
   });
   useDefaultRate.value = true;
   ratePct.value = 20;
+  useDefaultRate2.value = true;
+  rate2Pct.value = 25;
   userIdNum.value = 0;
+  parentIdSel.value = '';
   dialog.value = true;
 }
 
@@ -191,10 +297,14 @@ function openEdit(row: any) {
     id: row.id, name: row.name, type: row.type, phone: row.phone || '',
     real_name: row.realName || '', contact: row.contact || '', remark: row.remark || '',
     commission_rate: row.rate, status: row.status, user_id: row.userId,
+    parentName: row.parentName || '',
   });
   useDefaultRate.value = row.rate === null || row.rate === undefined;
   ratePct.value = Number(((row.rate ?? row.effectiveRate ?? 0.2) * 100).toFixed(1));
+  useDefaultRate2.value = row.rate2 === null || row.rate2 === undefined;
+  rate2Pct.value = Number(((row.rate2 ?? row.effectiveRate2 ?? 0.25) * 100).toFixed(1));
   userIdNum.value = row.userId || 0;
+  parentIdSel.value = '';
   dialog.value = true;
 }
 
@@ -206,8 +316,11 @@ const payload = computed(() => ({
   contact: form.contact,
   remark: form.remark,
   commission_rate: useDefaultRate.value ? null : Number((ratePct.value / 100).toFixed(4)),
+  commission_rate2: useDefaultRate2.value ? null : Number((rate2Pct.value / 100).toFixed(4)),
   status: form.status,
   user_id: userIdNum.value > 0 ? userIdNum.value : null,
+  // 后端只在当前为空时接受它，已有上级一律忽略
+  parent_id: parentIdSel.value || null,
 }));
 
 async function onSave() {
@@ -292,5 +405,13 @@ onMounted(reload);
   color: #909399;
   line-height: 1.6;
   margin-top: 4px;
+}
+.dl-note {
+  margin-bottom: 16px;
+}
+.dl-title {
+  font-size: 14px;
+  font-weight: 500;
+  margin: 18px 0 10px;
 }
 </style>

@@ -19,11 +19,21 @@ export const NAV_MAIN: NavItem[] = [
   { path: '/quiz', title: '测评管理', perm: 'quiz:view', icon: 'EditPen' },
   { path: '/orders', title: '订单管理', perm: 'orders:view', icon: 'List' },
   { path: '/users', title: '用户', perm: 'users:view', icon: 'User' },
-  // 代理分成：默认关闭，开启前整组都不出现（设置中心里的「代理分成」面板常驻，那是开启入口）
+  { path: '/settings', title: '站点设置', perm: 'settings:view', icon: 'Setting' }
+];
+
+/** 代理分成：独立子菜单，所有相关内容都在这一组里。
+ *
+ *  门禁是**逐项**而不是整组——前三项要模块已开启，「分成设置」常驻。
+ *  这样关闭状态下菜单里只剩「分成设置」：既没把功能摊开，又不会让人找不到开关
+ *  （开关此前藏在 设置中心 的 tab 里，实际用起来找不到）。
+ *  组内一项都不可见时（无权限），整组自动隐藏。 */
+export const NAV_AGENT: NavItem[] = [
   { path: '/agents', title: '代理管理', perm: 'agents:view', icon: 'Shop', feature: 'agent' },
   { path: '/commissions', title: '分成明细', perm: 'agents:view', icon: 'Money', feature: 'agent' },
   { path: '/withdrawals', title: '提现审核', perm: 'agents:view', icon: 'Wallet', feature: 'agent' },
-  { path: '/settings', title: '站点设置', perm: 'settings:view', icon: 'Setting' }
+  // 不带 feature：这是整个模块唯一的开启入口，挡住就没人能打开了
+  { path: '/agent-settings', title: '分成设置', perm: 'settings:view', icon: 'SetUp' }
 ];
 
 export const NAV_SYSTEM: NavItem[] = [
@@ -31,4 +41,4 @@ export const NAV_SYSTEM: NavItem[] = [
   { path: '/roles', title: '角色权限', perm: 'admins:manage', icon: 'Key' }
 ];
 
-export const NAV_ALL: NavItem[] = [...NAV_MAIN, ...NAV_SYSTEM];
+export const NAV_ALL: NavItem[] = [...NAV_MAIN, ...NAV_AGENT, ...NAV_SYSTEM];

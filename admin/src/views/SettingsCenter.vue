@@ -18,12 +18,9 @@
     <el-tab-pane label="支付设置" name="pay">
       <Settings v-if="loaded.pay" />
     </el-tab-pane>
-    <!-- 代理分成：这个面板**常驻**，它是整个模块唯一的开启入口，
-         跟着 feature 开关一起隐藏就没人能把模块打开了 -->
-    <el-tab-pane label="代理分成" name="agent">
-      <AgentPanel v-if="loaded.agent" />
-    </el-tab-pane>
   </el-tabs>
+  <!-- 代理分成的设置已移到 侧边栏「代理分成 → 分成设置」（/agent-settings），
+       与代理管理、分成明细、提现审核收在同一个独立菜单里，不在这儿开第二个入口 -->
 </template>
 
 <script setup lang="ts">
@@ -34,13 +31,10 @@ import OaPanel from './OaPanel.vue';
 import SmsPanel from './SmsPanel.vue';
 import Storage from './Storage.vue';
 import Settings from './Settings.vue';
-import AgentPanel from './AgentPanel.vue';
 
 const tab = ref('site');
 // 懒加载各 tab：切到时才挂载，避免一次性发起全部请求
-const loaded = reactive({
-  site: true, mp: false, oa: false, sms: false, storage: false, pay: false, agent: false,
-});
+const loaded = reactive({ site: true, mp: false, oa: false, sms: false, storage: false, pay: false });
 
 watch(tab, (t) => {
   if (t === 'mp') loaded.mp = true;
@@ -48,7 +42,6 @@ watch(tab, (t) => {
   if (t === 'sms') loaded.sms = true;
   if (t === 'storage') loaded.storage = true;
   if (t === 'pay') loaded.pay = true;
-  if (t === 'agent') loaded.agent = true;
 });
 </script>
 
