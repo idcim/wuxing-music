@@ -1,8 +1,12 @@
 import req from './request';
 
 // ── 认证 ──
-export const login = (username: string, password: string) =>
-  req.post('/api/admin/login', { username, password });
+export const login = (username: string, password: string, captchaId: string, captchaCode: string) =>
+  req.post('/api/admin/login', {
+    username, password, captcha_id: captchaId, captcha_code: captchaCode
+  });
+// 登录图形验证码（免鉴权）；一次性消费，验过即作废
+export const getCaptcha = () => req.get('/api/admin/captcha');
 export const getMe = () => req.get('/api/admin/me');
 export const getDashboard = () => req.get('/api/admin/dashboard');
 

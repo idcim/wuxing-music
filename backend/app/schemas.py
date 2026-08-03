@@ -19,6 +19,8 @@ def ok(data: Any = None, msg: str = "ok") -> dict:
 class LoginIn(BaseModel):
     username: str
     password: str
+    captcha_id: str = ""      # GET /api/admin/captcha 返回的 id
+    captcha_code: str = ""    # 用户填的 4 位验证码
 
 
 class TokenOut(BaseModel):
