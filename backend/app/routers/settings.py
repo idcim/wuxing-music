@@ -4,10 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app import storage
+from app import agent_service, storage
 from app.database import get_db
 from app.models import Admin, Setting
 from app.schemas import (
+    AgentSettingIn,
     MpSettingIn,
     OaSettingIn,
     PaySettingIn,
@@ -26,6 +27,7 @@ STORAGE_KEY = "storage_config"
 MP_KEY = "mp_config"
 OA_KEY = "oa_config"
 SMS_KEY = "sms_config"
+AGENT_KEY = agent_service.AGENT_KEY
 
 # 敏感字段：不回传明文，仅返回 {field}_set 表示是否已配置
 PAY_SECRETS = {"wx_api_key", "wx_key_pem", "wx_cert_pem"}
@@ -97,6 +99,27 @@ def update_site(
     _: Admin = Depends(require_perm("settings:edit")),
 ):
     _save_setting(db, SITE_KEY, body.model_dump())
+    return ok({"saved": True})
+
+
+# ── 代理分成设置 ──
+# 注意：这两个接口**不做 require_enabled 门禁**——它们是唯一的开启入口，
+# 挡住就没人能把模块打开了。其余 /api/admin/agents/* 一律要求已开启。
+@router.get("/agent")
+def get_agent(db: Session = Depends(get_db), _: Admin = Depends(require_perm("settings:view"))):
+    return ok(agent_service.agent_cfg(db))
+
+
+@router.put("/agent")
+def update_agent(
+    body: AgentSettingIn,
+    db: Session = Depends(get_db),
+    _: Admin = Depends(require_perm("settings:edit")),
+):
+    data = body.model_dump()
+    if data.get("payout_mode") not in ("manual", "wxpay"):
+        raise HTTPException(status_code=400, detail="打款方式不合法")
+    _save_setting(db, AGENT_KEY, data)
     return ok({"saved": True})
 
 

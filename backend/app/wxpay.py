@@ -165,6 +165,61 @@ def refund(
     return resp.json()
 
 
+def transfer(
+    cfg: dict,
+    *,
+    openid: str,
+    out_bill_no: str,
+    amount_fen: int,
+    remark: str,
+    app_id: Optional[str] = None,
+    scene_id: str = "1000",
+) -> dict:
+    """商家转账到零钱（v3 /fund-app/mch-transfer/transfer-bills）——代理提现打款。
+
+    ⚠️ 这条路径至今**没有对真实商户号验证过**（本项目商户号尚未上线联调），
+    所以 agent_config.payout_mode 默认是 manual（线下打款 + 后台标记）。
+    切到 wxpay 之前，以下几件事都得先办妥，任何一条缺失都会在这里报错而不是静默失败：
+
+    - 商户号需**单独开通「商家转账」产品权限**，光有商户号不够；
+    - openid 必须属于发起转账所用的 appid（小程序 openid 与公众号 oa_openid 不通用）；
+    - 新版商家转账**需要收款人在微信里确认收款**，不是静默到账，超时未确认资金退回；
+    - 超过一定额度需传收款人真实姓名（要用微信平台公钥加密，本函数**未实现**，
+      因此大额转账会被微信拒绝——届时请走 manual 或补齐加密）；
+    - 有单笔/单日限额与频率限制。
+
+    out_bill_no 作幂等键：同一单号重复提交微信只会受理一次。
+    """
+    _require(cfg, "wx_app_id", "wx_mch_id", "wx_key_pem", "wx_cert_serial")
+    if not openid:
+        raise WxPayError("代理未关联微信账号（openid 为空），无法转账")
+
+    url_path = "/v3/fund-app/mch-transfer/transfer-bills"
+    payload = {
+        "appid": app_id or cfg["wx_app_id"],
+        "out_bill_no": out_bill_no,
+        "transfer_scene_id": scene_id,
+        "openid": openid,
+        "transfer_amount": amount_fen,
+        "transfer_remark": (remark or "分成提现")[:32],
+    }
+    body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    headers = {
+        "Authorization": _authorization(cfg, "POST", url_path, body),
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+    try:
+        resp = httpx.post(
+            f"{WXPAY_BASE}{url_path}", content=body.encode("utf-8"), headers=headers, timeout=20
+        )
+    except httpx.HTTPError as e:
+        raise WxPayError(f"调用微信转账失败：{e}")
+    if resp.status_code not in (200, 201):
+        raise WxPayError(f"微信转账返回 {resp.status_code}：{resp.text}")
+    return resp.json()
+
+
 def decrypt_callback_resource(api_v3_key: str, resource: dict) -> dict:
     """AEAD_AES_256_GCM 解密回调 resource，返回明文 dict。"""
     if not api_v3_key:

@@ -168,6 +168,15 @@ class SmsSettingIn(BaseModel):
     enabled: bool = False
 
 
+# ── 代理分成设置 ──
+class AgentSettingIn(BaseModel):
+    enabled: bool = False              # 总开关，默认关（关闭时连分成记录都不产生）
+    default_rate: float = Field(default=0.2, ge=0, le=1)
+    freeze_days: int = Field(default=7, ge=0, le=365)
+    min_withdraw: float = Field(default=10, ge=0)
+    payout_mode: str = "manual"        # manual 线下打款 | wxpay 微信商家转账
+
+
 # ── 退款 ──
 class RefundIn(BaseModel):
     reason: str = ""

@@ -15,6 +15,7 @@ from app.config import DEFAULT_JWT_SECRET, settings
 from app.database import Base, SessionLocal, engine
 from app.routers import (
     admins,
+    agents,
     auth,
     cdkeys,
     elements,
@@ -160,6 +161,7 @@ app.include_router(elements.router)
 app.include_router(settings_router.router)
 app.include_router(users.router)
 app.include_router(orders.router)
+app.include_router(agents.router)
 app.include_router(upload.router)
 app.include_router(site.router)
 app.include_router(mp.router)

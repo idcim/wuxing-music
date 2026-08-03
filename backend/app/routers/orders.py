@@ -5,7 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app import wxpay
+from app import agent_service, wxpay
 from app.database import get_db
 from app.models import Admin, Order, Setting, User
 from app.schemas import RefundIn, ok
@@ -160,6 +160,9 @@ def confirm_refund(
         user.membership_name = "听闻"
         user.membership_expire_at = None
         user.membership_source = ""
+
+    # 代理分成冲正：还没提走的直接作废；已提现的钱追不回来，标记 clawback 由人工追讨
+    agent_service.void_commission(db, o, reason=f"订单退款（{admin.username}）")
 
     db.commit()
     db.refresh(o)

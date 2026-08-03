@@ -130,6 +130,10 @@ class User(Base):
     # 出生钟点 0-23（可空）。存钟点而非「时辰序号」：子时跨 23:00-00:59 两个自然日，
     # 存序号会丢掉「到底是哪一天的子时」这个信息。
     birth_hour: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 代理归因：首次扫码永久绑定，一旦有值不再改绑（见 agent_service.bind_agent）。
+    # 不建独立绑定表——「永久且唯一」的关系放两列就够，多一张表反而要处理"哪条才算数"。
+    agent_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    agent_bound_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     membership_type: Mapped[str] = mapped_column(String(16), default="free")
     membership_name: Mapped[str] = mapped_column(String(32), default="听闻")
     membership_expire_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -217,6 +221,80 @@ class PlayHistory(Base):
     user_id: Mapped[int] = mapped_column(Integer, index=True)
     track_id: Mapped[int] = mapped_column(Integer, index=True)
     played_at: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)
+
+
+class Agent(Base):
+    """渠道代理：实体店（店内印刷推广码）/ 网络推手（分享海报链接）。
+
+    只做一级分销——「代理 → 用户」一层到底。刻意不留 parent_agent_id：
+    微信对三级及以上分销是封号级红线，模型上留了口子日后必然有人接。
+    """
+
+    __tablename__ = "agent"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # 推广码：进小程序码 scene / H5 链接的 ?a=，字符集同 CDKEY（去掉易混的 0/O/1/I）
+    code: Mapped[str] = mapped_column(String(16), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(64))
+    type: Mapped[str] = mapped_column(String(16), default="store")  # store 实体店 | promoter 网络推手
+    # 关联的用户账号：代理中心据此认人。可空表示还没绑账号（后台先建档、代理稍后注册）
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    phone: Mapped[str] = mapped_column(String(20), default="", index=True)
+    real_name: Mapped[str] = mapped_column(String(64), default="")   # 打款收款人姓名校验用
+    contact: Mapped[str] = mapped_column(String(255), default="")
+    remark: Mapped[str] = mapped_column(String(255), default="")
+    # None 表示用全局默认比例（agent_config.default_rate）——这就是「可覆盖」的实现，
+    # 用 0 表示"不分成"，因此不能拿 0 当"未设置"的哨兵。
+    commission_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="active", index=True)  # active | disabled
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class Commission(Base):
+    """一笔成交产生的分成。金额与比例都是成交时点的快照——
+    事后改代理比例不影响历史记录，否则对账永远对不平。"""
+
+    __tablename__ = "commission"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    agent_id: Mapped[int] = mapped_column(Integer, index=True)
+    # 唯一：支付回调可能重复投递，靠这个约束保证一单只记一次账
+    order_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, index=True)
+    order_amount: Mapped[float] = mapped_column(Float, default=0)
+    rate: Mapped[float] = mapped_column(Float, default=0)
+    amount: Mapped[float] = mapped_column(Float, default=0)
+    # pending(冻结中) → available(可提现) → withdrawing → paid；void = 退款冲正
+    status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    # 冻结到期时间。不设定时任务解冻：查询余额时按 available_at <= now 判定，
+    # 少一个 cron 就少一处会悄悄停掉的组件。
+    available_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    withdrawal_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    # 分成已付款之后订单才退款：钱追不回来，标记出来由人工向代理追讨
+    clawback: Mapped[bool] = mapped_column(Boolean, default=False)
+    void_reason: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class Withdrawal(Base):
+    """提现单：代理申请 → 后台审核 → 打款（线下标记 / 微信商家转账）。"""
+
+    __tablename__ = "withdrawal"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    agent_id: Mapped[int] = mapped_column(Integer, index=True)
+    amount: Mapped[float] = mapped_column(Float, default=0)
+    # pending(待审核) → approved(待打款) → paid；rejected / failed
+    status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    payout_mode: Mapped[str] = mapped_column(String(16), default="manual")  # manual | wxpay
+    transfer_no: Mapped[str] = mapped_column(String(64), default="")   # 商户转账单号（幂等键）
+    wx_transfer_id: Mapped[str] = mapped_column(String(64), default="")
+    fail_reason: Mapped[str] = mapped_column(String(255), default="")
+    reviewed_by: Mapped[str] = mapped_column(String(64), default="")
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    remark: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
 
 class SmsCode(Base):

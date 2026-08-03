@@ -17,11 +17,25 @@ from jose import JWTError, jwt
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app import ratelimit, sms, storage, wxpay
+from app import agent_service, ratelimit, sms, storage, wxpay
 from app.config import settings
 from app.database import get_db
 from app.lunar import lunar_info
-from app.models import Cdkey, CdkeyRedeemLog, Element, Order, PlayHistory, Plan, Setting, SmsCode, Track, User
+from app.models import (
+    Agent,
+    Cdkey,
+    CdkeyRedeemLog,
+    Commission,
+    Element,
+    Order,
+    PlayHistory,
+    Plan,
+    Setting,
+    SmsCode,
+    Track,
+    User,
+    Withdrawal,
+)
 from app.security import hash_password, verify_password
 
 logger = logging.getLogger("uvicorn.error")
@@ -1015,6 +1029,8 @@ def mp_create_order(
         _grant_membership(db, user, plan)
         order.status = "paid"
         order.paid_at = datetime.utcnow()
+        # 分成与「订单转已支付」同一次提交，避免出现付了款却没记账的中间态
+        agent_service.record_commission(db, order)
         db.commit()
         return ok({
             "dev_opened": True,
@@ -1095,6 +1111,9 @@ async def mp_pay_callback(request: Request, db: Session = Depends(get_db)):
     order.status = "paid"
     order.transaction_id = data.get("transaction_id", "")
     order.paid_at = datetime.utcnow()
+    # 代理分成：模块关闭 / 用户无绑定代理时内部直接 return，不落库。
+    # 重复回调由 commission.order_id 的唯一约束兜住，不会重复记账。
+    agent_service.record_commission(db, order)
     db.commit()
     return JSONResponse(content={"code": "SUCCESS", "message": "成功"})
 
@@ -1472,3 +1491,192 @@ def mp_qrcode_url(
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return ok(result)
+
+
+# ── 代理分成（默认整体关闭：未开启时下列接口一律 404）──
+#
+# 归因是「首次扫码永久绑定」：推广码经小程序码 scene / H5 链接的 ?a= 带进来，
+# 前端先存本地，登录后再调 /agent/bind。已绑定的不改绑。
+
+
+class AgentBindIn(BaseModel):
+    code: str = ""
+
+
+@router.post("/agent/bind")
+def mp_agent_bind(
+    body: AgentBindIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """绑定推广码。已绑定 / 码无效 / 绑自己都返回 bound=false，由前端静默处理。
+
+    只有 bound=true 才值得提示用户；其余情况弹窗都是噪音。
+    """
+    agent_service.require_enabled(db)
+    return ok(agent_service.bind_agent(db, user, body.code))
+
+
+@router.get("/agent/me")
+def mp_agent_me(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """代理中心首屏：身份 + 推广码 + 余额 + 本月业绩。
+
+    非代理用户返回 isAgent=false，前端据此不渲染入口——
+    与「模块未开启时 404」共同保证：普通用户看不到任何痕迹。
+    """
+    cfg = agent_service.require_enabled(db)
+    agent = agent_service.agent_of_user(db, user)
+    if not agent:
+        return ok({"isAgent": False})
+
+    # 本月业绩：按自然月起点算，与代理对账的直觉一致
+    now = datetime.utcnow()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    month_rows = (
+        db.query(Commission)
+        .filter(
+            Commission.agent_id == agent.id,
+            Commission.created_at >= month_start,
+            Commission.status != "void",
+        )
+        .all()
+    )
+    return ok({
+        "isAgent": True,
+        "agent": agent_service.agent_dict(agent, cfg),
+        "balance": agent_service.balance_of(db, agent.id),
+        "month": {
+            "count": len(month_rows),
+            "amount": round(sum(float(r.amount or 0) for r in month_rows), 2),
+            "gmv": round(sum(float(r.order_amount or 0) for r in month_rows), 2),
+        },
+        "minWithdraw": float(cfg.get("min_withdraw") or 0),
+        "freezeDays": int(cfg.get("freeze_days") or 0),
+    })
+
+
+def _require_agent(db: Session, user: User) -> Agent:
+    agent = agent_service.agent_of_user(db, user)
+    if not agent:
+        raise HTTPException(status_code=403, detail="您还不是代理")
+    return agent
+
+
+@router.get("/agent/commissions")
+def mp_agent_commissions(
+    page: int = 1,
+    size: int = 20,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """分成明细。只回自己的，且不暴露买家身份（隐私）。"""
+    agent_service.require_enabled(db)
+    agent = _require_agent(db, user)
+    size = max(1, min(size, 50))
+    q = db.query(Commission).filter(Commission.agent_id == agent.id)
+    total = q.count()
+    rows = (
+        q.order_by(Commission.created_at.desc())
+        .offset((max(page, 1) - 1) * size)
+        .limit(size)
+        .all()
+    )
+    now = datetime.utcnow()
+    return ok({
+        "total": total,
+        "items": [{
+            "id": r.id,
+            "amount": r.amount,
+            "orderAmount": r.order_amount,
+            "rate": r.rate,
+            # pending 但已过冻结期，对代理而言就是「可提现」，别显示成冻结中
+            "status": "available" if (
+                r.status == "pending" and r.available_at and r.available_at <= now
+            ) else r.status,
+            "availableAt": r.available_at.isoformat() if r.available_at else None,
+            "createdAt": r.created_at.isoformat() if r.created_at else None,
+        } for r in rows],
+    })
+
+
+class WithdrawIn(BaseModel):
+    amount: float
+
+
+@router.post("/agent/withdraw")
+def mp_agent_withdraw(
+    body: WithdrawIn,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """发起提现。真出钱的入口，校验从严：
+
+    金额一律以服务端重算的余额为准（绝不信前端），同一代理同时只允许一笔在途。
+    """
+    cfg = agent_service.require_enabled(db)
+    agent = _require_agent(db, user)
+
+    ip = ratelimit.client_ip(request)
+    if ip and ratelimit.fail_count(f"withdraw:{ip}", 3600) >= 20:
+        raise HTTPException(status_code=429, detail="操作过于频繁，请稍后再试")
+
+    amount = round(float(body.amount or 0), 2)
+    min_withdraw = float(cfg.get("min_withdraw") or 0)
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="提现金额不合法")
+    if amount < min_withdraw:
+        raise HTTPException(status_code=400, detail=f"最低提现 {min_withdraw:.2f} 元")
+    if agent_service.has_open_withdrawal(db, agent.id):
+        raise HTTPException(status_code=400, detail="已有提现在处理中，请等待完成")
+
+    picked = agent_service.pick_for_withdraw(db, agent.id, amount)
+    if not picked:
+        raise HTTPException(status_code=400, detail="可提现余额不足")
+
+    # 按整条分成记录结算，实际金额可能略高于申请额——四舍五入到分不拆记录，
+    # 拆记录会让明细与提现单对不上，代理更难核对。
+    real_amount = round(sum(float(r.amount or 0) for r in picked), 2)
+    wd = Withdrawal(
+        agent_id=agent.id,
+        amount=real_amount,
+        status="pending",
+        payout_mode=str(cfg.get("payout_mode") or "manual"),
+    )
+    db.add(wd)
+    db.flush()
+    for r in picked:
+        r.status = "withdrawing"
+        r.withdrawal_id = wd.id
+    db.commit()
+    if ip:
+        ratelimit.record_fail(f"withdraw:{ip}")
+    return ok({"id": wd.id, "amount": real_amount, "status": wd.status})
+
+
+@router.get("/agent/withdrawals")
+def mp_agent_withdrawals(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """我的提现记录（最近 30 条）。"""
+    agent_service.require_enabled(db)
+    agent = _require_agent(db, user)
+    rows = (
+        db.query(Withdrawal)
+        .filter(Withdrawal.agent_id == agent.id)
+        .order_by(Withdrawal.created_at.desc())
+        .limit(30)
+        .all()
+    )
+    return ok([{
+        "id": r.id,
+        "amount": r.amount,
+        "status": r.status,
+        "failReason": r.fail_reason,
+        "paidAt": r.paid_at.isoformat() if r.paid_at else None,
+        "createdAt": r.created_at.isoformat() if r.created_at else None,
+    } for r in rows])

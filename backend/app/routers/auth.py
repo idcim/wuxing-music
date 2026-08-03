@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app import captcha, ratelimit
+from app import agent_service, captcha, ratelimit
 from app.database import get_db
 from app.models import Admin, Role
 from app.schemas import LoginIn, ok
@@ -82,4 +82,7 @@ def me(
         "is_super": bool(admin.is_super),
         "role_name": role.name if role else "",
         "permissions": admin_permissions(admin, db),
+        # 可选模块开关：菜单据此显隐。与权限是两回事——
+        # 有权限但模块没开，菜单一样不该出现。
+        "features": {"agent": agent_service.is_enabled(db)},
     })

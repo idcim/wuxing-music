@@ -73,6 +73,16 @@ PERMISSION_GROUPS: list[dict] = [
         ],
     },
     {
+        "module": "agents",
+        "label": "代理分成",
+        "items": [
+            {"key": "agents:view", "label": "查看代理与分成明细"},
+            {"key": "agents:manage", "label": "新增 / 编辑 / 停用代理"},
+            # 与 manage 分开：这是真出钱的动作，值得单独授予
+            {"key": "agents:settle", "label": "审核提现 / 标记打款"},
+        ],
+    },
+    {
         "module": "settings",
         "label": "站点设置",
         "items": [
