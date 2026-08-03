@@ -1,6 +1,6 @@
 // 应用版本信息。发布时手动 bump，并与根目录 version.json、package.json 对齐。
 // 用途：关于/设置页展示、埋点上报、以及未来 APP 更新接口做版本比对。
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.2.0';
 
 // 后端接口契约版本（大版本不兼容时 +1，供后端灰度/兼容判断）。
 export const API_VERSION = '1.1.0';

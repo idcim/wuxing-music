@@ -15,20 +15,23 @@
 
 ## 当前状态（务必先读）
 
-> ⚠️ 本文档一度停留在"待初始化"阶段，现已按实际实现全面校正。运行/部署的**操作细节**见 [`README.md`](README.md)、[`backend/README.md`](backend/README.md)、[`admin/README.md`](admin/README.md)；本文件负责讲"**是什么 / 规范 / 数据结构 / 协作约定**"。
+> ⚠️ 本文档一度停留在"待初始化"阶段，现已按实际实现全面校正。运行/部署的**操作细节**见 [`README.md`](README.md)、[`backend/README.md`](backend/README.md)、[`admin/README.md`](admin/README.md)、[`docs/DEPLOY.md`](docs/DEPLOY.md)；本文件负责讲"**是什么 / 规范 / 数据结构 / 协作约定**"。
+>
+> 🚀 **推到 `master` 即上线**：服务器上 1Panel 计划任务每分钟拉取本仓库并重建容器（见「部署与版本」）。提交前请确认改动可直接上生产。
 
 本项目是一个 **monorepo**，三部分均已落地：
 
 | 目录 | 角色 | 技术栈 | 状态 |
 | ---- | ---- | ------ | ---- |
-| `src/` | 小程序 / H5 前端 | **Taro 4.2 + React 18 + TS + Sass + Zustand** | 小程序主流程完成；H5（微信内）登录/支付已接入（v1.1） |
-| `backend/` | 后端 API（管理端 + 小程序公开端） | **FastAPI + SQLAlchemy + 外部 MySQL**（开发可 SQLite），Docker | 全套接口 + 微信支付/礼物码/统计已实现，待真实商户配置上线 |
-| `admin/` | 管理后台 | **Vue3 + Vite + Element Plus + Pinia** | 15 个视图完成 |
+| `src/` | 小程序 / H5 前端 | **Taro 4.2 + React 18 + TS + Sass + Zustand** | 小程序主流程完成；H5（微信内）登录/支付已接入（v1.1），已容器化上服务器 |
+| `backend/` | 后端 API（管理端 + 小程序/H5 公开端） | **FastAPI + SQLAlchemy + 外部 MySQL**（开发可 SQLite），Docker | 全套接口 + 微信支付/礼物码/统计 + RBAC + 限流已实现，待真实商户配置上线 |
+| `admin/` | 管理后台 | **Vue3 + Vite + Element Plus + Pinia** | 18 个视图完成（含管理员/角色权限、设置中心） |
 
-- **数据源开关**：`src/constants/env.ts` 的 `USE_MOCK`。当前 `false`，直连线上 `API_BASE = https://app-api.azure-glow.cn`。置 `true` 可在无后端时本地跑通登录/曲目/兑换/支付/音频全链路。
+- **数据源开关**：`src/constants/env.ts` 的 `USE_MOCK`。当前 `false`；`API_BASE` 按端分支——**H5 为空串（同源反代，免 CORS）**，小程序用绝对地址 `https://app-api.azure-glow.cn`。置 `true` 可在无后端时本地跑通登录/曲目/兑换/支付/音频全链路。
 - **已完成**：前端全部页面与播放体验、后端管理 CRUD、小程序公开接口对接、微信支付（JSAPI 统一下单 + 回调验签，逻辑已就绪）、CDKEY 兑换、买卡送人礼物码、订单/退款、聆听历史与周统计、海报小程序码、站点/存储/支付/小程序配置与文件上传（本地）。
 - **已完成（H5 端，v1.1）**：H5（微信内）手机登录（短信验证码 + 手机号密码）、微信登录（公众号网页授权 OAuth2）、微信支付（公众号 JSAPI）；短信/公众号抽象层（未配则 dev 兜底）；版本管理基建（`version.json` + `docs/ROADMAP.md` + `src/constants/version.ts`）。详见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
-- **待补**：真实微信商户号 + 证书上线联调；真实公众号/小程序 AppSecret 配置后授权与 `code→openid` 生效验证；短信服务商密钥接入（抽象层已就位）；对象存储（OSS）上传接入（抽象层已就位）；**上线前安全加固清单见 [`docs/ROADMAP.md`](docs/ROADMAP.md)**。
+- **已完成（后台与运维）**：管理员账号 + 角色权限（RBAC，权限点见 `backend/app/permissions.py`）；设置中心（站点/小程序/公众号/短信/存储/支付）；安全加固（`DEBUG` gate 收敛 dev fail-open、JWT 默认密钥守卫、短信/登录/兑换限流）；H5 容器化 + 1Panel 计划任务自动部署（健康检查 + 失败回滚）。
+- **待补**：真实微信商户号 + 证书上线联调；真实公众号/小程序 AppSecret 配置后授权与 `code→openid` 生效验证；短信服务商密钥接入（抽象层已就位）；对象存储（OSS）上传接入（抽象层已就位）；生产 `.env` 落 `DEBUG=false` + 随机 `JWT_SECRET`；**剩余安全清单见 [`docs/ROADMAP.md`](docs/ROADMAP.md)**。
 - **不做**：❌ 离线下载（已全端移除，勿再引入）。
 
 ------
@@ -110,20 +113,23 @@ wuxing-music/
 │   │   ├── stats.ts            #   周聆听统计
 │   │   ├── user.ts             #   资料 / 绑定手机
 │   │   ├── audio/              #   音频（分端：index.weapp.ts / index.h5.ts / types.ts）
+│   │   ├── wechat/             #   微信能力（分端：JS-SDK 签名 / chooseWXPay / 网页授权）
 │   │   └── storage/            #   本地存储（index.ts，统一封装）
 │   ├── constants/
 │   │   ├── wuxing.ts           #   五行运行时数据（角徵宫商羽 / 五脏 / 曲目）
 │   │   ├── quiz.ts             #   测评题库
 │   │   ├── plans.ts            #   会员套餐兜底数据
+│   │   ├── version.ts          #   前端版本常量（与根 version.json 对齐）
 │   │   └── env.ts              #   USE_MOCK / API_BASE / TOKEN_KEY
-│   ├── utils/                  # color / format / nav / platform / share / url
+│   ├── utils/                  # color / format / nav / platform / share / unit / url
 │   ├── styles/variables.scss   # ★ design token（基色 / 圆角 / 间距 / 五行色 map）
 │   ├── assets/                 # 图标 / 图片
 │   └── types/index.ts          # 全量 TS 类型
 ├── backend/                    # FastAPI 后端
 │   └── app/
 │       ├── main.py             #   应用入口 + 路由挂载 + 建表
-│       ├── config.py           #   .env 配置（DATABASE_URL / JWT / 管理员）
+│       ├── config.py           #   .env 配置（DATABASE_URL / JWT / 管理员 / ★ DEBUG 开关）
+│       ├── ratelimit.py        #   ★ 进程内滑动窗口限流（短信/密码登录/兑换失败）
 │       ├── database.py         #   引擎 / Session / Base
 │       ├── models.py           #   ★ 13 张表（见「后端数据模型」）
 │       ├── permissions.py      #   ★ 后台权限点定义（RBAC 唯一来源）
@@ -133,19 +139,26 @@ wuxing-music/
 │       ├── wxpay.py            #   微信支付统一下单 + 回调解密
 │       ├── storage.py          #   本地 / OSS 存储抽象
 │       └── routers/            #   auth / users / orders / plans / elements / tracks
-│           │                   #   cdkeys / quiz / settings / site / upload（管理端）
-│           └── mp.py           #   ★ 小程序公开端（/api/mp/*）
+│           │                   #   cdkeys / quiz / admins / settings / site / upload（管理端）
+│           └── mp.py           #   ★ 小程序 + H5 公开端（/api/mp/*）
 ├── admin/                      # Vue3 管理后台
 │   └── src/
 │       ├── api/                #   接口封装（index.ts / request.ts）
 │       ├── stores/auth.ts      #   Pinia 登录态
+│       ├── menu.ts             #   ★ 侧边栏 + 权限点（路由守卫与布局共用一份）
 │       ├── router/             #   路由
-│       └── views/              #   17 视图（Dashboard / Users / Orders / Plans / Elements
-│                               #           Admins / Roles
-│                               #           Tracks / Cdkeys / Quiz / Site / Storage / MpPanel …）
+│       └── views/              #   18 视图（Login / Dashboard / Users / Orders / Plans
+│                               #           Elements / Tracks / Cdkeys / Quiz / Admins / Roles
+│                               #           SettingsCenter → Site / Storage / Settings(支付)
+│                               #                            MpPanel / OaPanel / SmsPanel）
 ├── prototype/
 │   └── wuxing-music-app.jsx    # 原型参考（Web React 版）
-├── docker-compose.yml          # 一键起 backend + admin（连外部 MySQL）
+├── config/index.ts             # ★ Taro 编译配置（h5.publicPath / devServer 代理 / postcss）
+├── docker/                     # H5 前端容器：Dockerfile.h5 + h5.nginx.conf（同源反代 /api）
+├── scripts/auto-deploy.sh      # ★ 1Panel 计划任务自动部署（拉取→重建→健康检查→失败回滚）
+├── docs/                       # DEPLOY.md（部署与域名清单）/ ROADMAP.md（版本路线 + 安全清单）
+├── version.json                # ★ 机读版本清单（app/api + 各端 + changelog）
+├── docker-compose.yml          # 一键起 backend + admin + h5（连外部 MySQL）
 ├── project.config.json         # 微信开发者工具配置
 └── package.json                # 前端脚手架
 ```
@@ -165,6 +178,9 @@ wuxing-music/
 **登录约定（小程序）**：`wxLogin()` 取 `wx.login()` 的临时 `code` + 稳定游客 openid 一起发给 `/api/mp/login`；后端配置了 AppSecret 时用 `code` 调 `jscode2session` 换真实 openid，否则回退前端直传的稳定 openid（保证游客态身份不漂移）。**切勿把每次都变的 `code` 当 openid 用**。
 
 **登录约定（H5，v1.1）**：按平台分支（`utils/platform.ts` 的 `isH5`/`isInWeChat`）。手机登录（`loginByPhone`/`loginByPassword`）平台无关。微信登录 `wechatLoginH5()` 走公众号网页授权：无 `code` → 取 `/api/mp/h5/oauth-url` 跳转授权；带 `code` 回跳 → `/api/mp/h5/login` 换 `oa_openid`（`app.tsx` 在微信内静默触发并清理 URL）。**安全约束**：`/api/mp/login`（小程序）与 `/api/mp/h5/login`（H5）均——已配置密钥时**必须用真实 `code` 换 openid、忽略前端直传标识**，仅未配置时才用游客标识走 dev 兜底（防绕过授权/顶号）；手机号合成 openid `phone:<手机号>` 不可经 openid 直信路径登录（详见 [`docs/ROADMAP.md`](docs/ROADMAP.md) 安全加固清单）。
+
+**`DEBUG` 开关（后端，`backend/app/config.py`）** ⚠️：所有 dev fail-open 兜底（短信回传明文 `devCode`、未配商户时免付直开会员、登录游客兜底、种子公开测试 CDKEY）**统一由 `DEBUG` gate**——`DEBUG=false`（生产）时未配真实密钥一律**拒绝**而非放行；且 `JWT_SECRET` 仍是默认值时**后端拒绝启动**（`main.py` lifespan 守卫）。新增任何「未配置就放行」的兜底逻辑，必须挂在 `settings.debug` 下。
+限流见 `backend/app/ratelimit.py`（进程内滑动窗口）：短信发送按 IP/小时 + 号码/日、密码登录与 CDKEY 兑换按失败次数。**多实例部署需换 Redis**（源码已注明）。
 
 ------
 
@@ -409,7 +425,7 @@ GET/POST /elements  DELETE /elements/{id}
 GET  /tracks POST /tracks  PUT/DELETE /tracks/{id}
 GET  /cdkeys POST /cdkeys/generate  POST /cdkeys/{id}/disable
 GET/POST /quiz  PUT/DELETE /quiz/{id}
-GET/PUT /settings/pay | /settings/site | /settings/storage | /settings/mp
+GET/PUT /settings/pay | /settings/site | /settings/storage | /settings/mp | /settings/oa | /settings/sms
 POST /settings/storage/migrate      # 存储迁移
 POST /upload                        # 后台文件/封面/证书上传
 GET/POST /admins  PUT/DELETE /admins/{id}  POST /admins/{id}/password   # 管理员账号
@@ -450,9 +466,38 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 
 ## 管理后台 `admin/`（Vue3 + Element Plus）
 
-页面（`admin/src/views/`）：登录、仪表盘、歌曲（分页/筛选/音频封面上传）、五行、套餐、兑换码（批量生成/导出/禁用）、测评、订单（详情+退单）、用户（详情+开通会员）、站点设置（站点/小程序/文件存储/支付，含 LOGO/证书上传）、**系统管理（管理员账号 + 角色权限矩阵）**。默认管理员 `admin` / `admin123`（由 `backend/.env` 覆盖），首次启动即为超级管理员。
+页面（`admin/src/views/`）：登录、仪表盘、歌曲（分页/筛选/音频封面上传）、五行、套餐、兑换码（批量生成/导出/禁用）、测评、订单（详情+退单）、用户（详情+开通会员）、**设置中心 `SettingsCenter`**（站点 / 小程序 / **公众号** / **短信** / 文件存储 / 支付，含 LOGO/证书上传）、**系统管理（管理员账号 + 角色权限矩阵）**。默认管理员 `admin` / `admin123`（由 `backend/.env` 覆盖），首次启动即为超级管理员。
 
 侧边栏导航定义在 `admin/src/menu.ts`，**路由守卫与 MainLayout 共用同一份**（含各项所需权限点），避免菜单与鉴权走偏；新增后台模块时改这一处即可。
+
+------
+
+## 部署与版本
+
+> 操作细节（首次部署步骤、`.env` 字段、域名清单、上线检查单）以 [`docs/DEPLOY.md`](docs/DEPLOY.md) 为准；此处只讲拓扑与约定。
+
+### 拓扑（`docker-compose.yml`，三个容器 + 外部 MySQL）
+
+| 组件 | 容器 | 端口 | 说明 |
+| ---- | ---- | ---- | ---- |
+| 后端 API | `wuxing-backend` | 8000 | `/api/mp/*` 公开端 + `/api/admin/*` 管理端；健康检查 `GET /api/health` |
+| 管理后台 | `wuxing-admin` | 8080 | Nginx 托管，`/api` 反代到后端（同源无跨域） |
+| H5 前端 | `wuxing-h5` | 8081 | `docker/Dockerfile.h5` 内跑 `build:h5`，Nginx 托管产物 + 反代 `/api`、`/uploads` |
+| MySQL | 外部（`1panel-network`） | 3306 | 不随 compose 起落，单独维护 |
+| 小程序 | `dist/`（`build:weapp`） | — | 微信开发者工具上传，不走服务器 |
+
+- **H5 的 `API_BASE` 为空字符串（同源）**：`src/constants/env.ts` 按 `process.env.TARO_ENV` 分支，H5 走容器内 nginx 反代，因此 **H5 不需要 CORS、换域名也不必改前端**；那个绝对地址只服务小程序端。
+- H5 构建镜像必须用 **glibc 基底**（`node:22-slim`），alpine 下 Taro/Vite 的原生绑定装不上。
+
+### 自动部署（`scripts/auto-deploy.sh`）
+
+拉取式部署，由 **1Panel 计划任务**定时调用（非 GitHub Actions）：检测远程有新提交 → `git pull` → `docker compose up -d --build` → 轮询 `/api/health` → **失败自动回滚到上个 commit 并重建**。带文件锁防并发重入，无更新则立即退出（幂等，可每分钟跑）。行为通过环境变量覆盖（`WUXING_REPO_DIR` / `WUXING_BRANCH` / `WUXING_HEALTH_URL` / `WUXING_ROLLBACK` …）。
+
+**推论：推到 `master` 即上线。** 提交前请确认改动可直接上生产；日志在 `/var/log/wuxing-deploy.log`。
+
+### 版本
+
+根 `version.json` 是**机读的唯一版本源**（`current.app` / `current.api` + 各端 `channels` + `changelog`），前端常量 `src/constants/version.ts` 与之对齐，APP 更新接口契约见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。**当前 v1.1.0**（小程序 + H5）。发版时同步改这三处。
 
 ------
 
@@ -479,12 +524,15 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 - [x] 手机登录（短信验证码 + 手机号密码）、微信网页授权登录、H5 微信支付（公众号 JSAPI）
 - [x] 版本管理基建（`version.json` + `docs/ROADMAP.md` + `constants/version.ts`）
 - [x] SMS 验证码校验次数上限（防暴力，失败 5 次作废）
-- [ ] APP 更新接口（契约已定，随 APP 阶段实现）；**上线前安全加固**（见 [`docs/ROADMAP.md`](docs/ROADMAP.md)）
+- [x] 安全加固：`DEBUG` gate 收敛全部 dev fail-open、JWT 默认密钥守卫、短信/登录/兑换限频、依赖 CVE 升级
+- [x] H5 容器化（Nginx 同源反代）+ 1Panel 计划任务自动部署（健康检查 + 失败回滚）
+- [ ] APP 更新接口（契约已定，随 APP 阶段实现）
 
 ### 待补（上线前）
 - [ ] 真实微信商户号 + 证书上线联调（后台可配）
 - [ ] 真实 AppSecret 配置后 `code→openid` 生效验证
 - [ ] OSS 上传接入（抽象层已就绪）
+- [ ] 生产 `.env` 落 `DEBUG=false` + 随机 `JWT_SECRET`（剩余项见 [`docs/ROADMAP.md`](docs/ROADMAP.md) 安全清单）
 
 ------
 
@@ -544,6 +592,20 @@ iOS 端订阅类商品**必须走 Apple IAP**（苹果抽 30%，禁止引导外�
 12. **行内样式禁止直接写 `rpx`**：`rpx` 只有写在 `.scss` 里才会被 postcss-pxtransform 换算；写在 `.tsx` 的 `style={{}}` 里不过 postcss，H5 下浏览器判定为非法值并**丢弃整条声明**——元素塌成 0×0（图标全部消失）、`border` / `box-shadow` 直接失效。一律用 `src/utils/unit.ts` 的 `rpx(n)`（weapp 编译成 `${n}rpx`，H5 换算成 rem）。不要用 `Taro.pxTransform`：它内部 `~~` 取整，会截断 splash 星点这类小数尺寸。
 13. **H5 全局底色要改两处，缺一仍是白底**：① H5 没有 `page` 元素（页面容器是 `div.taro_page`），postcss-html-transform 只把 `view/text/button` 等小程序标签映射成 `taro-*-core`，**不会**把 `page` 映射成 `body`——全局样式必须写 `page, body { ... }`，否则底色/文字色整个失效。② 更关键：Taro H5 路由**运行时**往 `<head>` 注入 `.taro_router > .taro_page { background-color: #fff }`，这层盖在 `body` 之上，只补 `body` 看不出任何变化，没写自身背景的页（首页/探律/会员/我的/result/element/player）照旧白底。注入的 style 排在 `<link>` 之后、同权重会赢，必须**提权**覆盖：`body .taro_router > .taro_page { background-color: $bg-deep }`（保持不透明，否则左右滑动切页时前后两页内容互相透出）。`app.config.ts` 的 `window.backgroundColor` 在 H5 只作用于导航栏，**不管** `.taro_page`。小程序端这两条里的 `body` 均编译成 `.h5-body`，无匹配元素，无副作用。
     > 排查提示：验证背景问题必须看**实际绘制的那一层**（沿 `elementFromPoint` 向上找第一个非透明祖先），只量 `document.body` 会得出「已修好」的错误结论。
+14. **`<Input>` 禁止条件渲染切换形态**（Taro H5 `taro-input-core` 两个坑）：① 节点被 React 复用时**不刷新 `type` / `placeholder`**——登录页曾因此把密码框渲染成 `type=number` 明文框；② **首屏之后才挂载的实例根本不渲染内部 `<input>`**，所以加 `key` 强制重挂载反而让整个框消失。正解：**两个 Input 都常驻，切换只改 `display`**（见 `src/pages/login/index.tsx`）。
+15. **输入框字号必须 ≥ 32rpx**：30rpx 在 ≤400px 视口下算出来不到 16px，iOS Safari / 微信 WKWebView 聚焦时会**强制放大整个页面**；32rpx = 0.8rem，在 375px 视口（根字号被钳在 20px）正好 16px 达标。
+16. **聚焦高亮用纯 CSS，别用 `onFocus` + state**：`focus → setState → 重渲染 → 再触发 focus` 会把渲染进程直接卡死。用 `:focus` 与 `:focus-within` 两条选择器覆盖两端——小程序端类名落在原生 `input` 上，H5 端落在外层 `taro-input-core`（真 `input` 是其子节点）。另：placeholder 颜色小程序只认 `placeholderStyle` 属性，不吃 `::placeholder`。
+17. **`Taro.showModal({ editable: true })` 是小程序专有，H5 上等于没有**：`taro-h5` 的 `showModal` 既不认 `editable` / `placeholderText`（连默认值合并都没有），成功回调也**只返回 `{ cancel, confirm }`，没有 `content`**（弹窗内容是 `textContent` 纯文本节点，压根没有 `<input>`）。于是 `res.content` 恒为 `undefined`，`if (!res.content) return` 直接静默吞掉——用户点确定什么也不会发生、也没有任何提示。**需要用户输入的一律自绘页内抽屉**（见 `src/components/UserEditSheet/`），别用 `showModal` 收输入。
+18. **一批小程序 API 在 H5 上「存在但不可用」，甚至会假报成功**——`if (Taro.xxx)` 这种存在性判断挡不住它们：
+    - `getMenuButtonBoundingClientRect`：H5 有同名导出，但是 `temporarilyNotSupport` 存根，调用会 `console.warn` 并返回 Promise。且 H5 的 `statusBarHeight` 是 **`NaN`**。两者叠加让 `getNavTop()` 恒返回 64，白白吃掉每页顶部 64px（已由 `utils/nav.ts` 的 `navTopStyle()` 分端修掉）。
+    - `getAccountInfoSync`：H5 不支持 → 版本号恒显示「—」，改用 `constants/version.ts` 的 `APP_VERSION`。
+    - `getStorageInfoSync()`：H5 只返回 `keys`，`currentSize` / `limitSize` 都是 `NaN` → 缓存大小恒显示 0KB，H5 干脆别显示。
+    - `saveImageToPhotosAlbum`：H5 实现是 `<a download>` 合成点击，微信内置浏览器会拦掉，**但它总是回调 `success`** → 提示「已保存到相册」而其实什么都没存。H5 应引导「长按图片保存」。
+    - `showShareMenu`：H5 是存根，直接调用会**抛异常**（`utils/share.ts` 已加 `isWeapp` 守卫）。H5 的分享要走公众号 JS-SDK 的 `updateAppMessageShareData`（尚未接）。
+19. **H5 上 `redirectTo` = `history.replaceState`，切页不留历史**：TabBar 四个 tab 原本一律 `redirectTo`，H5（hash 路由）下用户「归处→探律→会员」后按微信/浏览器后退键会**直接退出整个站点**而不是回到上一个 tab。现按端分支：小程序仍 `redirectTo`（对齐原生 tabBar 语义），H5 改为「目标 tab 已在 `Taro.getCurrentPages()` 里就 `navigateBack(delta)`、否则 `navigateTo`」——既留历史又不会把页面栈撑爆。注意 `getCurrentPages()` 里的 `route` **带前导斜杠**（`/pages/home/index`），比对前要归一化。
+20. **二级页的返回键必须兜底**：H5 可由分享链接/刷新直接进任意二级页，此时页面栈只有当前页，裸 `Taro.navigateBack()` 会**静默失败**（且 Taro H5 的 `navigateBack` 不保证 reject，`.catch()` 兜底也不会触发），用户被困在页面里。统一用 `utils/nav.ts` 的 `goBack(fallback)`：栈深 ≤1 时 `reLaunch` 回首页。
+
+> 本地验证的坑：`npm run dev:h5` 起的 dev server 与 `python -m http.server` 托管的 `build:h5` 产物里，`taro-input-core` 都**不渲染内部 `<input>`**（新建实例也一样，`document.querySelectorAll('input').length === 0`），登录页这个已上线可用的页面同样如此。也就是说**输入框相关的行为无法在本地浏览器复现验证**，只能上真机/真环境看。排查 Input 问题时别被本地现象误导。
 
 ------
 
@@ -593,11 +655,12 @@ ZEROER-GIFT-7DAY      → 7日体验卡
 
 ## 参考资源
 
-- 本仓库：[`README.md`](README.md)（如何跑）、[`backend/README.md`](backend/README.md)、[`admin/README.md`](admin/README.md)、[`docs/ROADMAP.md`](docs/ROADMAP.md)（版本路线图 + APP 更新接口契约）、根 `version.json`（机读版本清单）
+- 本仓库：[`README.md`](README.md)（如何跑）、[`backend/README.md`](backend/README.md)、[`admin/README.md`](admin/README.md)、[`docs/DEPLOY.md`](docs/DEPLOY.md)（部署 + 域名清单 + 上线检查单）、[`docs/ROADMAP.md`](docs/ROADMAP.md)（版本路线图 + APP 更新接口契约 + 安全加固清单）、根 `version.json`（机读版本清单）
 - 原型预览：`prototype/wuxing-music-app.jsx`（React Web 版）
 - Taro 文档：https://docs.taro.zone/ ｜ 微信小程序：https://developers.weixin.qq.com/miniprogram/dev/framework/
 
 ------
 
-**最后更新**：H5 端（v1.1）登录/支付接入 + 版本管理基建（见 [`docs/ROADMAP.md`](docs/ROADMAP.md)）。
-**当前阶段**：小程序 + H5（微信内）前端、后端管理/公开接口、管理后台均已完成；微信支付/公众号授权/短信/OSS 待真实配置上线验证。
+**最后更新**：补齐部署与版本章节（H5 容器化 + 1Panel 自动部署）、后台设置中心与 RBAC 现状、Taro H5 `<Input>` 三条新陷阱。
+**当前版本**：v1.1.0（小程序 + H5，见根 `version.json`）。
+**当前阶段**：小程序 + H5（微信内）前端、后端管理/公开接口、管理后台均已完成，三容器已上服务器且推 `master` 即自动部署；微信支付/公众号授权/短信/OSS 待真实配置上线验证。
