@@ -18,8 +18,7 @@ export const NAV_MAIN: NavItem[] = [
   { path: '/cdkeys', title: '兑换码', perm: 'cdkeys:view', icon: 'Ticket' },
   { path: '/quiz', title: '测评管理', perm: 'quiz:view', icon: 'EditPen' },
   { path: '/orders', title: '订单管理', perm: 'orders:view', icon: 'List' },
-  { path: '/users', title: '用户', perm: 'users:view', icon: 'User' },
-  { path: '/settings', title: '站点设置', perm: 'settings:view', icon: 'Setting' }
+  { path: '/users', title: '用户', perm: 'users:view', icon: 'User' }
 ];
 
 /** 代理分成：独立子菜单，所有相关内容都在这一组里。
@@ -38,7 +37,8 @@ export const NAV_AGENT: NavItem[] = [
 
 export const NAV_SYSTEM: NavItem[] = [
   { path: '/admins', title: '管理员', perm: 'admins:manage', icon: 'UserFilled' },
-  { path: '/roles', title: '角色权限', perm: 'admins:manage', icon: 'Key' }
+  { path: '/roles', title: '角色权限', perm: 'admins:manage', icon: 'Key' },
+  { path: '/settings', title: '站点设置', perm: 'settings:view', icon: 'Setting' }
 ];
 
 export const NAV_ALL: NavItem[] = [...NAV_MAIN, ...NAV_AGENT, ...NAV_SYSTEM];
