@@ -109,4 +109,29 @@ H5 已作为 `wuxing-h5` 服务并入 `docker-compose.yml`——`docker compose 
 - [ ] 微信平台：公众号网页授权域名 + JS 安全域名、商户 JSAPI 支付目录、小程序合法域名
 - [ ] 备案：H5 与后端域名已备案
 - [ ] 其余安全项见 [ROADMAP.md](ROADMAP.md) 「上线前安全加固清单」
+
+### 大文件音频（v1.2.0 起）
+
+曲目 WAV 母版可达数百 MB，以下几处不配好会直接卡住：
+
+- [ ] **1Panel 外层反代的 `client_max_body_size`**（⚠️ 不在本仓库里，最容易漏）。
+      仓库内的 `admin/nginx.conf` 已放到 512m、后端 `UPLOAD_MAX_MB` 默认 500，
+      但请求先经过 1Panel 的 vhost，那里若仍是默认值，大文件会在最外层就被 413 掉。
+      同时建议给该 vhost 加长 `proxy_read_timeout`（大文件上传/下载耗时长）。
+- [ ] **OSS 直传**：后台 → 设置 → 存储设置 选 OSS 并填全 endpoint / bucket / accessKey。
+      配好后后台上传音频会自动走浏览器直传，不经服务器中转（未配则回退中转，受上限约束）。
+- [ ] **OSS 桶 CORS**：允许 H5 域名的 `GET`（含 `Range` 请求头）。
+      不配的话：① 海报 canvas 会因跨域图片被污染而无法生成；② 部分浏览器的分段请求会被拒。
+- [ ] **小程序 `downloadFile` 合法域名**：把 OSS / CDN 域名也加进去，
+      否则小程序端真机放不了（H5 不受此限）。
+- [ ] **Range 自检**：`curl -s -D- -o /dev/null -H "Range: bytes=0-1023" <音频URL>`
+      期望 `206 Partial Content` + `Content-Range` + `Accept-Ranges: bytes`。
+      三层都要过：后端 :8000、H5 :8081、后台 :8080。
+
+### 小程序端需手工重新上传（v1.2.0）
+
+服务器自动部署只覆盖 后端 / 后台 / H5。**小程序包不随之更新**，
+而 v1.2.0 的 `POST /api/mp/bind-phone` 已改为强制校验短信验证码：
+线上旧包的绑定手机号请求不带 `code`，后端上线后会返回 400「请输入验证码」。
+需用微信开发者工具执行 `npm run build:weapp` 并重新上传、提审、发布。
 ```
