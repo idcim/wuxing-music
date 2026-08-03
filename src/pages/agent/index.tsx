@@ -4,6 +4,7 @@ import Taro, { useDidShow } from '@tarojs/taro';
 import {
   getAgentMe,
   getCommissions,
+  getDownline,
   getWithdrawals,
   requestWithdraw
 } from '@/services/agent';
@@ -13,7 +14,7 @@ import PosterShare from '@/components/PosterShare';
 import ListState, { type LoadState } from '@/components/ListState';
 import { navTopStyle, goBack } from '@/utils/nav';
 import { isWeapp } from '@/utils/platform';
-import type { AgentMe, CommissionItem, WithdrawalItem } from '@/types';
+import type { AgentDownline, AgentMe, CommissionItem, WithdrawalItem } from '@/types';
 import './index.scss';
 
 const COMMISSION_TEXT: Record<string, string> = {
@@ -46,6 +47,7 @@ export default function AgentCenter() {
   const [me, setMe] = useState<AgentMe>({ isAgent: false });
   const [rows, setRows] = useState<CommissionItem[]>([]);
   const [withdrawals, setWithdrawals] = useState<WithdrawalItem[]>([]);
+  const [downline, setDownline] = useState<AgentDownline>({ subAgents: [], subAgentCount: 0, userCount: 0 });
   const [state, setState] = useState<LoadState>('loading');
   const [tab, setTab] = useState<'commission' | 'withdraw'>('commission');
   const [posterOpen, setPosterOpen] = useState(false);
@@ -61,9 +63,14 @@ export default function AgentCenter() {
           setState('empty');
           return;
         }
-        const [c, w] = await Promise.all([getCommissions(1, 30), getWithdrawals()]);
+        const [c, w, dl] = await Promise.all([
+          getCommissions(1, 30),
+          getWithdrawals(),
+          getDownline()
+        ]);
         setRows(c.items || []);
         setWithdrawals(w || []);
+        setDownline(dl);
         setState('ready');
       })
       .catch((e: any) => {
@@ -157,6 +164,13 @@ export default function AgentCenter() {
                 成交后冻结 {me.freezeDays} 天转为可提现{me.minWithdraw ? `，满 ${money(me.minWithdraw)} 元可提` : ''}
               </Text>
             )}
+            {/* 有上级就把规则摆明，别让代理自己去猜为什么金额对不上 */}
+            {!!me.upline && (
+              <Text className="agent__card-tip">
+                你的上级为「{me.upline.name}」，每笔直推分成中有
+                {(me.upline.cutRate * 100).toFixed(0)}% 归上级
+              </Text>
+            )}
           </View>
 
           {/* 本月业绩 */}
@@ -176,6 +190,37 @@ export default function AgentCenter() {
               <Text className="agent__stat-label">分成比例</Text>
             </View>
           </View>
+
+          {/* 我的下级：只有一层，下级的下级与我无关 */}
+          {(downline.subAgentCount > 0 || downline.userCount > 0) && (
+            <View className="agent__team fade-up">
+              <View className="agent__team-head">
+                <Text className="agent__team-title">我的下级</Text>
+                <Text className="agent__team-count">
+                  {downline.subAgentCount} 位代理 · {downline.userCount} 位用户
+                </Text>
+              </View>
+              {downline.subAgents.map((s) => (
+                <View key={s.id} className="agent__team-item">
+                  <View className="agent__team-item-left">
+                    <Text className="agent__team-name">{s.name}</Text>
+                    <Text className="agent__team-meta">
+                      {s.type === 'store' ? '实体店' : '网络推手'} · {s.userCount} 位用户
+                    </Text>
+                  </View>
+                  <View className="agent__team-item-right">
+                    <Text className="agent__team-amount">+{money(s.contributed)}</Text>
+                    <Text className="agent__team-label">累计抽成</Text>
+                  </View>
+                </View>
+              ))}
+              {downline.subAgentCount === 0 && (
+                <Text className="agent__team-empty">
+                  还没有下级代理。你推广来的用户成为代理后会自动成为你的下级
+                </Text>
+              )}
+            </View>
+          )}
 
           {/* 推广码 */}
           <View className="agent__promo fade-up">
@@ -228,16 +273,27 @@ export default function AgentCenter() {
                 <View key={r.id} className="agent__item">
                   <View className="agent__item-main">
                     <Text className="agent__item-amount">+{money(r.amount)}</Text>
-                    <Text className={`agent__item-status agent__item-status--${r.status}`}>
-                      {COMMISSION_TEXT[r.status] || r.status}
-                    </Text>
+                    <View className="agent__item-tags">
+                      {r.level === 2 && <Text className="agent__item-level">下级抽成</Text>}
+                      <Text className={`agent__item-status agent__item-status--${r.status}`}>
+                        {COMMISSION_TEXT[r.status] || r.status}
+                      </Text>
+                    </View>
                   </View>
                   <View className="agent__item-meta">
                     <Text className="agent__item-desc">
-                      订单 ¥{money(r.orderAmount)} · {(Number(r.rate || 0) * 100).toFixed(0)}%
+                      {r.level === 2
+                        ? `${r.sourceAgentName || '下级'}的成交 · 抽成 ${(Number(r.rate || 0) * 100).toFixed(0)}%`
+                        : `订单 ¥${money(r.orderAmount)} · ${(Number(r.rate || 0) * 100).toFixed(0)}%`}
                     </Text>
                     <Text className="agent__item-time">{fmt(r.createdAt)}</Text>
                   </View>
+                  {/* 直推被上级抽走过就说明白，否则「怎么不是 20 块」会被反复问 */}
+                  {r.level === 1 && r.baseAmount > r.amount && (
+                    <Text className="agent__item-note">
+                      本单分成 ¥{money(r.baseAmount)}，上级抽 ¥{money(r.baseAmount - r.amount)}
+                    </Text>
+                  )}
                 </View>
               ))}
             </View>

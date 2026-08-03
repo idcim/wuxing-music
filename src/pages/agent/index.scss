@@ -138,6 +138,85 @@
     }
   }
 
+  // ── 我的下级 ──
+  &__team {
+    margin-top: 24rpx;
+    background: $surface;
+    border: 2rpx solid $border;
+    border-radius: $radius-lg;
+    padding: $pad-card;
+
+    &-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 20rpx;
+      border-bottom: 2rpx solid $border;
+    }
+
+    &-title {
+      font-size: 28rpx;
+      color: $text-primary;
+    }
+
+    &-count {
+      font-size: 22rpx;
+      color: $text-tertiary;
+    }
+
+    &-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 22rpx 0;
+      border-bottom: 2rpx solid rgba(255, 255, 255, 0.03);
+
+      &:last-child {
+        border-bottom: none;
+        padding-bottom: 0;
+      }
+    }
+
+    &-name {
+      display: block;
+      font-size: 26rpx;
+      color: $text-secondary;
+    }
+
+    &-meta {
+      display: block;
+      margin-top: 6rpx;
+      font-size: 22rpx;
+      color: $text-quaternary;
+    }
+
+    &-item-right {
+      text-align: right;
+    }
+
+    &-amount {
+      display: block;
+      font-size: 28rpx;
+      color: #84cc16;
+    }
+
+    &-label {
+      display: block;
+      margin-top: 4rpx;
+      font-size: 20rpx;
+      color: $text-quaternary;
+    }
+
+    &-empty {
+      display: block;
+      padding: 32rpx 0 8rpx;
+      text-align: center;
+      font-size: 22rpx;
+      color: $text-quaternary;
+      line-height: 1.6;
+    }
+  }
+
   // ── 推广码 ──
   &__promo {
     margin-top: 24rpx;
@@ -250,6 +329,27 @@
     &-amount {
       font-size: 34rpx;
       color: $text-primary;
+    }
+
+    &-tags {
+      display: flex;
+      align-items: center;
+      gap: 12rpx;
+    }
+
+    &-level {
+      font-size: 20rpx;
+      color: #fde047;
+      padding: 4rpx 14rpx;
+      border-radius: $radius-pill;
+      background: rgba(234, 179, 8, 0.12);
+    }
+
+    &-note {
+      display: block;
+      margin-top: 10rpx;
+      font-size: 20rpx;
+      color: $text-quaternary;
     }
 
     &-status {

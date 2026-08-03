@@ -3,7 +3,7 @@ import { USE_MOCK } from '@/constants/env';
 import { request, ApiError } from '@/services/api';
 import { storage, STORAGE_KEYS } from '@/services/storage';
 import { isH5 } from '@/utils/platform';
-import type { AgentMe, CommissionItem, WithdrawalItem } from '@/types';
+import type { AgentDownline, AgentMe, CommissionItem, WithdrawalItem } from '@/types';
 
 /**
  * 代理分成。**模块默认关闭**，关闭时后端所有 /api/mp/agent/* 都回 404，
@@ -16,6 +16,7 @@ const NOT_AGENT: AgentMe = { isAgent: false };
 const MOCK_ME: AgentMe = {
   isAgent: true,
   agent: { id: 1, code: 'A8K3N9', name: '城东琴行', type: 'store', effectiveRate: 0.2, status: 'active' },
+  upline: null,
   balance: { available: 64.8, frozen: 21.6, withdrawing: 0, paid: 129.6 },
   month: { count: 12, amount: 216, gmv: 1080 },
   minWithdraw: 10,
@@ -98,13 +99,32 @@ export async function getAgentMe(): Promise<AgentMe> {
   }
 }
 
+/** 我的下级：直接下级代理 + 推广用户数。只有一层——下级的下级与我无关。 */
+export async function getDownline(): Promise<AgentDownline> {
+  if (USE_MOCK) {
+    return {
+      subAgents: [
+        { id: 2, name: '推手小李', code: 'B7X2M4', type: 'promoter', status: 'active', userCount: 8, contributed: 12.8, createdAt: '2026-07-10T10:00:00' }
+      ],
+      subAgentCount: 1,
+      userCount: 23
+    };
+  }
+  try {
+    return await request<AgentDownline>('/api/mp/agent/downline');
+  } catch (e) {
+    if (isDisabled(e)) return { subAgents: [], subAgentCount: 0, userCount: 0 };
+    throw e;
+  }
+}
+
 export async function getCommissions(page = 1, size = 20): Promise<{ total: number; items: CommissionItem[] }> {
   if (USE_MOCK) {
     return {
       total: 2,
       items: [
-        { id: 1, amount: 3.6, orderAmount: 18, rate: 0.2, status: 'available', availableAt: null, createdAt: '2026-08-01T10:00:00' },
-        { id: 2, amount: 25.6, orderAmount: 128, rate: 0.2, status: 'pending', availableAt: '2026-08-10T10:00:00', createdAt: '2026-08-03T09:00:00' }
+        { id: 1, amount: 2.7, orderAmount: 18, level: 1, baseAmount: 3.6, rate: 0.2, status: 'available', availableAt: null, createdAt: '2026-08-01T10:00:00' },
+        { id: 2, amount: 6.4, orderAmount: 128, level: 2, baseAmount: 25.6, sourceAgentName: '推手小李', rate: 0.25, status: 'pending', availableAt: '2026-08-10T10:00:00', createdAt: '2026-08-03T09:00:00' }
       ]
     };
   }

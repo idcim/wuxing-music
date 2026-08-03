@@ -122,16 +122,39 @@ export interface AgentInfo {
 export interface AgentMe {
   isAgent: boolean;
   agent?: AgentInfo;
+  // 有上级时下发抽成规则，让代理自己能对上账（否则会以为少给了钱）
+  upline?: { name: string; cutRate: number } | null;
   balance?: AgentBalance;
   month?: { count: number; amount: number; gmv: number };
   minWithdraw?: number;
   freezeDays?: number;
 }
 
+export interface SubAgent {
+  id: number;
+  name: string;
+  code: string;
+  type: 'store' | 'promoter';
+  status: string;
+  userCount: number;
+  contributed: number;   // 该下级为我带来的抽成
+  createdAt: string | null;
+}
+
+export interface AgentDownline {
+  subAgents: SubAgent[];
+  subAgentCount: number;
+  userCount: number;
+}
+
 export interface CommissionItem {
   id: number;
   amount: number;
   orderAmount: number;
+  // 1=直推（实拿 = 基数 − 上级抽成），2=从下级那儿抽的
+  level: number;
+  baseAmount: number;
+  sourceAgentName?: string;
   rate: number;
   status: CommissionStatus;
   availableAt: string | null;
