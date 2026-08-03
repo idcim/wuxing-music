@@ -4,7 +4,11 @@
   position: fixed;
   left: 28rpx;
   right: 28rpx;
-  bottom: 144rpx; // 位于 tabBar 之上
+  // 位于 tabBar 之上。tabBar 自身还叠了 env(safe-area-inset-bottom)（见 TabBar/index.scss），
+  // 刘海屏上那部分约 34px，若这里只写死 144rpx，tabBar（z-index 60）会盖住本组件（z-index 50）。
+  bottom: 144rpx;
+  bottom: calc(144rpx + constant(safe-area-inset-bottom));
+  bottom: calc(144rpx + env(safe-area-inset-bottom));
   border-radius: 36rpx;
   background: rgba(10, 14, 26, 0.92);
   border: 2rpx solid;
@@ -63,13 +67,26 @@
   }
 
   &__bar {
+    position: relative;
     flex: 1;
     height: 4rpx;
     background: rgba(255, 255, 255, 0.08);
     border-radius: 2rpx;
     overflow: hidden;
 
+    // 缓冲进度：压在播放进度之下的浅色条。
+    // 上百 MB 的曲目弱网时，用户至少看得见「在下」而不是干等。
+    &-buffer {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.18);
+      transition: width 0.3s linear;
+    }
+
     &-fill {
+      position: relative;
       height: 100%;
       transition: width 0.1s linear;
     }

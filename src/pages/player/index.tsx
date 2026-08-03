@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { View, Text, Slider, Image } from '@tarojs/components';
 import Taro, { useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/taro';
-import { openShareMenu } from '@/utils/share';
+import { goBack } from '@/utils/nav';
+import { openShareMenu, setH5Share } from '@/utils/share';
 import { usePlayerStore } from '@/stores/player';
 import { useUserStore } from '@/stores/user';
 import { WUXING } from '@/constants/wuxing';
@@ -10,6 +11,7 @@ import { resolveUrl } from '@/utils/url';
 import Icon from '@/components/Icon';
 import SleepTimer from '@/components/SleepTimer';
 import Playlist from '@/components/Playlist';
+import UpgradePrompt from '@/components/UpgradePrompt';
 import type { ElementId } from '@/types';
 import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
@@ -30,6 +32,10 @@ export default function Player() {
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const isLoading = usePlayerStore((s) => s.isLoading);
   const currentTime = usePlayerStore((s) => s.currentTime);
+  const storeDuration = usePlayerStore((s) => s.duration);
+  const buffered = usePlayerStore((s) => s.buffered);
+  const loadError = usePlayerStore((s) => s.loadError);
+  const retry = usePlayerStore((s) => s.retry);
   const timerVal = usePlayerStore((s) => s.timerVal);
   const playMode = usePlayerStore((s) => s.playMode);
   const queue = usePlayerStore((s) => s.queue);
@@ -46,7 +52,17 @@ export default function Player() {
   const [listOpen, setListOpen] = useState(false);
   const hasQueue = queue.length > 1;
 
-  useDidShow(() => openShareMenu());
+  useDidShow(() => {
+    openShareMenu();
+    // H5 的「···」转发文案要靠 JS-SDK 设，useShareAppMessage 在 H5 是空操作
+    setH5Share(
+      currentTrack
+        ? `我在听《${currentTrack.title}》· ${el.note}音助眠`
+        : '五行律音 · 按体质定制的助眠音律',
+      '按中医五行体质匹配专属安神助眠音律',
+      '/pages/home/index'
+    );
+  });
   useShareAppMessage(() => ({
     title: currentTrack
       ? `我在听《${currentTrack.title}》· ${el.note}音助眠`
@@ -58,7 +74,7 @@ export default function Player() {
     query: ''
   }));
 
-  const back = () => Taro.navigateBack();
+  const back = () => goBack();
 
   if (!currentTrack) {
     return (
@@ -71,7 +87,11 @@ export default function Player() {
     );
   }
 
-  const dur = currentTrack.durationSec || 1;
+  // 优先用音频实际时长：从聆听历史进来的曲目 durationSec 是 0，
+  // 只靠它 dur 会退化成 1，进度条变成「1 秒的歌」——拖一下就到底，
+  // 而右侧时长文字仍显示真实值，两者自相矛盾。
+  const dur = Math.round(storeDuration) || currentTrack.durationSec || 1;
+  const bufferedPct = dur ? Math.min(100, (buffered / dur) * 100) : 0;
   const toggle = () => {
     if (isLoading) return;
     isPlaying ? pause() : resume();
@@ -126,9 +146,23 @@ export default function Player() {
           blockColor={el.primary}
           onChange={onSeek}
         />
+        <View className="player__buffer">
+          <View className="player__buffer-fill" style={{ width: `${bufferedPct}%` }} />
+        </View>
+        {!!loadError && (
+          <View className="player__error">
+            <Text className="player__error-text">{loadError}</Text>
+            <View className="player__error-btn" onClick={retry}>
+              <Text className="player__error-btn-text">重试</Text>
+            </View>
+          </View>
+        )}
         <View className="player__time">
           <Text className="player__time-cur serif">{fmtTime(currentTime)}</Text>
-          <Text className="player__time-dur serif">{currentTrack.duration}</Text>
+          {/* 音频报了真实时长就以它为准，与进度条同源，避免条与文字对不上 */}
+          <Text className="player__time-dur serif">
+            {storeDuration ? fmtTime(storeDuration) : currentTrack.duration || fmtTime(dur)}
+          </Text>
         </View>
       </View>
 
@@ -194,6 +228,8 @@ export default function Player() {
 
       <SleepTimer open={timerOpen} onClose={() => setTimerOpen(false)} />
       <Playlist open={listOpen} onClose={() => setListOpen(false)} />
+      {/* 本页不渲染 MiniPlayer，试听到限的升级引导要自己挂一份 */}
+      <UpgradePrompt />
     </View>
   );
 }

@@ -4,27 +4,41 @@ import type { AudioService, AudioCallbacks, AudioMeta } from './types';
 // BackgroundAudioManager 为全局单例，支持锁屏/后台继续播放。
 // 注意：title 必填，否则 src 赋值会报错。
 let mgr: Taro.BackgroundAudioManager | null = null;
+// 回调经这一层间接分发：on* 在部分基础库没有配套的 off*，每次 load 都重新 on
+// 会让旧曲目的回调一直挂在全局单例上越积越多。改成只注册一次、内容随 bound 变化。
+let bound: AudioCallbacks = {};
+let listening = false;
 
 function getMgr(): Taro.BackgroundAudioManager {
   if (!mgr) mgr = Taro.getBackgroundAudioManager();
   return mgr;
 }
 
+function bindOnce(m: Taro.BackgroundAudioManager): void {
+  if (listening) return;
+  listening = true;
+  m.onPlay(() => bound.onPlay?.());
+  m.onPause(() => bound.onPause?.());
+  m.onStop(() => bound.onStop?.());
+  m.onEnded(() => bound.onEnded?.());
+  // Taro 的类型声明里 onError 回调不带参，与真机行为一致，统一传 undefined
+  m.onError(() => bound.onError?.(undefined));
+  m.onWaiting(() => bound.onWaiting?.());
+  m.onCanplay(() => bound.onCanplay?.());
+  m.onTimeUpdate(() => {
+    bound.onTimeUpdate?.(m.currentTime, m.duration);
+    // 微信的 buffered 是「已缓冲到第几秒」，与 H5 的口径一致，顺带一起上报。
+    // 没有独立的 progress 事件，只能搭 timeupdate 的车。
+    const b = (m as unknown as { buffered?: number }).buffered;
+    if (typeof b === 'number') bound.onProgress?.(b, m.duration);
+  });
+}
+
 const service: AudioService = {
   load(url, meta: AudioMeta, callbacks: AudioCallbacks = {}) {
     const m = getMgr();
-
-    // 重新绑定回调（off* 在部分基础库不可用，直接覆盖式 on*）
-    if (callbacks.onPlay) m.onPlay(callbacks.onPlay);
-    if (callbacks.onPause) m.onPause(callbacks.onPause);
-    if (callbacks.onStop) m.onStop(callbacks.onStop);
-    if (callbacks.onEnded) m.onEnded(callbacks.onEnded);
-    if (callbacks.onError) m.onError(() => callbacks.onError!(undefined));
-    if (callbacks.onWaiting) m.onWaiting(callbacks.onWaiting);
-    if (callbacks.onCanplay) m.onCanplay(callbacks.onCanplay);
-    if (callbacks.onTimeUpdate) {
-      m.onTimeUpdate(() => callbacks.onTimeUpdate!(m.currentTime, m.duration));
-    }
+    bound = callbacks;
+    bindOnce(m);
 
     // title 必须先于 src 设置
     m.title = meta.title;
@@ -45,9 +59,16 @@ const service: AudioService = {
   seek(sec) {
     getMgr().seek(sec);
   },
+  // 断流：小程序侧 stop() 即会终止当前音源的加载并清空播放态。
+  // 与 destroy() 的区别是保留单例与已注册的回调，便于随后重新 load。
+  release() {
+    mgr?.stop();
+  },
   destroy() {
     mgr?.stop();
     mgr = null;
+    bound = {};
+    listening = false;
   }
 };
 

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useState } from 'react';
 import { View, Text, Image } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { usePlayerStore } from '@/stores/player';
@@ -6,9 +6,11 @@ import { useUserStore } from '@/stores/user';
 import { WUXING } from '@/constants/wuxing';
 import { A } from '@/utils/color';
 import { rpx } from '@/utils/unit';
+import { fmtTime } from '@/utils/format';
 import { resolveUrl } from '@/utils/url';
 import Icon from '@/components/Icon';
 import SleepTimer from '@/components/SleepTimer';
+import UpgradePrompt from '@/components/UpgradePrompt';
 import type { ElementId } from '@/types';
 import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
@@ -18,40 +20,36 @@ export default function MiniPlayer() {
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const isLoading = usePlayerStore((s) => s.isLoading);
   const progress = usePlayerStore((s) => s.progress);
+  const currentTime = usePlayerStore((s) => s.currentTime);
+  const buffered = usePlayerStore((s) => s.buffered);
+  const loadError = usePlayerStore((s) => s.loadError);
+  const retry = usePlayerStore((s) => s.retry);
+  const duration = usePlayerStore((s) => s.duration);
   const timerVal = usePlayerStore((s) => s.timerVal);
   const pause = usePlayerStore((s) => s.pause);
   const resume = usePlayerStore((s) => s.resume);
-  const showUpgrade = usePlayerStore((s) => s.showUpgrade);
-  const dismissUpgrade = usePlayerStore((s) => s.dismissUpgrade);
   const element = useUserStore((s) => s.element) || ('木' as ElementId);
 
   const [timerOpen, setTimerOpen] = useState(false);
 
-  useEffect(() => {
-    if (!showUpgrade) return;
-    Taro.showModal({
-      title: '试听结束',
-      content: '开通会员，畅听全部专属音律',
-      confirmText: '去开通',
-      cancelText: '再想想',
-      success: (res) => {
-        if (res.confirm) Taro.redirectTo({ url: '/pages/member/index' });
-      },
-      complete: () => dismissUpgrade()
-    });
-  }, [showUpgrade, dismissUpgrade]);
-
-  if (!currentTrack) return null;
+  // 升级引导已抽到 UpgradePrompt（全屏播放器页不渲染 MiniPlayer，那边也要能弹）。
+  // 无曲目时本组件不出现，但仍要把引导挂上——试听到限那一刻是有曲目的，
+  // 这里主要保证「停止播放后清空 currentTrack」不会把待弹的提示一起吞掉。
+  if (!currentTrack) return <UpgradePrompt />;
 
   const el = WUXING[element];
   const toggle = () => {
+    // 加载失败时按钮变成「重试」，别让用户对着一个没反应的播放键
+    if (loadError) { retry(); return; }
     if (isLoading) return;
     isPlaying ? pause() : resume();
   };
 
-  // 进度 → 当前时间显示（与原型一致的近似换算）
-  const curMin = Math.floor(progress * 0.36);
-  const curSec = String(Math.floor((progress * 21.6) % 60)).padStart(2, '0');
+  // 直接用 store 里的真实播放秒数。
+  // （旧写法 progress*0.36 / progress*21.6 是把百分比按「36 分钟一首」硬折算的，
+  //  凡是时长不等于 36 分钟的曲目，显示的时间都是错的。）
+  const curLabel = fmtTime(currentTime);
+  const bufferedPct = duration ? Math.min(100, (buffered / duration) * 100) : 0;
 
   return (
     <Fragment>
@@ -79,12 +77,18 @@ export default function MiniPlayer() {
         </View>
 
         <View className="mini-player__info">
-          <Text className="mini-player__title">{currentTrack.title}</Text>
+          <Text className="mini-player__title">
+            {loadError || currentTrack.title}
+          </Text>
           <View className="mini-player__row">
             <Text className="mini-player__time cormorant" style={{ color: el.accent }}>
-              {curMin}:{curSec}
+              {curLabel}
             </Text>
             <View className="mini-player__bar">
+              <View
+                className="mini-player__bar-buffer"
+                style={{ width: `${bufferedPct}%` }}
+              />
               <View
                 className="mini-player__bar-fill"
                 style={{ width: `${progress}%`, background: el.primary }}
@@ -123,7 +127,9 @@ export default function MiniPlayer() {
         </View>
 
         <View className="mini-player__toggle" style={{ background: el.primary }} onClick={toggle}>
-          {isLoading ? (
+          {loadError ? (
+            <Icon name="repeat" size={26} color="#0a0e1a" strokeWidth={2} />
+          ) : isLoading ? (
             <View className="mini-player__spinner" />
           ) : isPlaying ? (
             <Icon name="pause" size={28} fill="#0a0e1a" strokeWidth={0} color="#0a0e1a" />
@@ -136,6 +142,7 @@ export default function MiniPlayer() {
 
     {/* 抽屉放到 .mini-player(fixed) 之外，否则 fixed 嵌套 fixed 会相对父级定位、被导航栏遮挡 */}
     <SleepTimer open={timerOpen} onClose={() => setTimerOpen(false)} />
+    <UpgradePrompt />
     </Fragment>
   );
 }

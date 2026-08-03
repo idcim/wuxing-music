@@ -2,6 +2,7 @@ import { PropsWithChildren } from 'react';
 import Taro, { useLaunch } from '@tarojs/taro';
 import { useUserStore } from '@/stores/user';
 import { useContentStore } from '@/stores/content';
+import { usePlayerStore } from '@/stores/player';
 import { isH5, isInWeChat } from '@/utils/platform';
 import { getToken } from '@/services/auth';
 import './app.scss';
@@ -11,6 +12,9 @@ function App({ children }: PropsWithChildren) {
     bootstrapAuth();
     // 从后端拉取五行/曲目（mock 下用本地常量）
     useContentStore.getState().hydrate();
+    // 恢复睡眠定时（刷新/冷启动后按截止时间戳校正）
+    usePlayerStore.getState().checkTimer();
+    watchForeground();
   });
 
   return children;
@@ -37,6 +41,18 @@ async function bootstrapAuth(): Promise<void> {
     return;
   }
   useUserStore.getState().initFromCache();
+}
+
+// 回到前台时校正睡眠定时：H5 切后台/锁屏会节流 setTimeout，
+// 定时可能晚触发甚至不触发，必须按真实时间重新判定。
+function watchForeground(): void {
+  if (isH5 && typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) usePlayerStore.getState().checkTimer();
+    });
+    return;
+  }
+  Taro.onAppShow?.(() => usePlayerStore.getState().checkTimer());
 }
 
 // 清理地址栏上微信回跳带的 code/state，避免刷新重复换取与分享泄漏。
