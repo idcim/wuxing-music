@@ -157,6 +157,7 @@ wuxing-music/
 ├── docker/                     # H5 前端容器：Dockerfile.h5 + h5.nginx.conf（同源反代 /api）
 ├── scripts/auto-deploy.sh      # ★ 1Panel 计划任务自动部署（拉取→重建→健康检查→失败回滚）
 ├── docs/                       # DEPLOY.md（部署与域名清单）/ ROADMAP.md（版本路线 + 安全清单）
+│                               # WEAPP-TODO.md（★ 小程序端欠账清单，包不随自动部署，独立记账）
 ├── version.json                # ★ 机读版本清单（app/api + 各端 + changelog）
 ├── docker-compose.yml          # 一键起 backend + admin + h5（连外部 MySQL）
 ├── project.config.json         # 微信开发者工具配置
@@ -395,7 +396,7 @@ GET  /api/mp/h5/oauth-url       # 公众号网页授权跳转地址（未配→c
 POST /api/mp/h5/login           # 公众号 code 换 openid 登录（未配→guestId dev 兜底）
 GET  /api/mp/h5/jssdk-config    # wx.config 签名（JSAPI 支付 / 分享）
 GET  /api/mp/profile            # 我的资料
-PATCH|POST /api/mp/profile      # 改昵称/头像（同时支持 POST 规避代理对 PATCH 的 405）
+PATCH|POST /api/mp/profile      # 改昵称/头像/生日/时辰（同时支持 POST 规避代理对 PATCH 的 405）
 POST /api/mp/upload             # 用户头像上传（≤5MB）
 GET  /api/mp/membership         # 会员态（含 isPremium）
 POST /api/mp/bind-phone         # 绑定手机号
@@ -412,12 +413,14 @@ POST /api/mp/history            # 上报聆听
 GET  /api/mp/history            # 聆听历史
 GET  /api/mp/stats/weekly       # 周聆听统计
 POST /api/mp/qrcode             # 小程序码（海报）
+POST /api/mp/qrcode/url         # 普通链接二维码（H5 海报用，小程序码 H5 扫了会跳出去）
 ```
 
 ### 管理端 `/api/admin/*`（需 Bearer；`admin/src/api/index.ts` 有全量封装）
 
 ```
-POST /api/admin/login  GET /me  GET /dashboard
+GET  /api/admin/captcha            # 登录图形验证码（免鉴权，一次性消费）
+POST /api/admin/login  GET /me  GET /dashboard   # 登录需带 captcha_id/captcha_code
 GET  /users  GET /users/{id}  POST /users/{id}/grant                 # 用户 + 后台开通会员
 GET  /orders GET /orders/{id} POST /orders/{id}/refund  .../refund/confirm  # 订单 + 退款
 GET/POST /plans     DELETE /plans/{id}
@@ -453,7 +456,7 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 | `element` | 五行配置（id=木火土金水） | primary/accent/glow/bg、note/organ/season、sleep_tip |
 | `track` | 曲目 | element_id(FK)、hz、audio_url、cover_url、is_premium、preview_sec、is_online |
 | `plan` | 套餐 | id(free/month/year/trial)、price、duration_days、features(JSON) |
-| `user` | 用户 | openid/unionid/**oa_openid**/phone/**password_hash**、element、membership_type/name/expire_at/source |
+| `user` | 用户 | openid/unionid/**oa_openid**/phone/**password_hash**、element、**birthday/birth_hour**、membership_type/name/expire_at/source |
 | `cdkey` | 兑换码 | code、batch_id、plan_type、status(unused/used/disabled/expired) |
 | `cdkey_redeem_log` | 兑换日志 | user_id、cdkey_id、ip、device |
 | `app_order` | 订单 | order_no、status(pending/paid/refunding/refunded…)、**is_gift/gift_code**、**refund_*** |
@@ -497,7 +500,11 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 
 ### 版本
 
-根 `version.json` 是**机读的唯一版本源**（`current.app` / `current.api` + 各端 `channels` + `changelog`），前端常量 `src/constants/version.ts` 与之对齐，APP 更新接口契约见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。**当前 v1.1.0**（小程序 + H5）。发版时同步改这三处。
+根 `version.json` 是**机读的唯一版本源**（`current.app` / `current.api` + 各端 `channels` + `changelog`），前端常量 `src/constants/version.ts` 与之对齐，APP 更新接口契约见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。**当前 v1.3.0**。发版时同步改**四处**：`version.json`、`package.json`、`src/constants/version.ts`、`docs/ROADMAP.md`（v1.2.0 曾漏改 `version.ts` 的 `API_VERSION`）。
+
+⚠️ **`channels.weapp` 是唯一会与源码版本脱节的一栏**：H5/后端/后台推 `master` 即自动部署，
+小程序包却要手工上传，所以该栏另有 `published` 字段记录**线上实际发布的版本**；
+未上传前它会一直落后于 `version`。欠账明细见 [`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)。
 
 ------
 
@@ -655,12 +662,13 @@ ZEROER-GIFT-7DAY      → 7日体验卡
 
 ## 参考资源
 
-- 本仓库：[`README.md`](README.md)（如何跑）、[`backend/README.md`](backend/README.md)、[`admin/README.md`](admin/README.md)、[`docs/DEPLOY.md`](docs/DEPLOY.md)（部署 + 域名清单 + 上线检查单）、[`docs/ROADMAP.md`](docs/ROADMAP.md)（版本路线图 + APP 更新接口契约 + 安全加固清单）、根 `version.json`（机读版本清单）
+- 本仓库：[`README.md`](README.md)（如何跑）、[`backend/README.md`](backend/README.md)、[`admin/README.md`](admin/README.md)、[`docs/DEPLOY.md`](docs/DEPLOY.md)（部署 + 域名清单 + 上线检查单）、[`docs/ROADMAP.md`](docs/ROADMAP.md)（版本路线图 + APP 更新接口契约 + 安全加固清单）、[`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)（小程序端欠账清单）、根 `version.json`（机读版本清单）
 - 原型预览：`prototype/wuxing-music-app.jsx`（React Web 版）
 - Taro 文档：https://docs.taro.zone/ ｜ 微信小程序：https://developers.weixin.qq.com/miniprogram/dev/framework/
 
 ------
 
-**最后更新**：补齐部署与版本章节（H5 容器化 + 1Panel 自动部署）、后台设置中心与 RBAC 现状、Taro H5 `<Input>` 三条新陷阱。
-**当前版本**：v1.1.0（小程序 + H5，见根 `version.json`）。
+**最后更新**：生日 → 农历/生肖/本命五行（后端算）、后台登录验证码、新增 [`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)。
+**当前版本**：v1.3.0（见根 `version.json`）。
 **当前阶段**：小程序 + H5（微信内）前端、后端管理/公开接口、管理后台均已完成，三容器已上服务器且推 `master` 即自动部署；微信支付/公众号授权/短信/OSS 待真实配置上线验证。
+⚠️ **小程序包不随自动部署**，欠账（合法域名、待真机验证项、未接的微信原生能力、审核合规）单独记在 [`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)。
