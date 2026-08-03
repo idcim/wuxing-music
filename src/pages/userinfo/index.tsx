@@ -1,4 +1,4 @@
-import { View, Text, Image, Button } from '@tarojs/components';
+import { View, Text, Image, Button, Picker } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { useState } from 'react';
 import { WUXING } from '@/constants/wuxing';
@@ -14,14 +14,53 @@ import type { ElementId } from '@/types';
 import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
 
+// 出生时辰选项。下标 0 = 未知，其余对应十二时辰；值是该时辰的代表钟点（存进后端的就是它）。
+// 子时跨 23:00-00:59 两个自然日，这里取 00 点一侧——与用户填的公历日期同一天，
+// 与后端 lunar.py 里 sect=2 的取舍一致，不会出现「补了时辰本命五行就变」。
+const SHICHEN: { label: string; hour: number }[] = [
+  { label: '未知', hour: -1 },
+  { label: '子时 23:00-00:59', hour: 0 },
+  { label: '丑时 01:00-02:59', hour: 2 },
+  { label: '寅时 03:00-04:59', hour: 4 },
+  { label: '卯时 05:00-06:59', hour: 6 },
+  { label: '辰时 07:00-08:59', hour: 8 },
+  { label: '巳时 09:00-10:59', hour: 10 },
+  { label: '午时 11:00-12:59', hour: 12 },
+  { label: '未时 13:00-14:59', hour: 14 },
+  { label: '申时 15:00-16:59', hour: 16 },
+  { label: '酉时 17:00-18:59', hour: 18 },
+  { label: '戌时 19:00-20:59', hour: 20 },
+  { label: '亥时 21:00-22:59', hour: 22 }
+];
+const SHICHEN_LABELS = SHICHEN.map((s) => s.label);
+
+// 今天（Picker 的 end，生日不能选未来）
+function todayStr(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 export default function UserInfo() {
   const user = useUserStore((s) => s.user);
   const element = useUserStore((s) => s.element);
   const setPhone = useUserStore((s) => s.setPhone);
+  const setUser = useUserStore((s) => s.setUser);
   const setProfile = useUserStore((s) => s.setProfile);
   const el = WUXING[(element as ElementId) || '木'];
 
   const [editing, setEditing] = useState<EditField>(null);
+
+  // 生日/时辰改完立即落库。updateProfile 返回完整用户对象——
+  // 生日会连带算出农历、生肖、本命五行，这些派生字段只有后端知道。
+  const saveBirth = async (patch: { birthday?: string; birthHour?: number }) => {
+    try {
+      setUser(await updateProfile(patch));
+      Taro.showToast({ title: '已更新', icon: 'success' });
+    } catch (e: any) {
+      Taro.showToast({ title: e?.message || '保存失败', icon: 'none' });
+    }
+  };
 
   // 登录态变化时刷新（不再 redirectTo 到登录页——那会销毁本页，
   // 而登录成功后一律 reLaunch 回首页，用户再也回不到「个人信息」）
@@ -30,14 +69,21 @@ export default function UserInfo() {
 
   const goLogin = () => Taro.navigateTo({ url: '/pages/login/index' });
 
+  // 当前时辰在选项里的下标（0 = 未知）
+  const shichenIndex = Math.max(
+    0,
+    SHICHEN.findIndex((s) => s.hour === (user?.birthHour ?? -1))
+  );
+  // 本命五行的配色（与测评体质区分开，各用各的颜色）
+  const birthEl = user?.lunar?.element ? WUXING[user.lunar.element as ElementId] : null;
+
   // 上传头像临时图 → 换正式 URL → 落库 → 更新本地
   const saveAvatar = async (tmp: string) => {
     if (!tmp) return;
     Taro.showLoading({ title: '上传中', mask: true });
     try {
       const url = await uploadAvatar(tmp);
-      const saved = await updateProfile({ avatar: url });
-      setProfile({ avatar: saved.avatar ?? url });
+      setUser(await updateProfile({ avatar: url }));
       Taro.hideLoading();
       Taro.showToast({ title: '头像已更新', icon: 'success' });
     } catch (e: any) {
@@ -169,7 +215,10 @@ export default function UserInfo() {
         </View>
 
         {/* 登录密码：设置后可用「手机号 + 密码」登录 */}
-        <View className="userinfo__row" onClick={() => setEditing('password')}>
+        <View
+          className="userinfo__row userinfo__row--divider"
+          onClick={() => setEditing('password')}
+        >
           <Text className="userinfo__label">登录密码</Text>
           <View className="userinfo__row-right">
             <Text className="userinfo__value userinfo__value--muted">
@@ -178,16 +227,73 @@ export default function UserInfo() {
             <Icon name="chevronRight" size={28} color="#334155" strokeWidth={1.5} />
           </View>
         </View>
+
+        {/* 生日：用 Picker 包住整行，不走 UserEditSheet——
+            Picker 内不含 <Input>，天然绕开「Input 必须常驻挂载」那套（陷阱 14）。 */}
+        <Picker
+          mode="date"
+          start="1900-01-01"
+          end={todayStr()}
+          value={user.birthday || todayStr()}
+          onChange={(e) => saveBirth({ birthday: String(e.detail.value) })}
+        >
+          <View className="userinfo__row userinfo__row--divider">
+            <Text className="userinfo__label">生日</Text>
+            <View className="userinfo__row-right">
+              <Text className={`userinfo__value ${user.birthday ? '' : 'userinfo__value--muted'}`}>
+                {user.birthday || '未填写'}
+              </Text>
+              <Icon name="chevronRight" size={28} color="#334155" strokeWidth={1.5} />
+            </View>
+          </View>
+        </Picker>
+
+        {/* 出生时辰：可选，填了才能凑齐四柱 */}
+        <Picker
+          mode="selector"
+          range={SHICHEN_LABELS}
+          value={shichenIndex}
+          onChange={(e) => saveBirth({ birthHour: SHICHEN[Number(e.detail.value)].hour })}
+        >
+          <View className="userinfo__row">
+            <Text className="userinfo__label">出生时辰</Text>
+            <View className="userinfo__row-right">
+              <Text className={`userinfo__value ${shichenIndex ? '' : 'userinfo__value--muted'}`}>
+                {SHICHEN_LABELS[shichenIndex]}
+              </Text>
+              <Icon name="chevronRight" size={28} color="#334155" strokeWidth={1.5} />
+            </View>
+          </View>
+        </Picker>
       </View>
 
-      {/* 体质 / 会员（只读） */}
+      {/* 体质 / 本命 / 会员（只读） */}
       <View className="userinfo__list userinfo__list--readonly fade-up" style={{ animationDelay: '0.05s' }}>
+        {/* 测评体质：推荐曲目与主题配色的依据，仍以它为准 */}
         <View className="userinfo__row userinfo__row--divider">
-          <Text className="userinfo__label">五行体质</Text>
+          <Text className="userinfo__label">测评体质</Text>
           <Text className="userinfo__value" style={{ color: el.accent }}>
             {element ? `${el.id}型 · ${el.note}音` : '未测评'}
           </Text>
         </View>
+
+        {/* 本命五行：由生日换算，仅作命理趣味展示，不参与推荐 */}
+        {!!user.lunar && (
+          <View className="userinfo__row userinfo__row--divider">
+            <Text className="userinfo__label">本命五行</Text>
+            <Text
+              className="userinfo__value userinfo__value--wrap"
+              style={{ color: birthEl ? birthEl.accent : undefined }}
+            >
+              {[
+                user.lunar.date,
+                user.lunar.shengXiao ? `属${user.lunar.shengXiao}` : '',
+                user.lunar.element ? `${user.lunar.dayGan}${user.lunar.element}命` : ''
+              ].filter(Boolean).join(' · ')}
+            </Text>
+          </View>
+        )}
+
         <View className="userinfo__row">
           <Text className="userinfo__label">会员</Text>
           <Text className="userinfo__value">{user.membership.name}</Text>

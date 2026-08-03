@@ -8,7 +8,7 @@ import json
 import logging
 import re
 import uuid
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import NoReturn
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app import ratelimit, sms, storage, wxpay
 from app.config import settings
 from app.database import get_db
+from app.lunar import lunar_info
 from app.models import Cdkey, CdkeyRedeemLog, Element, Order, PlayHistory, Plan, Setting, SmsCode, Track, User
 from app.security import hash_password, verify_password
 
@@ -36,12 +37,8 @@ def ok(data=None, msg="ok"):
 PHONE_RE = re.compile(r"^1\d{10}$")
 
 
-def _client_ip(request: Request) -> str:
-    """取客户端 IP：经反向代理时优先 X-Forwarded-For 首段，否则连接对端。"""
-    xff = request.headers.get("x-forwarded-for", "")
-    if xff:
-        return xff.split(",")[0].strip()
-    return request.client.host if request.client else ""
+# 取客户端 IP 已提到 ratelimit（后台登录限流同样要用），此处保留别名不改调用点
+_client_ip = ratelimit.client_ip
 
 
 # ── 用户 JWT（与管理员区分，sub 前缀 user:）──
@@ -96,6 +93,12 @@ def _user_dict(u: User) -> dict:
         "element": u.element,
         "elementScores": json.loads(u.element_scores or "{}"),
         "quizCompletedAt": u.quiz_completed_at.isoformat() if u.quiz_completed_at else None,
+        "birthday": u.birthday.isoformat() if u.birthday else None,
+        "birthHour": u.birth_hour,
+        # 农历/生肖/本命五行由后端算好一起下发（前端不引农历库，见 app/lunar.py 开头注释）。
+        # 注意：这些字段必须出现在本函数里——前端 initFromCache 会用 fetchProfile 的结果
+        # 整体覆盖本地缓存，这里不返回的字段会在下次启动时被抹掉。
+        "lunar": lunar_info(u.birthday, u.birth_hour),
         "isPremium": _is_premium(u),
         "membership": {
             "type": u.membership_type,
@@ -629,6 +632,8 @@ def mp_profile(user: User = Depends(get_current_user)):
 class UpdateProfileIn(BaseModel):
     nickname: str | None = None
     avatar: str | None = None
+    birthday: str | None = None      # 公历 ISO 日期 "1996-04-12"，空串表示清除
+    birthHour: int | None = None     # 出生钟点 0-23，-1 表示清除（未知时辰）
 
 
 @router.api_route("/profile", methods=["PATCH", "POST"])
@@ -648,6 +653,29 @@ def mp_update_profile(
         user.nickname = name
     if body.avatar is not None:
         user.avatar = body.avatar.strip()
+    if body.birthday is not None:
+        raw = body.birthday.strip()
+        if not raw:
+            user.birthday = None          # 传空串 = 清除生日
+        else:
+            try:
+                d = date.fromisoformat(raw)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="生日格式应为 YYYY-MM-DD")
+            today = date.today()
+            if d > today:
+                raise HTTPException(status_code=400, detail="生日不能晚于今天")
+            if d.year < 1900:
+                raise HTTPException(status_code=400, detail="生日年份过早")
+            user.birthday = d
+    if body.birthHour is not None:
+        # -1 是前端「未知时辰」的清除信号；其余必须是合法钟点
+        if body.birthHour < 0:
+            user.birth_hour = None
+        elif body.birthHour > 23:
+            raise HTTPException(status_code=400, detail="出生时辰不合法")
+        else:
+            user.birth_hour = body.birthHour
     db.commit()
     db.refresh(user)
     return ok(_user_dict(user))

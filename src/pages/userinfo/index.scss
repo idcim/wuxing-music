@@ -113,6 +113,16 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 
+    // 本命五行那行是「农历 · 生肖 · X命」的长串，
+    // 上面的 max-width + nowrap 省略号会把它截掉，这里放开换行。
+    &--wrap {
+      max-width: 460rpx;
+      overflow: visible;
+      white-space: normal;
+      text-align: right;
+      line-height: 1.5;
+    }
+
     &--muted {
       color: $text-quaternary;
     }

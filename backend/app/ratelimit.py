@@ -15,6 +15,21 @@
 import threading
 import time
 
+from fastapi import Request
+
+
+def client_ip(request: Request) -> str:
+    """取客户端 IP：经反向代理时优先 X-Forwarded-For 首段，否则连接对端。
+
+    放在这里是因为它只服务于「按 IP 限流」这一个用途，
+    而调用方分散在小程序端与后台登录两处路由里。
+    """
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else ""
+
+
 _lock = threading.Lock()
 # key -> 事件时间戳列表（正向限流用）
 _hits: dict[str, list[float]] = {}

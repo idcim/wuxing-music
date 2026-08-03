@@ -58,7 +58,9 @@
         <el-descriptions-item label="昵称">{{ detail.nickname }}</el-descriptions-item>
         <el-descriptions-item label="ID">{{ detail.id }}</el-descriptions-item>
         <el-descriptions-item label="手机号">{{ detail.phone || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="体质">{{ detail.element || '未测评' }}</el-descriptions-item>
+        <el-descriptions-item label="测评体质">{{ detail.element || '未测评' }}</el-descriptions-item>
+        <el-descriptions-item label="生日">{{ birthText(detail) }}</el-descriptions-item>
+        <el-descriptions-item label="本命五行">{{ lunarText(detail.lunar) }}</el-descriptions-item>
         <el-descriptions-item label="会员">{{ detail.membership_name }}</el-descriptions-item>
         <el-descriptions-item label="来源">{{ srcText(detail.membership_source) }}</el-descriptions-item>
         <el-descriptions-item label="到期">{{ fmt(detail.membership_expire_at) }}</el-descriptions-item>
@@ -157,6 +159,21 @@ const payPlans = computed(() => plans.value.filter((p) => p.id !== 'free'));
 
 function fmt(s?: string) {
   return s ? new Date(s).toLocaleString('zh-CN') : '-';
+}
+
+// 生日是纯日期，别用 fmt（toLocaleString 会拖一串 00:00:00 出来）
+function birthText(d: any) {
+  if (!d?.birthday) return '-';
+  const h = d.birth_hour;
+  return h === null || h === undefined ? d.birthday : `${d.birthday} ${String(h).padStart(2, '0')}时`;
+}
+
+// 农历/生肖/本命五行，由后端换算下发
+function lunarText(l: any) {
+  if (!l) return '-';
+  return [l.date, l.shengXiao ? `属${l.shengXiao}` : '', l.element ? `${l.dayGan}${l.element}命` : '']
+    .filter(Boolean)
+    .join(' · ');
 }
 
 async function load() {

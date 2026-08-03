@@ -22,7 +22,7 @@ interface UserStore {
   setElement: (el: ElementId, scores: ElementScores) => void;
   updateMembership: (m: Membership) => void;
   setPhone: (phone: string) => void;
-  setProfile: (p: { nickname?: string; avatar?: string; hasPassword?: boolean }) => void;
+  setProfile: (p: Partial<User>) => void;
   login: () => Promise<User>;
   loginByPhone: (phone: string, code: string) => Promise<User>;
   loginByPassword: (phone: string, password: string) => Promise<User>;

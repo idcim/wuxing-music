@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.lunar import lunar_info
 from app.models import Admin, Cdkey, Order, Plan, Track, User
 from app.schemas import ok
 from app.security import require_perm
@@ -22,6 +23,7 @@ def _user_dict(u: User) -> dict:
         "nickname": u.nickname,
         "avatar": u.avatar,
         "element": u.element,
+        "birthday": u.birthday.isoformat() if u.birthday else None,
         "membership_type": u.membership_type,
         "membership_name": u.membership_name,
         "membership_source": u.membership_source,
@@ -62,6 +64,8 @@ def get_user(
     data["quiz_completed_at"] = (
         u.quiz_completed_at.isoformat() if u.quiz_completed_at else None
     )
+    data["birth_hour"] = u.birth_hour
+    data["lunar"] = lunar_info(u.birthday, u.birth_hour)   # 农历/生肖/本命五行
     # 该用户的订单
     orders = (
         db.query(Order)

@@ -1,7 +1,8 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -125,6 +126,10 @@ class User(Base):
     element: Mapped[str] = mapped_column(String(2), default="")
     element_scores: Mapped[str] = mapped_column(Text, default="{}")  # JSON
     quiz_completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    birthday: Mapped[date | None] = mapped_column(Date, nullable=True)          # 公历生日
+    # 出生钟点 0-23（可空）。存钟点而非「时辰序号」：子时跨 23:00-00:59 两个自然日，
+    # 存序号会丢掉「到底是哪一天的子时」这个信息。
+    birth_hour: Mapped[int | None] = mapped_column(Integer, nullable=True)
     membership_type: Mapped[str] = mapped_column(String(16), default="free")
     membership_name: Mapped[str] = mapped_column(String(32), default="听闻")
     membership_expire_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

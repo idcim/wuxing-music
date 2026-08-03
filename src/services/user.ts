@@ -1,8 +1,8 @@
 import Taro from '@tarojs/taro';
 import { USE_MOCK, API_BASE, TOKEN_KEY } from '@/constants/env';
 import { request } from '@/services/api';
-import { storage } from '@/services/storage';
-import type { ElementId, ElementScores } from '@/types';
+import { storage, STORAGE_KEYS } from '@/services/storage';
+import type { ElementId, ElementScores, User } from '@/types';
 
 // 提交测评结果到后端（mock 模式下静默成功，仅依赖本地存储）
 export async function submitQuiz(element: ElementId, scores: ElementScores): Promise<void> {
@@ -24,17 +24,31 @@ export async function bindPhone(phone: string, code: string): Promise<string> {
   return res.phone;
 }
 
-// 更新昵称 / 头像，落库。mock 下原样返回，仅靠本地存储。
-export async function updateProfile(
-  patch: { nickname?: string; avatar?: string }
-): Promise<{ nickname?: string; avatar?: string }> {
-  if (USE_MOCK) return patch;
+// 可提交的资料字段。birthday 传空串 = 清除；birthHour 传 -1 = 清除（未知时辰）。
+export interface ProfilePatch {
+  nickname?: string;
+  avatar?: string;
+  birthday?: string;
+  birthHour?: number;
+}
+
+/**
+ * 更新资料并落库，返回**完整用户对象**。
+ *
+ * 返回完整对象而不是只回投改过的字段：生日会连带算出农历/生肖/本命五行，
+ * 这些派生字段只有后端知道；旧写法 `return { nickname, avatar }` 会把它们丢掉。
+ * mock 下没有后端可算，只把 patch 合并进当前缓存用户。
+ */
+export async function updateProfile(patch: ProfilePatch): Promise<User> {
+  if (USE_MOCK) {
+    const cur = storage.get<User>(STORAGE_KEYS.USER) as User;
+    return { ...cur, ...patch } as User;
+  }
   // 用 POST（后端同时支持 PATCH/POST），规避部分反向代理对 PATCH 返回 405
-  const res = await request<{ nickname: string; avatar: string }>('/api/mp/profile', {
+  return request<User>('/api/mp/profile', {
     method: 'POST',
-    data: patch
+    data: { ...patch }
   });
-  return { nickname: res.nickname, avatar: res.avatar };
 }
 
 /**

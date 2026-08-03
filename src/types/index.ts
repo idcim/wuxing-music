@@ -71,12 +71,24 @@ export interface Membership {
   source: 'purchase' | 'cdkey' | 'gift' | null;
 }
 
+// 生日换算出的农历信息（由后端算好下发，前端不引农历库）
+export interface LunarInfo {
+  date: string;              // 「丙子年二月廿五」，闰月自带「闰」前缀
+  shengXiao: string;         // 生肖，春节口径
+  dayGan: string;            // 日柱天干
+  element: ElementId | '';   // 日主五行（本命五行），值域与 ElementId 一致
+  eightChar: string | null;  // 四柱「丙子 壬辰 己卯 丙子」，未填时辰为 null
+}
+
 export interface User {
   id: string;
   openid: string;
   unionid?: string;
   phone?: string;
   hasPassword?: boolean;     // 是否已设置登录密码（决定「手机号 + 密码」登录可用与否）
+  birthday?: string | null;  // 公历生日 "1996-04-12"
+  birthHour?: number | null; // 出生钟点 0-23，null 表示未知时辰
+  lunar?: LunarInfo | null;  // 后端据 birthday 换算，无生日则为 null
   nickname: string;
   avatar: string;
   element: ElementId | null;
