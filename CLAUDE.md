@@ -381,13 +381,26 @@ const top = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
 - `GET /api/mp/stats/weekly`：近 7 天每日次数/分钟 + 本周总时长。
 - `POST /api/mp/qrcode`：`getwxacodeunlimit` 生成无限量小程序码（海报二维码用）。
 
-### 8. 代理分成 ⭐（v1.4.0，**默认整体关闭**）
+### 8. 代理分成 ⭐（v1.5.0，**两级**，默认整体关闭）
 
 面向**实体店**与**网络推手**的成交分成。核心逻辑收在 `backend/app/agent_service.py`
 （不塞 `mp.py`，后者已 1500+ 行），管理端在 `routers/agents.py`。
 
-**⚠️ 只做一级分销**——微信禁止三级及以上分销（封号红线）。模型上**刻意不留 `parent_agent_id`**，
-不要"顺手"加二级。
+**⚠️ 计酬封顶两级**——红线是「不得达到三级」，不是不能有二级。
+`record_commission` **只走两跳（直推 + 其 parent_id），绝不递归向上**；
+链可以更长（琴行→小李→小王），但小王的客户成交只付小王与小李，琴行 0。别加第三级。
+
+**分成算法：抽成从下级那份里扣，平台总支出不变**
+```
+base = 订单额 × 直推的一级比例  = 100 × 20% = ¥20   ← 平台支出，恒定
+cut  = base   × 上级的二级抽成  = 20  × 25% = ¥5
+lvl1 = base − cut               = ¥15               ← 直推实拿
+```
+`lvl1` **必须由 `base − cut` 反算**，不能独立取整——否则两条相加与 base 差一分，对账对不平。
+`rate2` 取**上级自己的** `commission_rate2`（配在上级身上：「我能抽下级多少」）。
+
+**上下级自动继承且永久**：用户设为代理时其 `user.agent_id` 即上级；只允许为空时补填，
+不允许改指向（改绑等于把别人的下级抢走）。
 
 **默认关闭要贯穿三层**，新增相关代码时三处都得挂上：
 1. **接口**：`agent_service.require_enabled(db)` → 未开启回 **404**（不是 403，403 等于承认功能存在）。
@@ -397,6 +410,12 @@ const top = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
 3. **界面**：后台菜单按 `/api/admin/me` 的 `features.agent` 过滤（`admin/src/menu.ts` 的
    `feature` 字段，路由守卫与 MainLayout 共用）；前端入口只在 `/api/mp/agent/me`
    回 `isAgent=true` 时渲染。
+   ⚠️ `NAV_AGENT` 这一组是**逐项**门禁而非整组：「分成设置」**不带 feature**——
+   它是模块唯一的开启入口，跟着开关一起藏就没人能打开了（v1.4 埋在设置中心 tab 里，实际找不到）。
+
+**⚠️ `commission` 的唯一键是 `(order_id, level)` 复合的**，不是 `order_id` 单列——
+一单要落两条。存量库的旧单列唯一索引由 `main.py::_fix_commission_index()` 换掉（幂等）。
+**退款冲正必须 `.all()` 不能 `.first()`**，否则上级那条留在账上照样能提走。
 
 **归因（首次扫码永久绑定）**：推广码进小程序码 `scene` / H5 链接 `?a=`，
 `app.tsx` 的 `useLaunch` 里 `captureAgentCode()` **先落本地**（此时多半没登录），
@@ -454,7 +473,8 @@ POST /api/mp/qrcode/url         # 普通链接二维码（H5 海报用，小程�
 # ── 代理分成（模块默认关闭；未开启时以下一律 404）──
 POST /api/mp/agent/bind         # 绑定推广码（首次扫码永久绑定，已绑不改绑）
 GET  /api/mp/agent/me           # 代理身份 + 余额 + 本月业绩（非代理回 isAgent:false）
-GET  /api/mp/agent/commissions  # 我的分成明细
+GET  /api/mp/agent/commissions  # 我的分成明细（含 level / baseAmount）
+GET  /api/mp/agent/downline     # 我的下级代理 + 推广用户数（只有一层）
 POST /api/mp/agent/withdraw     # 申请提现（金额以服务端重算余额为准）
 GET  /api/mp/agent/withdrawals  # 我的提现记录
 ```
@@ -476,7 +496,9 @@ POST /settings/storage/migrate      # 存储迁移
 POST /upload                        # 后台文件/封面/证书上传
 GET/PUT /settings/agent             # 代理分成设置（★ 常驻，是模块唯一开启入口，不受开关门禁）
 GET/POST /agents  PUT /agents/{id}  POST /agents/{id}/disable  GET /agents-summary  # 代理
-GET  /commissions                   # 分成明细
+GET  /agents/{id}/downline          # 下属：直接下级代理 + 名下用户（只看一层）
+POST /users/{id}/agent              # ★ 把用户设为代理（上级按推广来源自动落定，不可改）
+GET  /commissions                   # 分成明细（?level=1 直推 / 2 下级抽成）
 GET  /withdrawals  POST /withdrawals/{id}/approve | /reject | /paid                 # 提现审核
 GET/POST /admins  PUT/DELETE /admins/{id}  POST /admins/{id}/password   # 管理员账号
 GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色 + 权限点清单
@@ -511,8 +533,8 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 | `setting` | KV 配置 | key/value（`pay_config`/`site_config`/`storage_config`/`mp_config`/`oa_config`(公众号)/`sms_config`(短信)） |
 | `play_history` | 聆听历史 | user_id、track_id、played_at |
 | `sms_code` | 短信验证码（手机登录） | phone、code、scene、expire_at、used、attempts（失败≥5 作废） |
-| `agent` | ★ 代理（实体店/网络推手） | code(推广码)、type(store/promoter)、user_id(代理中心认人)、commission_rate(**null=跟随全局默认，0≠未设置**)、status |
-| `commission` | ★ 分成记录 | agent_id、**order_id(unique，幂等靠它)**、rate/amount(成交时点快照)、status(pending→available→withdrawing→paid / void)、available_at、clawback |
+| `agent` | ★ 代理（实体店/网络推手） | code(推广码)、type(store/promoter)、user_id(代理中心认人)、commission_rate(一级)/commission_rate2(作为上级的抽成，**null=跟随全局，0≠未设置**)、**parent_id(上级，永久不可改)**、status |
+| `commission` | ★ 分成记录（一单最多两条） | agent_id、order_id、**level(1直推/2上级抽成)**、**唯一键 (order_id, level)**、base_amount(一级基数=平台支出)、rate/amount(成交时点快照)、source_agent_id(二级行的来源下级)、status(pending→available→withdrawing→paid / void)、clawback |
 | `withdrawal` | ★ 提现单 | agent_id、amount、status(pending→approved→paid / rejected / failed)、payout_mode、transfer_no |
 
 ------
@@ -550,7 +572,7 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 
 ### 版本
 
-根 `version.json` 是**机读的唯一版本源**（`current.app` / `current.api` + 各端 `channels` + `changelog`），前端常量 `src/constants/version.ts` 与之对齐，APP 更新接口契约见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。**当前 v1.4.0**。发版时同步改**四处**：`version.json`、`package.json`、`src/constants/version.ts`、`docs/ROADMAP.md`（v1.2.0 曾漏改 `version.ts` 的 `API_VERSION`）。
+根 `version.json` 是**机读的唯一版本源**（`current.app` / `current.api` + 各端 `channels` + `changelog`），前端常量 `src/constants/version.ts` 与之对齐，APP 更新接口契约见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。**当前 v1.5.0**。发版时同步改**四处**：`version.json`、`package.json`、`src/constants/version.ts`、`docs/ROADMAP.md`（v1.2.0 曾漏改 `version.ts` 的 `API_VERSION`）。
 
 ⚠️ **`channels.weapp` 是唯一会与源码版本脱节的一栏**：H5/后端/后台推 `master` 即自动部署，
 小程序包却要手工上传，所以该栏另有 `published` 字段记录**线上实际发布的版本**；
@@ -718,7 +740,7 @@ ZEROER-GIFT-7DAY      → 7日体验卡
 
 ------
 
-**最后更新**：代理分成模块（实体店 / 网络推手，默认整体关闭）。
-**当前版本**：v1.4.0（见根 `version.json`）。
+**最后更新**：代理分成升级二级（抽成从下级那份里扣）、下属视图、后台独立代理菜单。
+**当前版本**：v1.5.0（见根 `version.json`）。
 **当前阶段**：小程序 + H5（微信内）前端、后端管理/公开接口、管理后台均已完成，三容器已上服务器且推 `master` 即自动部署；微信支付/公众号授权/短信/OSS 待真实配置上线验证。
 ⚠️ **小程序包不随自动部署**，欠账（合法域名、待真机验证项、未接的微信原生能力、审核合规）单独记在 [`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)。
