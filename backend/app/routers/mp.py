@@ -89,6 +89,8 @@ def _user_dict(u: User) -> dict:
         "openid": u.openid,
         "unionid": u.unionid,
         "phone": u.phone,
+        # 只回布尔，不回哈希：前端据此显示「登录密码 已设置/未设置」
+        "hasPassword": bool(u.password_hash),
         "nickname": u.nickname,
         "avatar": u.avatar,
         "element": u.element,
@@ -224,6 +226,9 @@ class SmsSendIn(BaseModel):
 # 短信发送限频阈值
 SMS_IP_HOURLY = 20        # 同 IP 每小时最多发起（防批量盗刷不同号码）
 SMS_PHONE_DAILY = 10      # 同手机号每日最多发送（防对单号短信轰炸）
+# 允许的验证码场景（与前端 SmsScene 对齐）：未知场景一律拒绝，
+# 免得被用来凭空消耗短信额度、或绕开某个场景的额外校验。
+SMS_SCENES = {"login", "bind", "reset"}
 
 
 @router.post("/sms/send")
@@ -235,6 +240,8 @@ def mp_sms_send(body: SmsSendIn, request: Request, db: Session = Depends(get_db)
     if not PHONE_RE.match(phone):
         raise HTTPException(status_code=400, detail="手机号格式不正确")
     scene = (body.scene or "login").strip()
+    if scene not in SMS_SCENES:
+        raise HTTPException(status_code=400, detail="不支持的验证码场景")
 
     # 生产未配短信：拒绝而非明文回传（dev fail-open 仅限开发态）
     if not settings.debug and not sms.is_configured(db):
@@ -279,6 +286,37 @@ def mp_sms_send(body: SmsSendIn, request: Request, db: Session = Depends(get_db)
     return ok(data)
 
 
+def _consume_sms_code(db: Session, phone: str, code: str, scene: str) -> None:
+    """校验并核销一枚短信验证码；不通过直接抛 400。
+
+    登录（scene=login）与绑定手机号（scene=bind）共用，保证两处的
+    过期判定与失败计数（达 5 次作废该码，防暴力猜测）行为一致。
+    """
+    now = datetime.utcnow()
+    row = (
+        db.query(SmsCode)
+        .filter(
+            SmsCode.phone == phone,
+            SmsCode.scene == scene,
+            SmsCode.used == False,  # noqa: E712
+        )
+        .order_by(SmsCode.id.desc())
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=400, detail="验证码错误")
+    if row.expire_at and row.expire_at < now:
+        raise HTTPException(status_code=400, detail="验证码已过期")
+    if row.code != code:
+        row.attempts += 1
+        if row.attempts >= 5:
+            row.used = True
+        db.commit()
+        raise HTTPException(status_code=400, detail="验证码错误")
+    row.used = True
+    db.commit()
+
+
 class PhoneLoginIn(BaseModel):
     phone: str
     code: str
@@ -292,30 +330,7 @@ def mp_login_phone(body: PhoneLoginIn, db: Session = Depends(get_db)):
     if not phone or not code:
         raise HTTPException(status_code=400, detail="手机号或验证码不能为空")
 
-    now = datetime.utcnow()
-    row = (
-        db.query(SmsCode)
-        .filter(
-            SmsCode.phone == phone,
-            SmsCode.scene == "login",
-            SmsCode.used == False,  # noqa: E712
-        )
-        .order_by(SmsCode.id.desc())
-        .first()
-    )
-    if not row:
-        raise HTTPException(status_code=400, detail="验证码错误")
-    if row.expire_at and row.expire_at < now:
-        raise HTTPException(status_code=400, detail="验证码已过期")
-    if row.code != code:
-        # 校验失败计数，达 5 次即作废该码（防暴力猜测），需重新获取
-        row.attempts += 1
-        if row.attempts >= 5:
-            row.used = True
-        db.commit()
-        raise HTTPException(status_code=400, detail="验证码错误")
-    row.used = True
-    db.commit()
+    _consume_sms_code(db, phone, code, "login")
 
     # 按手机号匹配；无则新建（openid 用合成唯一值满足 NOT NULL/unique）
     user = db.query(User).filter(User.phone == phone).first()
@@ -677,6 +692,7 @@ def mp_membership(user: User = Depends(get_current_user)):
 # ── 绑定手机号 ──
 class BindPhoneIn(BaseModel):
     phone: str
+    code: str = ""
 
 
 @router.post("/bind-phone")
@@ -685,11 +701,17 @@ def bind_phone(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """绑定/改绑手机号：强制格式校验 + 手机号唯一（不可绑到他人已占用的号）。
-    注：scene=bind 短信验证码校验待前端配合下发后叠加（见安全清单）。"""
+    """绑定/改绑手机号：格式校验 + scene=bind 短信验证码 + 手机号唯一。
+
+    必须验短信码，否则任何登录态都能把任意号码占为己有（并因此获得
+    「手机号 + 密码」登录路径）。验证码由 POST /api/mp/sms/send {scene:'bind'} 下发。
+    """
     phone = (body.phone or "").strip()
+    code = (body.code or "").strip()
     if not PHONE_RE.match(phone):
         raise HTTPException(status_code=400, detail="手机号格式不正确")
+    if not code:
+        raise HTTPException(status_code=400, detail="请输入验证码")
     # 唯一性：该号已被其他账号绑定则拒绝（排除自身，允许重复绑定本人号码）
     exists = (
         db.query(User)
@@ -698,6 +720,7 @@ def bind_phone(
     )
     if exists:
         raise HTTPException(status_code=400, detail="该手机号已被其他账号绑定")
+    _consume_sms_code(db, phone, code, "bind")
     user.phone = phone
     db.commit()
     db.refresh(user)
@@ -1379,6 +1402,45 @@ def mp_qrcode(
 
     try:
         result = storage.save_bytes(db, resp.content, ".png", base_url=str(request.base_url))
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return ok(result)
+
+
+class UrlQrcodeIn(BaseModel):
+    url: str
+
+
+@router.post("/qrcode/url")
+def mp_qrcode_url(
+    body: UrlQrcodeIn,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """生成普通链接二维码（H5 海报用）。
+
+    海报上原本一律是**小程序码**，H5 用户扫了会被拉去小程序——
+    对纯 H5 的分享链路是断的。这里按传入的 H5 地址生成标准二维码。
+    """
+    url = (body.url or "").strip()
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="二维码地址不合法")
+    if len(url) > 512:
+        raise HTTPException(status_code=400, detail="二维码地址过长")
+
+    try:
+        import io as _io
+        import qrcode
+    except ImportError:
+        raise HTTPException(status_code=400, detail="服务端未安装二维码组件")
+
+    img = qrcode.make(url)
+    buf = _io.BytesIO()
+    img.save(buf, format="PNG")
+
+    try:
+        result = storage.save_bytes(db, buf.getvalue(), ".png", base_url=str(request.base_url))
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return ok(result)

@@ -8,6 +8,9 @@ const service: WechatService = {
   },
   async chooseWXPay(_p: PayParams) {
     throw new Error('小程序不走 H5 JSAPI 支付，请使用 Taro.requestPayment');
+  },
+  async updateShare() {
+    // no-op：小程序的转发文案由页面里的 useShareAppMessage / useShareTimeline 提供
   }
 };
 

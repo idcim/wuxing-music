@@ -10,7 +10,26 @@ interface WxJsSdk {
   ready(cb: () => void): void;
   error(cb: (err: unknown) => void): void;
   chooseWXPay(opts: Record<string, unknown>): void;
+  // 1.4+ 的分享接口；旧版微信只有 onMenuShare* 系列，故都声明为可选
+  updateAppMessageShareData?(opts: Record<string, unknown>): void;
+  updateTimelineShareData?(opts: Record<string, unknown>): void;
+  onMenuShareAppMessage?(opts: Record<string, unknown>): void;
+  onMenuShareTimeline?(opts: Record<string, unknown>): void;
 }
+
+// wx.config 每个页面只需成功一次：Taro H5 是 hash 路由，整个 SPA 自始至终
+// 只有一次真实页面加载，签名用的 URL（去掉 #hash 后）也不会变。
+// 缓存起来还能顺带绕开 iOS 微信「按首次进入页面的 URL 签名」那条坑——
+// 不重复签，就不存在二次签名与页面 URL 不一致的问题。
+let configured: Promise<void> | null = null;
+
+const JS_API_LIST = [
+  'chooseWXPay',
+  'updateAppMessageShareData',
+  'updateTimelineShareData',
+  'onMenuShareAppMessage',
+  'onMenuShareTimeline'
+];
 
 function getWx(): WxJsSdk | undefined {
   return typeof window !== 'undefined' ? (window as unknown as { wx?: WxJsSdk }).wx : undefined;
@@ -42,36 +61,43 @@ interface JsSdkConfig {
   configured: boolean;
 }
 
-const service: WechatService = {
-  async configJsSdk(url: string) {
-    await loadSdk();
-    // 微信 JS-SDK 签名要求用「去掉 #hash」的页面 URL；Taro H5 为 hash 路由，
-    // location.href 形如 https://host/path#/pages/...，必须先剥离 hash，否则
-    // wx.config 会因签名与页面 URL 不一致而校验失败（invalid signature）。
-    // 注：iOS 微信对 SPA 用「首次进入页面的 URL」签名，若 SPA 路由跳转后签名失效，
-    // 需改用进入时缓存的 entry URL 重签（真机联调时按需处理，见 docs/ROADMAP）。
-    const signUrl = url.split('#')[0];
-    const cfg = await request<JsSdkConfig>(
-      `/api/mp/h5/jssdk-config?url=${encodeURIComponent(signUrl)}`,
-      { auth: false }
-    );
-    if (!cfg.configured) throw new Error('公众号 JS-SDK 未配置');
+async function doConfig(url: string): Promise<void> {
+  await loadSdk();
+  // 微信 JS-SDK 签名要求用「去掉 #hash」的页面 URL；Taro H5 为 hash 路由，
+  // location.href 形如 https://host/path#/pages/...，必须先剥离 hash，否则
+  // wx.config 会因签名与页面 URL 不一致而校验失败（invalid signature）。
+  const signUrl = url.split('#')[0];
+  const cfg = await request<JsSdkConfig>(
+    `/api/mp/h5/jssdk-config?url=${encodeURIComponent(signUrl)}`,
+    { auth: false }
+  );
+  if (!cfg.configured) throw new Error('公众号 JS-SDK 未配置');
 
-    const wx = getWx();
-    if (!wx) throw new Error('微信 JS-SDK 未就绪');
+  const wx = getWx();
+  if (!wx) throw new Error('微信 JS-SDK 未就绪');
 
-    await new Promise<void>((resolve, reject) => {
-      wx.ready(() => resolve());
-      wx.error((err) => reject(err));
-      wx.config({
-        debug: false,
-        appId: cfg.appId,
-        timestamp: cfg.timestamp,
-        nonceStr: cfg.nonceStr,
-        signature: cfg.signature,
-        jsApiList: ['chooseWXPay']
-      });
+  await new Promise<void>((resolve, reject) => {
+    wx.ready(() => resolve());
+    wx.error((err) => reject(err));
+    wx.config({
+      debug: false,
+      appId: cfg.appId,
+      timestamp: cfg.timestamp,
+      nonceStr: cfg.nonceStr,
+      signature: cfg.signature,
+      jsApiList: JS_API_LIST
     });
+  });
+}
+
+const service: WechatService = {
+  configJsSdk(url: string) {
+    if (configured) return configured;
+    configured = doConfig(url).catch((e) => {
+      configured = null;   // 失败允许重试（如首次网络抖动）
+      throw e;
+    });
+    return configured;
   },
 
   async chooseWXPay(p: PayParams) {
@@ -89,6 +115,31 @@ const service: WechatService = {
         fail: (err: unknown) => reject(err)
       });
     });
+  },
+
+  async updateShare(info) {
+    // 分享是锦上添花，配置未就绪就安静跳过，别打断页面
+    try {
+      await service.configJsSdk(
+        typeof window !== 'undefined' ? window.location.href : ''
+      );
+    } catch {
+      return;
+    }
+    const wx = getWx();
+    if (!wx) return;
+
+    const common = {
+      title: info.title,
+      desc: info.desc,
+      link: info.link,
+      imgUrl: info.imgUrl
+    };
+    // 新接口（JS-SDK 1.4+）；老版本微信只认 onMenuShare*，两边都设一遍。
+    wx.updateAppMessageShareData?.({ ...common });
+    wx.updateTimelineShareData?.({ title: info.title, link: info.link, imgUrl: info.imgUrl });
+    wx.onMenuShareAppMessage?.({ ...common });
+    wx.onMenuShareTimeline?.({ title: info.title, link: info.link, imgUrl: info.imgUrl });
   }
 };
 
