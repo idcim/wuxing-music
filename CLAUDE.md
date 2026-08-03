@@ -98,6 +98,7 @@ wuxing-music/
 │   │   ├── orders/             #   我的订单（购买记录 + 礼物码回看）
 │   │   ├── history/            #   聆听历史 + 周统计
 │   │   ├── player/             #   全屏播放器（旋转罗盘 / seek）
+│   │   ├── agent/              #   代理中心（★ 仅代理可见，模块关闭时无入口）
 │   │   └── about/              #   关于 / 条款
 │   ├── components/             # 8 个：CdkeyModal / Icon / MiniPlayer / Playlist
 │   │   │                       #        PosterShare / SleepTimer / TabBar / TrackCard
@@ -133,6 +134,7 @@ wuxing-music/
 │       ├── database.py         #   引擎 / Session / Base
 │       ├── models.py           #   ★ 13 张表（见「后端数据模型」）
 │       ├── permissions.py      #   ★ 后台权限点定义（RBAC 唯一来源）
+│       ├── agent_service.py    #   ★ 代理分成：开关/归因/记账/冲正/余额（默认整体关闭）
 │       ├── schemas.py          #   Pydantic 出入参 + ok() 信封
 │       ├── security.py         #   密码哈希 / JWT / 管理员依赖
 │       ├── seed.py             #   启动种子数据（五行/曲目/套餐/测评/测试兑换码/管理员）
@@ -149,8 +151,9 @@ wuxing-music/
 │       ├── router/             #   路由
 │       └── views/              #   18 视图（Login / Dashboard / Users / Orders / Plans
 │                               #           Elements / Tracks / Cdkeys / Quiz / Admins / Roles
+│                               #           Agents / Commissions / Withdrawals（★ 代理分成）
 │                               #           SettingsCenter → Site / Storage / Settings(支付)
-│                               #                            MpPanel / OaPanel / SmsPanel）
+│                               #                            MpPanel / OaPanel / SmsPanel / AgentPanel）
 ├── prototype/
 │   └── wuxing-music-app.jsx    # 原型参考（Web React 版）
 ├── config/index.ts             # ★ Taro 编译配置（h5.publicPath / devServer 代理 / postcss）
@@ -378,6 +381,40 @@ const top = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
 - `GET /api/mp/stats/weekly`：近 7 天每日次数/分钟 + 本周总时长。
 - `POST /api/mp/qrcode`：`getwxacodeunlimit` 生成无限量小程序码（海报二维码用）。
 
+### 8. 代理分成 ⭐（v1.4.0，**默认整体关闭**）
+
+面向**实体店**与**网络推手**的成交分成。核心逻辑收在 `backend/app/agent_service.py`
+（不塞 `mp.py`，后者已 1500+ 行），管理端在 `routers/agents.py`。
+
+**⚠️ 只做一级分销**——微信禁止三级及以上分销（封号红线）。模型上**刻意不留 `parent_agent_id`**，
+不要"顺手"加二级。
+
+**默认关闭要贯穿三层**，新增相关代码时三处都得挂上：
+1. **接口**：`agent_service.require_enabled(db)` → 未开启回 **404**（不是 403，403 等于承认功能存在）。
+   唯一例外 `GET/PUT /api/admin/settings/agent`——它是开启入口，挡住就没人能打开。
+2. **记账**：`record_commission` 未开启时 **直接 return 不落库**。不是"记了不显示"，
+   否则日后一开启会冒出一批历史欠账。
+3. **界面**：后台菜单按 `/api/admin/me` 的 `features.agent` 过滤（`admin/src/menu.ts` 的
+   `feature` 字段，路由守卫与 MainLayout 共用）；前端入口只在 `/api/mp/agent/me`
+   回 `isAgent=true` 时渲染。
+
+**归因（首次扫码永久绑定）**：推广码进小程序码 `scene` / H5 链接 `?a=`，
+`app.tsx` 的 `useLaunch` 里 `captureAgentCode()` **先落本地**（此时多半没登录），
+绑定挂在 `stores/user.ts` 的 `setUser`——五条登录路径的唯一汇合点，
+挂在每条路径上迟早漏一条。已绑不改绑、**拒绝代理绑自己**（防自购返佣）。
+> 小程序 `scene` 是被 encodeURIComponent 过的，**必须先解码**再解析。
+
+**分成**：挂在订单转 `paid` 的**两处**（支付回调 + `DEBUG` 下 dev 直开），与订单状态
+**同一次提交**；幂等靠 `commission.order_id` 唯一约束（微信回调会重投）；
+金额/比例存**成交时点快照**，改比例不回溯。冻结期满才可提现——
+**不设 cron 解冻**，查余额时按 `available_at <= now` 判定。退款走 `void_commission` 冲正。
+
+**提现**：金额以**服务端重算余额**为准（绝不信前端）；同一代理只允许一笔在途；
+`with_for_update()` 行锁**只在 MySQL 生效，SQLite 是空操作**——并发用例只能在 MySQL 上验。
+驳回/打款失败必须把金额**放回可提现池**（漏了余额会凭空消失）。
+`payout_mode` 默认 `manual`（线下打款 + 后台标记）；`wxpay`（`wxpay.transfer`）需商户号
+单独开通「商家转账」权限且**尚未真实验证**。
+
 ------
 
 ## API 端点清单
@@ -414,6 +451,12 @@ GET  /api/mp/history            # 聆听历史
 GET  /api/mp/stats/weekly       # 周聆听统计
 POST /api/mp/qrcode             # 小程序码（海报）
 POST /api/mp/qrcode/url         # 普通链接二维码（H5 海报用，小程序码 H5 扫了会跳出去）
+# ── 代理分成（模块默认关闭；未开启时以下一律 404）──
+POST /api/mp/agent/bind         # 绑定推广码（首次扫码永久绑定，已绑不改绑）
+GET  /api/mp/agent/me           # 代理身份 + 余额 + 本月业绩（非代理回 isAgent:false）
+GET  /api/mp/agent/commissions  # 我的分成明细
+POST /api/mp/agent/withdraw     # 申请提现（金额以服务端重算余额为准）
+GET  /api/mp/agent/withdrawals  # 我的提现记录
 ```
 
 ### 管理端 `/api/admin/*`（需 Bearer；`admin/src/api/index.ts` 有全量封装）
@@ -431,6 +474,10 @@ GET/POST /quiz  PUT/DELETE /quiz/{id}
 GET/PUT /settings/pay | /settings/site | /settings/storage | /settings/mp | /settings/oa | /settings/sms
 POST /settings/storage/migrate      # 存储迁移
 POST /upload                        # 后台文件/封面/证书上传
+GET/PUT /settings/agent             # 代理分成设置（★ 常驻，是模块唯一开启入口，不受开关门禁）
+GET/POST /agents  PUT /agents/{id}  POST /agents/{id}/disable  GET /agents-summary  # 代理
+GET  /commissions                   # 分成明细
+GET  /withdrawals  POST /withdrawals/{id}/approve | /reject | /paid                 # 提现审核
 GET/POST /admins  PUT/DELETE /admins/{id}  POST /admins/{id}/password   # 管理员账号
 GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色 + 权限点清单
 ```
@@ -456,7 +503,7 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 | `element` | 五行配置（id=木火土金水） | primary/accent/glow/bg、note/organ/season、sleep_tip |
 | `track` | 曲目 | element_id(FK)、hz、audio_url、cover_url、is_premium、preview_sec、is_online |
 | `plan` | 套餐 | id(free/month/year/trial)、price、duration_days、features(JSON) |
-| `user` | 用户 | openid/unionid/**oa_openid**/phone/**password_hash**、element、**birthday/birth_hour**、membership_type/name/expire_at/source |
+| `user` | 用户 | openid/unionid/**oa_openid**/phone/**password_hash**、element、**birthday/birth_hour**、**agent_id/agent_bound_at**（代理归因，永久绑定）、membership_type/name/expire_at/source |
 | `cdkey` | 兑换码 | code、batch_id、plan_type、status(unused/used/disabled/expired) |
 | `cdkey_redeem_log` | 兑换日志 | user_id、cdkey_id、ip、device |
 | `app_order` | 订单 | order_no、status(pending/paid/refunding/refunded…)、**is_gift/gift_code**、**refund_*** |
@@ -464,6 +511,9 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 | `setting` | KV 配置 | key/value（`pay_config`/`site_config`/`storage_config`/`mp_config`/`oa_config`(公众号)/`sms_config`(短信)） |
 | `play_history` | 聆听历史 | user_id、track_id、played_at |
 | `sms_code` | 短信验证码（手机登录） | phone、code、scene、expire_at、used、attempts（失败≥5 作废） |
+| `agent` | ★ 代理（实体店/网络推手） | code(推广码)、type(store/promoter)、user_id(代理中心认人)、commission_rate(**null=跟随全局默认，0≠未设置**)、status |
+| `commission` | ★ 分成记录 | agent_id、**order_id(unique，幂等靠它)**、rate/amount(成交时点快照)、status(pending→available→withdrawing→paid / void)、available_at、clawback |
+| `withdrawal` | ★ 提现单 | agent_id、amount、status(pending→approved→paid / rejected / failed)、payout_mode、transfer_no |
 
 ------
 
@@ -500,7 +550,7 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 
 ### 版本
 
-根 `version.json` 是**机读的唯一版本源**（`current.app` / `current.api` + 各端 `channels` + `changelog`），前端常量 `src/constants/version.ts` 与之对齐，APP 更新接口契约见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。**当前 v1.3.0**。发版时同步改**四处**：`version.json`、`package.json`、`src/constants/version.ts`、`docs/ROADMAP.md`（v1.2.0 曾漏改 `version.ts` 的 `API_VERSION`）。
+根 `version.json` 是**机读的唯一版本源**（`current.app` / `current.api` + 各端 `channels` + `changelog`），前端常量 `src/constants/version.ts` 与之对齐，APP 更新接口契约见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。**当前 v1.4.0**。发版时同步改**四处**：`version.json`、`package.json`、`src/constants/version.ts`、`docs/ROADMAP.md`（v1.2.0 曾漏改 `version.ts` 的 `API_VERSION`）。
 
 ⚠️ **`channels.weapp` 是唯一会与源码版本脱节的一栏**：H5/后端/后台推 `master` 即自动部署，
 小程序包却要手工上传，所以该栏另有 `published` 字段记录**线上实际发布的版本**；
@@ -668,7 +718,7 @@ ZEROER-GIFT-7DAY      → 7日体验卡
 
 ------
 
-**最后更新**：生日 → 农历/生肖/本命五行（后端算）、后台登录验证码、新增 [`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)。
-**当前版本**：v1.3.0（见根 `version.json`）。
+**最后更新**：代理分成模块（实体店 / 网络推手，默认整体关闭）。
+**当前版本**：v1.4.0（见根 `version.json`）。
 **当前阶段**：小程序 + H5（微信内）前端、后端管理/公开接口、管理后台均已完成，三容器已上服务器且推 `master` 即自动部署；微信支付/公众号授权/短信/OSS 待真实配置上线验证。
 ⚠️ **小程序包不随自动部署**，欠账（合法域名、待真机验证项、未接的微信原生能力、审核合规）单独记在 [`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)。
