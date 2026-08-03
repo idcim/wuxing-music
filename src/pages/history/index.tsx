@@ -5,8 +5,10 @@ import { WUXING } from '@/constants/wuxing';
 import { usePlayerStore } from '@/stores/player';
 import { request } from '@/services/api';
 import TrackCard from '@/components/TrackCard';
+import ListState, { type LoadState } from '@/components/ListState';
 import MiniPlayer from '@/components/MiniPlayer';
-import { getNavTop } from '@/utils/nav';
+import { navTopStyle, goBack } from '@/utils/nav';
+import { parseTime } from '@/utils/format';
 import type { Track, ElementId } from '@/types';
 import './index.scss';
 
@@ -31,7 +33,9 @@ function toTrack(it: HistoryItem): Track {
     id: it.id,
     title: it.title,
     duration: it.duration,
-    durationSec: 0,
+    // 后端只给了 "MM:SS" 字符串，这里解析成秒——留 0 会让播放器的进度条
+    // 退化成「1 秒的歌」（拖一下就到底）。真实时长仍以音频元数据为准。
+    durationSec: parseTime(it.duration),
     hz: it.hz,
     tag: it.tag,
     plays: '',
@@ -56,7 +60,7 @@ function relTime(iso: string): string {
 
 export default function History() {
   const [list, setList] = useState<HistoryItem[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [state, setState] = useState<LoadState>('loading');
 
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
@@ -64,14 +68,22 @@ export default function History() {
   const pause = usePlayerStore((s) => s.pause);
   const resume = usePlayerStore((s) => s.resume);
 
-  useDidShow(() => {
+  const load = () => {
+    setState('loading');
     request<HistoryItem[]>('/api/mp/history')
-      .then((data) => setList(data || []))
-      .catch(() => setList([]))
-      .finally(() => setLoaded(true));
-  });
+      .then((data) => {
+        setList(data || []);
+        setState((data || []).length ? 'ready' : 'empty');
+      })
+      .catch((e: any) => {
+        // 401 与网络/服务端错误分开：前者引导登录，后者可重试
+        setState(e?.code === 401 ? 'auth' : 'error');
+      });
+  };
 
-  const back = () => Taro.navigateBack();
+  useDidShow(load);
+
+  const back = () => goBack();
 
   const onPlay = (it: HistoryItem) => {
     if (currentTrack?.id === it.id) {
@@ -84,17 +96,20 @@ export default function History() {
 
   return (
     <View className="history">
-      <View className="history__nav" style={{ paddingTop: `${getNavTop()}px` }}>
+      <View className="history__nav" style={navTopStyle()}>
         <Text className="history__back" onClick={back}>‹ 返回</Text>
         <Text className="history__nav-title">聆听历史</Text>
         <View className="history__nav-spacer" />
       </View>
 
-      {loaded && list.length === 0 ? (
-        <View className="history__empty">
-          <Text className="history__empty-text">还没有聆听记录</Text>
-        </View>
-      ) : (
+      <ListState
+        state={state}
+        emptyText="还没有聆听记录"
+        emptyIcon="history"
+        onRetry={load}
+      />
+
+      {state === 'ready' && (
         <View className="history__list">
           {list.map((it, i) => {
             const el = WUXING[it.element_id] || WUXING['木'];

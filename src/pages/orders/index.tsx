@@ -5,7 +5,9 @@ import { getMyOrders, type MyOrder } from '@/services/pay';
 import { useUserStore } from '@/stores/user';
 import Icon from '@/components/Icon';
 import PosterShare from '@/components/PosterShare';
-import { getNavTop } from '@/utils/nav';
+import ListState, { type LoadState } from '@/components/ListState';
+import { navTopStyle, goBack } from '@/utils/nav';
+import { isWeapp } from '@/utils/platform';
 import './index.scss';
 
 const STATUS_TEXT: Record<string, string> = {
@@ -27,24 +29,37 @@ function fmt(s: string | null): string {
 
 export default function Orders() {
   const [list, setList] = useState<MyOrder[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [state, setState] = useState<LoadState>('loading');
   const element = useUserStore((s) => s.element);
 
   const [posterOpen, setPosterOpen] = useState(false);
   const [posterCode, setPosterCode] = useState('');
   const [posterTitle, setPosterTitle] = useState('');
 
-  useDidShow(() => {
+  const load = () => {
+    setState('loading');
     getMyOrders()
-      .then((d) => setList(d || []))
-      .catch(() => setList([]))
-      .finally(() => setLoaded(true));
-  });
+      .then((d) => {
+        setList(d || []);
+        setState((d || []).length ? 'ready' : 'empty');
+      })
+      .catch((e: any) => {
+        // 401 与网络/服务端错误分开：前者引导登录，后者可重试
+        setState(e?.code === 401 ? 'auth' : 'error');
+      });
+  };
 
-  const back = () => Taro.navigateBack();
+  useDidShow(load);
 
   const copyCode = (code: string) => {
-    Taro.setClipboardData({ data: code, success: () => Taro.showToast({ title: '已复制', icon: 'success' }) });
+    // 小程序端自己弹提示；H5 端 Taro 的 shim 已经弹了一次「内容已复制」，
+    // 再补一条会叠成两个 toast，所以只在小程序端提示。
+    Taro.setClipboardData({
+      data: code,
+      success: () => {
+        if (isWeapp) Taro.showToast({ title: '已复制', icon: 'success' });
+      }
+    });
   };
 
   const sharePoster = (o: MyOrder) => {
@@ -55,17 +70,15 @@ export default function Orders() {
 
   return (
     <View className="orders">
-      <View className="orders__nav" style={{ paddingTop: `${getNavTop()}px` }}>
-        <Text className="orders__back" onClick={back}>‹</Text>
+      <View className="orders__nav" style={navTopStyle()}>
+        <Text className="orders__back" onClick={() => goBack()}>‹</Text>
         <Text className="orders__nav-title">我的订单</Text>
         <View className="orders__nav-spacer" />
       </View>
 
-      {loaded && list.length === 0 ? (
-        <View className="orders__empty">
-          <Text className="orders__empty-text">还没有订单记录</Text>
-        </View>
-      ) : (
+      <ListState state={state} emptyText="还没有订单记录" onRetry={load} />
+
+      {state === 'ready' && (
         <View className="orders__list">
           {list.map((o) => (
             <View key={o.orderNo} className="orders__item">

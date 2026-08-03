@@ -4,10 +4,10 @@ import Taro, { useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/
 import { ELEMENT_LIST, WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
 import { usePlayerStore } from '@/stores/player';
-import { openShareMenu } from '@/utils/share';
+import { openShareMenu, setH5Share } from '@/utils/share';
 import Icon from '@/components/Icon';
 import { A } from '@/utils/color';
-import { getNavTop } from '@/utils/nav';
+import { navTopStyle } from '@/utils/nav';
 import TrackCard from '@/components/TrackCard';
 import MiniPlayer from '@/components/MiniPlayer';
 import TabBar from '@/components/TabBar';
@@ -30,7 +30,11 @@ export default function Explore() {
 
   const we = WUXING[selected];
 
-  useDidShow(() => openShareMenu());
+  useDidShow(() => {
+    openShareMenu();
+    // H5 的「···」转发文案要靠 JS-SDK 设，useShareAppMessage 在 H5 是空操作
+    setH5Share(`${we.id}音 · ${we.desc}，来五行律音听听`, '按中医五行体质匹配专属安神助眠音律', '/pages/explore/index');
+  });
   useShareAppMessage(() => ({
     title: `${we.id}音 · ${we.desc}，来五行律音听听`,
     path: '/pages/home/index'
@@ -55,7 +59,7 @@ export default function Explore() {
   return (
     <View className="explore" style={{ background: we.bg }}>
       {/* 标题 */}
-      <View className="explore__header fade-up" style={{ paddingTop: `${getNavTop()}px` }}>
+      <View className="explore__header fade-up" style={navTopStyle()}>
         <Text className="explore__eyebrow cormorant italic">Explore Sounds</Text>
         <Text className="explore__title">探索律音</Text>
       </View>

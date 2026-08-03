@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { View, Text, Button } from '@tarojs/components';
 import Taro, { useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/taro';
-import { openShareMenu } from '@/utils/share';
+import { openShareMenu, setH5Share } from '@/utils/share';
 import { WUXING, ELEMENT_LIST } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
 import { usePlayerStore } from '@/stores/player';
 import Icon from '@/components/Icon';
 import { A } from '@/utils/color';
-import { getNavTop } from '@/utils/nav';
+import { navTopStyle } from '@/utils/nav';
 import TrackCard from '@/components/TrackCard';
 import MiniPlayer from '@/components/MiniPlayer';
 import TabBar from '@/components/TabBar';
@@ -35,7 +35,11 @@ export default function Home() {
   const [cdkeyOpen, setCdkeyOpen] = useState(false);
 
   // 转发好友 + 朋友圈（hook 必须直接写在页面里，Taro 才能编译期识别）
-  useDidShow(() => openShareMenu());
+  useDidShow(() => {
+    openShareMenu();
+    // H5 的「···」转发文案要靠 JS-SDK 设，useShareAppMessage 在 H5 是空操作
+    setH5Share(`我的本命是${el.id}型·${el.note}音，来五行律音找你的助眠音律`, '按中医五行体质匹配专属安神助眠音律', '/pages/home/index');
+  });
   useShareAppMessage(() => ({
     title: `我的本命是${el.id}型·${el.note}音，来五行律音找你的助眠音律`,
     path: '/pages/home/index'
@@ -74,7 +78,7 @@ export default function Home() {
   return (
     <View className="home" style={{ background: el.bg }}>
       {/* Header（顶部留出胶囊按钮安全高度，避免礼物按钮被遮挡） */}
-      <View className="home__header fade-up" style={{ paddingTop: `${getNavTop()}px` }}>
+      <View className="home__header fade-up" style={navTopStyle()}>
         <View>
           <Text className="home__greeting cormorant italic">Good evening</Text>
           <Text className="home__el">{el.id}型 · {el.note}音</Text>

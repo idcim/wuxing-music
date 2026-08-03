@@ -1,6 +1,6 @@
 import Taro from '@tarojs/taro';
 import { USE_MOCK } from '@/constants/env';
-import { request } from '@/services/api';
+import { request, ApiError } from '@/services/api';
 import { isWeapp, isH5 } from '@/utils/platform';
 import wechat from '@/services/wechat';
 import type { PayParams } from '@/services/wechat/types';
@@ -29,7 +29,10 @@ const PLAN_NAMES: Record<PlanId, string> = {
 
 export type PayOutcome =
   | { ok: true; membership: Membership }
-  | { ok: false; reason: 'cancel' | 'fail' | 'platform' };
+  // auth：未登录 / H5 未走微信授权（后端「请先微信登录」）——可引导，不该说成「支付失败」
+  // pending：钱已付但回调还没把会员开出来，属「稍后自动生效」，不能当失败也不能当成功
+  // message：后端给的具体原因，界面优先展示
+  | { ok: false; reason: 'cancel' | 'fail' | 'platform' | 'auth' | 'pending'; message?: string };
 
 function buildMembership(planId: PlanId): Membership {
   const days = PLAN_DAYS[planId];
@@ -42,10 +45,12 @@ function buildMembership(planId: PlanId): Membership {
   };
 }
 
-// 支付后会员由回调异步开通，短轮询拉取最新会员态（最多 ~5s）。
-// 若轮询结束仍未生效，则回退用本地推算的会员信息，避免界面卡住。
-async function pollMembership(planId: PlanId): Promise<Membership> {
-  for (let i = 0; i < 5; i++) {
+// 支付后会员由微信回调异步开通，短轮询拉取最新会员态（最多 ~8s）。
+// 超时返回 null，**绝不本地推算一个会员态冒充成功**——回调可能压根没到
+// （验签失败、回调地址不通、金额不符），伪造出来的「开通成功」会让用户
+// 以为已生效，直到下一次 fetchProfile 才被打回原形。
+async function pollMembership(planId: PlanId): Promise<Membership | null> {
+  for (let i = 0; i < 8; i++) {
     try {
       const m = await request<Membership & { isPremium?: boolean }>('/api/mp/membership');
       if (m && m.type === planId) return m;
@@ -54,7 +59,7 @@ async function pollMembership(planId: PlanId): Promise<Membership> {
     }
     await new Promise((r) => setTimeout(r, 1000));
   }
-  return buildMembership(planId);
+  return null;
 }
 
 // 按端调起微信支付：
@@ -85,6 +90,20 @@ function isPayCancel(err: any): boolean {
   return msg.includes('cancel');
 }
 
+// 把下单/支付异常翻译成可展示的结果。
+// 未登录（401）与 H5 未走微信授权（后端 400「请先微信登录」，见 mp.py::_resolve_pay_payer）
+// 都是可引导的登录问题——之前一律落到 reason:'fail'，界面提示「支付失败，请重试」，
+// 而用户无论重试多少次都不会成功。
+function payFailure(err: any): { ok: false; reason: 'cancel' | 'fail' | 'auth'; message?: string } {
+  if (isPayCancel(err)) return { ok: false, reason: 'cancel' };
+  const code = err instanceof ApiError ? err.code : 0;
+  const msg = err instanceof ApiError ? err.message : '';
+  if (code === 401 || msg.includes('请先微信登录') || msg.includes('请先登录')) {
+    return { ok: false, reason: 'auth', message: msg || '请先登录后再购买' };
+  }
+  return { ok: false, reason: 'fail', message: msg };
+}
+
 // 创建订单并拉起微信支付。成功后返回新会员信息（由调用方刷新 store）。
 export async function purchasePlan(planId: PlanId): Promise<PayOutcome> {
   // 小程序 / H5（微信内）端内支付；其它端（未来 rn / iOS App 走 IAP）返回 platform。
@@ -111,13 +130,17 @@ export async function purchasePlan(planId: PlanId): Promise<PayOutcome> {
       await invokePay(res.payParams);
       // 支付成功后会员由微信回调异步开通，可能略有延迟：短轮询取最新会员态
       const membership = await pollMembership(planId);
-      return { ok: true, membership };
+      if (membership) return { ok: true, membership };
+      return {
+        ok: false,
+        reason: 'pending',
+        message: '支付已完成，会员开通稍有延迟，请稍后在「我的」查看'
+      };
     }
 
     return { ok: false, reason: 'fail' };
   } catch (err: any) {
-    if (isPayCancel(err)) return { ok: false, reason: 'cancel' };
-    return { ok: false, reason: 'fail' };
+    return payFailure(err);
   }
 }
 
@@ -136,11 +159,9 @@ export interface MyOrder {
 
 export async function getMyOrders(): Promise<MyOrder[]> {
   if (USE_MOCK) return [];
-  try {
-    return await request<MyOrder[]>('/api/mp/orders');
-  } catch {
-    return [];
-  }
+  // 不再 catch 成 []：调用方要能区分「真的没有订单」和「401 / 断网 / 后端出错」，
+  // 否则一律渲染成「还没有订单记录」，用户会以为自己没买过。
+  return request<MyOrder[]>('/api/mp/orders');
 }
 
 // ── 买卡送人（礼物码）──
@@ -154,7 +175,10 @@ interface GiftOrderResult {
 
 export type GiftOutcome =
   | { ok: true; giftCode: string; planName: string }
-  | { ok: false; reason: 'cancel' | 'fail' | 'platform' };
+  // auth：未登录 / H5 未走微信授权（后端「请先微信登录」）——可引导，不该说成「支付失败」
+  // pending：钱已付但礼物码还没生成，可去「我的订单」回看，不是失败
+  // message：后端给的具体原因，界面优先展示
+  | { ok: false; reason: 'cancel' | 'fail' | 'platform' | 'auth' | 'pending'; message?: string };
 
 // 轮询礼物码（支付回调异步生成）
 async function pollGiftCode(orderNo: string): Promise<{ giftCode: string; planName: string } | null> {
@@ -199,12 +223,15 @@ export async function purchaseGift(planId: PlanId): Promise<GiftOutcome> {
       await invokePay(res.payParams);
       const r = await pollGiftCode(res.orderNo);
       if (r) return { ok: true, giftCode: r.giftCode, planName: r.planName };
-      return { ok: false, reason: 'fail' };
+      return {
+        ok: false,
+        reason: 'pending',
+        message: '支付已完成，礼物码生成稍有延迟，可稍后在「我的订单」查看'
+      };
     }
 
     return { ok: false, reason: 'fail' };
   } catch (err: any) {
-    if (isPayCancel(err)) return { ok: false, reason: 'cancel' };
-    return { ok: false, reason: 'fail' };
+    return payFailure(err);
   }
 }

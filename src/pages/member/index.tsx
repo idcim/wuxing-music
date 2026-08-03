@@ -5,9 +5,10 @@ import { PLANS } from '@/constants/plans';
 import { ELEMENT_LIST } from '@/constants/wuxing';
 import { purchasePlan, purchaseGift } from '@/services/pay';
 import { useUserStore } from '@/stores/user';
-import { openShareMenu } from '@/utils/share';
+import { fetchProfile } from '@/services/auth';
+import { openShareMenu, setH5Share } from '@/utils/share';
 import Icon from '@/components/Icon';
-import { getNavTop } from '@/utils/nav';
+import { navTopStyle } from '@/utils/nav';
 import MiniPlayer from '@/components/MiniPlayer';
 import CdkeyModal from '@/components/CdkeyModal';
 import PosterShare from '@/components/PosterShare';
@@ -29,7 +30,11 @@ export default function Member() {
   const element = useUserStore((s) => s.element);
   const updateMembership = useUserStore((s) => s.updateMembership);
 
-  useDidShow(() => openShareMenu());
+  useDidShow(() => {
+    openShareMenu();
+    // H5 的「···」转发文案要靠 JS-SDK 设，useShareAppMessage 在 H5 是空操作
+    setH5Share('五行律音会员 · 解锁全部助眠音律', '按中医五行体质匹配专属安神助眠音律', '/pages/member/index');
+  });
   useShareAppMessage(() => ({
     title: '五行律音会员 · 解锁全部助眠音律',
     path: '/pages/member/index'
@@ -39,8 +44,63 @@ export default function Member() {
     query: ''
   }));
 
+  // 未登录时下单必然 401，之前会落到「支付失败，请重试」——先拦住并引导登录
+  const requireLogin = (): boolean => {
+    if (useUserStore.getState().user) return true;
+    Taro.showModal({
+      title: '请先登录',
+      content: '登录后即可开通会员',
+      confirmText: '去登录',
+      success: (res) => {
+        if (res.confirm) Taro.navigateTo({ url: '/pages/login/index' });
+      }
+    });
+    return false;
+  };
+
+  // 支付/下单失败的统一提示：可引导的登录问题弹窗，其余透传后端原因
+  const onPayFail = (reason: string, message?: string, fallback = '支付失败，请重试') => {
+    if (reason === 'cancel') return; // 用户主动取消，不打扰
+    if (reason === 'pending') {
+      // 钱已经付了，只是回调还没到——绝不能说「支付失败」让用户重复付款
+      Taro.showModal({
+        title: '支付已完成',
+        content: message || '会员开通稍有延迟，请稍后在「我的」查看',
+        showCancel: false,
+        confirmText: '知道了'
+      });
+      // 再兜一次：回调可能在弹窗期间到达，刷新一下会员态
+      fetchProfile()
+        .then((u) => useUserStore.getState().setUser(u))
+        .catch(() => {});
+      return;
+    }
+    if (reason === 'auth') {
+      Taro.showModal({
+        title: '请先登录',
+        content: message || '登录后即可开通会员',
+        confirmText: '去登录',
+        success: (res) => {
+          if (res.confirm) Taro.navigateTo({ url: '/pages/login/index' });
+        }
+      });
+      return;
+    }
+    if (reason === 'platform') {
+      Taro.showModal({
+        title: '请前往小程序开通',
+        content: 'iOS App 端订阅需通过 Apple 内购，或使用兑换码升级',
+        showCancel: false
+      });
+      return;
+    }
+    Taro.showToast({ title: message || fallback, icon: 'none' });
+  };
+
   const buy = async (planId: PlanId) => {
     if (planId === 'free' || buying) return;
+    if (currentType === planId && isPremium) return; // 已是当前方案，别重复下单
+    if (!requireLogin()) return;
     setBuying(planId);
     const res = await purchasePlan(planId);
     setBuying(null);
@@ -53,22 +113,15 @@ export default function Member() {
       setPosterTitle(res.membership.name || '律音会员');
       setPosterSub('我已开通会员，邀你一起听助眠音律');
       setTimeout(() => setPosterOpen(true), 800);
-    } else if (res.reason === 'cancel') {
-      // 用户主动取消，不提示
-    } else if (res.reason === 'platform') {
-      Taro.showModal({
-        title: '请前往小程序开通',
-        content: 'iOS App 端订阅需通过 Apple 内购，或使用兑换码升级',
-        showCancel: false
-      });
     } else {
-      Taro.showToast({ title: '支付失败，请重试', icon: 'none' });
+      onPayFail(res.reason, res.message);
     }
   };
 
   // 买卡送朋友：支付后拿到礼物码，用海报展示分享
   const giftBuy = async (planId: PlanId) => {
     if (planId === 'free' || gifting) return;
+    if (!requireLogin()) return;
     setGifting(planId);
     const res = await purchaseGift(planId);
     setGifting(null);
@@ -79,16 +132,8 @@ export default function Member() {
       setPosterTitle(`${res.planName}礼物卡`);
       setPosterSub('送你一张律音会员礼物卡，扫码兑换');
       setTimeout(() => setPosterOpen(true), 600);
-    } else if (res.reason === 'cancel') {
-      // 取消，不提示
-    } else if (res.reason === 'platform') {
-      Taro.showModal({
-        title: '请前往小程序购买',
-        content: 'iOS App 端需通过 Apple 内购',
-        showCancel: false
-      });
     } else {
-      Taro.showToast({ title: '购买失败，请重试', icon: 'none' });
+      onPayFail(res.reason, res.message, '购买失败，请重试');
     }
   };
 
@@ -107,7 +152,7 @@ export default function Member() {
   return (
     <View className="member">
       {/* 标题 */}
-      <View className="member__header fade-up" style={{ paddingTop: `${getNavTop()}px` }}>
+      <View className="member__header fade-up" style={navTopStyle()}>
         <Text className="member__eyebrow cormorant italic">Membership</Text>
         <Text className="member__title">律音会员</Text>
         <Text className="member__sub">以音养身，以律养神</Text>

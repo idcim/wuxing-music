@@ -175,9 +175,20 @@
     border-radius: 28rpx;
     padding: 0 32rpx;
     color: $text-primary;
-    font-size: 28rpx;
+    // 不得低于 32rpx：更小的字号在 ≤400px 视口下算出来不到 16px，
+    // iOS Safari / 微信 WKWebView 聚焦时会强制放大整个页面。
+    font-size: 32rpx;
     letter-spacing: 2rpx;
     margin-bottom: 28rpx;
+
+    // 聚焦高亮走纯 CSS（禁止 onFocus + setState，会把渲染进程卡死）。
+    // 小程序端类名落在原生 input 上用 :focus；H5 端落在外层 taro-input-core
+    // （真正的 input 是它的子节点）故需 :focus-within。
+    &:focus,
+    &:focus-within {
+      border-color: rgba(56, 189, 248, 0.5);
+      background: rgba(255, 255, 255, 0.06);
+    }
   }
 
   // ── 通用按钮 ──

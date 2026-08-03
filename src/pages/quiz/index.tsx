@@ -1,23 +1,46 @@
 import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro from '@tarojs/taro';
+import { goBack } from '@/utils/nav';
 import Icon from '@/components/Icon';
 import { QUIZ_QUESTIONS, EMPTY_SCORES, calcTopElement } from '@/constants/quiz';
 import { useUserStore } from '@/stores/user';
 import { submitQuiz } from '@/services/user';
+import { storage, STORAGE_KEYS } from '@/services/storage';
 import type { ElementScores, QuizOption } from '@/types';
 import './index.scss';
 
+interface QuizProgress {
+  step: number;
+  scores: ElementScores;
+}
+
+// 中途进度只在本地留存，答完即清。H5 上刷新/误触后退都会重挂组件，
+// 不存的话答到第 3 题退出就全没了，得从头再来。
+function loadProgress(): QuizProgress | null {
+  const p = storage.get<QuizProgress>(STORAGE_KEYS.QUIZ_PROGRESS);
+  if (!p || typeof p.step !== 'number' || !p.scores) return null;
+  if (p.step <= 0 || p.step >= QUIZ_QUESTIONS.length) return null;
+  return p;
+}
+
 export default function Quiz() {
-  const [step, setStep] = useState(0);
-  const [scores, setScores] = useState<ElementScores>({ ...EMPTY_SCORES });
+  const saved = loadProgress();
+  const [step, setStep] = useState(saved?.step ?? 0);
+  const [scores, setScores] = useState<ElementScores>(saved?.scores ?? { ...EMPTY_SCORES });
   const setElement = useUserStore((s) => s.setElement);
 
   const question = QUIZ_QUESTIONS[step];
 
   const back = () => {
-    if (step > 0) setStep(step - 1);
-    else Taro.navigateBack().catch(() => Taro.redirectTo({ url: '/pages/onboard/index' }));
+    if (step > 0) {
+      const prev = step - 1;
+      setStep(prev);
+      storage.set(STORAGE_KEYS.QUIZ_PROGRESS, { step: prev, scores });
+    } else {
+      storage.remove(STORAGE_KEYS.QUIZ_PROGRESS);
+      goBack('/pages/onboard/index');
+    }
   };
 
   const choose = (opt: QuizOption) => {
@@ -28,8 +51,11 @@ export default function Quiz() {
     setScores(next);
 
     if (step < QUIZ_QUESTIONS.length - 1) {
-      setStep(step + 1);
+      const nextStep = step + 1;
+      setStep(nextStep);
+      storage.set(STORAGE_KEYS.QUIZ_PROGRESS, { step: nextStep, scores: next });
     } else {
+      storage.remove(STORAGE_KEYS.QUIZ_PROGRESS);   // 答完清进度，下次重测从头开始
       const top = calcTopElement(next);
       setElement(top, next);
       submitQuiz(top, next).catch(() => { /* 同步失败不阻断流程，已存本地 */ });

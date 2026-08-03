@@ -30,5 +30,7 @@ export const STORAGE_KEYS = {
   USER: 'wx_user',
   ELEMENT: 'wx_element',
   SCORES: 'wx_scores',
-  ONBOARDED: 'wx_onboarded'
+  ONBOARDED: 'wx_onboarded',
+  QUIZ_PROGRESS: 'wx_quiz_progress',  // 测评中途进度（答完即清）
+  SLEEP_DEADLINE: 'wx_sleep_deadline' // 睡眠定时截止时间戳（抗后台节流/刷新）
 } as const;

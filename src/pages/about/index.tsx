@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Text, Image } from '@tarojs/components';
 import Taro from '@tarojs/taro';
+import { goBack } from '@/utils/nav';
 import { getSiteInfo, type SiteInfo } from '@/services/site';
 import { resolveUrl } from '@/utils/url';
 import './index.scss';
@@ -12,7 +13,7 @@ export default function About() {
     getSiteInfo().then(setInfo);
   }, []);
 
-  const back = () => Taro.navigateBack();
+  const back = () => goBack();
 
   return (
     <View className="about">

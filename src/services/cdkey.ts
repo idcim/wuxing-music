@@ -4,7 +4,9 @@ import type { CdkeyRedeemResult, PlanId } from '@/types';
 
 export type RedeemOutcome =
   | { ok: true; data: CdkeyRedeemResult }
-  | { ok: false; reason: 'invalid' | 'used' };
+  // message 是后端给的具体原因（已过期 / 不可用 / 兑换过于频繁…），
+  // 界面优先展示它，避免把「已过期」「被限流」「未登录」一律说成「兑换码无效」。
+  | { ok: false; reason: 'invalid' | 'used' | 'auth'; message?: string };
 
 // ── mock ──
 const MOCK_KEYS: Record<string, { plan: string; days: number; type: PlanId }> = {
@@ -36,8 +38,10 @@ export async function redeemCdkey(code: string): Promise<RedeemOutcome> {
     });
     return { ok: true, data };
   } catch (err) {
+    const code = err instanceof ApiError ? err.code : 0;
     const msg = err instanceof ApiError ? err.message : '';
-    if (msg.includes('已被使用')) return { ok: false, reason: 'used' };
-    return { ok: false, reason: 'invalid' };
+    if (code === 401) return { ok: false, reason: 'auth', message: '请先登录后再兑换' };
+    if (msg.includes('已被使用')) return { ok: false, reason: 'used', message: msg };
+    return { ok: false, reason: 'invalid', message: msg };
   }
 }

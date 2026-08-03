@@ -7,7 +7,7 @@ import { getWeeklyStats, emptyWeekly, type WeeklyStats } from '@/services/stats'
 import Icon from '@/components/Icon';
 import { A } from '@/utils/color';
 import { resolveUrl } from '@/utils/url';
-import { getNavTop } from '@/utils/nav';
+import { navTopStyle } from '@/utils/nav';
 import CdkeyModal from '@/components/CdkeyModal';
 import MiniPlayer from '@/components/MiniPlayer';
 import TabBar from '@/components/TabBar';
@@ -131,7 +131,7 @@ export default function Profile() {
   return (
     <View className="profile">
       {/* 标题 */}
-      <View className="profile__header fade-up" style={{ paddingTop: `${getNavTop()}px` }}>
+      <View className="profile__header fade-up" style={navTopStyle()}>
         <Text className="profile__eyebrow cormorant italic">Profile</Text>
         <Text className="profile__title">我的</Text>
       </View>
@@ -197,7 +197,7 @@ export default function Profile() {
                 ? expireDays !== null
                   ? `已解锁全部权益 · ${expireDays}天到期`
                   : '已解锁全部权益'
-                : '升级解锁全部曲目与下载'}
+                : '升级解锁全部曲目'}
             </Text>
           </View>
         </View>

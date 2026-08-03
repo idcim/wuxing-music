@@ -1,9 +1,10 @@
 import { View, Text } from '@tarojs/components';
 import Taro, { useRouter, useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/taro';
+import { goBack } from '@/utils/nav';
 import { WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
 import { usePlayerStore } from '@/stores/player';
-import { openShareMenu } from '@/utils/share';
+import { openShareMenu, setH5Share } from '@/utils/share';
 import TrackCard from '@/components/TrackCard';
 import MiniPlayer from '@/components/MiniPlayer';
 import type { ElementId } from '@/types';
@@ -21,7 +22,11 @@ export default function ElementDetail() {
   const pause = usePlayerStore((s) => s.pause);
   const resume = usePlayerStore((s) => s.resume);
 
-  useDidShow(() => openShareMenu());
+  useDidShow(() => {
+    openShareMenu();
+    // H5 的「···」转发文案要靠 JS-SDK 设，useShareAppMessage 在 H5 是空操作
+    setH5Share(`${el.id}音 · ${el.desc}`, '按中医五行体质匹配专属安神助眠音律', '/pages/explore/index');
+  });
   useShareAppMessage(() => ({
     title: `${el.id}音 · ${el.desc}`,
     path: '/pages/home/index'
@@ -31,7 +36,7 @@ export default function ElementDetail() {
     query: ''
   }));
 
-  const back = () => Taro.navigateBack();
+  const back = () => goBack();
   const goMember = () => Taro.redirectTo({ url: '/pages/member/index' });
 
   const onTrack = (trackId: number) => {

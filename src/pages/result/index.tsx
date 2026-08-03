@@ -15,6 +15,7 @@ export default function Result() {
   const router = useRouter();
   const storeEl = useUserStore((s) => s.element);
   const storeScores = useUserStore((s) => s.scores);
+  const isPremium = useUserStore((s) => s.isPremium);
   const queryEl = router.params.element
     ? (decodeURIComponent(router.params.element) as ElementId)
     : null;
@@ -30,6 +31,8 @@ export default function Result() {
   const total = sorted.reduce((s, [, v]) => s + v, 0);
 
   const enter = () => Taro.reLaunch({ url: '/pages/home/index' });
+  // 会员页是 tab 页，用 reLaunch 让 TabBar 状态正确（本页不在 tab 栈里）
+  const goMember = () => Taro.reLaunch({ url: '/pages/member/index' });
 
   return (
     <View className="result" style={{ background: el.bg }}>
@@ -122,6 +125,18 @@ export default function Result() {
         <Text className="result__cta-text">进入律音馆</Text>
         <Icon name="arrowRight" size={28} color="#0a0e1a" strokeWidth={2} />
       </View>
+
+      {/* 次级入口：刚看到自己的体质与助眠建议，是整个漏斗里意图最强的一刻，
+          此前这里只有「进入律音馆」，没有任何会员引导。非会员才显示。 */}
+      {!isPremium && (
+        <View className="result__upsell" onClick={goMember}>
+          <Icon name="crown" size={28} color={el.accent} strokeWidth={1.5} />
+          <Text className="result__upsell-text" style={{ color: el.accent }}>
+            解锁{el.id}型全部专属音律
+          </Text>
+          <Icon name="chevronRight" size={26} color={el.accent} strokeWidth={1.5} />
+        </View>
+      )}
     </View>
   );
 }

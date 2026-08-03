@@ -2,6 +2,7 @@
 
 .result {
   min-height: 100vh;
+  min-height: 100dvh;
   padding: 112rpx 48rpx 80rpx;
   display: flex;
   flex-direction: column;
@@ -175,4 +176,19 @@
       color: #0a0e1a;
     }
   }
+
+  // 非会员的次级引导（主 CTA 之下，弱于「进入律音馆」）
+  &__upsell {
+    margin-top: 28rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12rpx;
+    padding: 22rpx 0;
+  }
+
+  &__upsell-text {
+    font-size: 26rpx;
+  }
 }
+

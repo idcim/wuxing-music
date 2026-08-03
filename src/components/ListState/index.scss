@@ -1,0 +1,35 @@
+@import '../../styles/variables.scss';
+
+.list-state {
+  padding-top: 180rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28rpx;
+
+  &__text {
+    font-size: 26rpx;
+    color: $text-tertiary;
+  }
+
+  &__btn {
+    padding: 18rpx 56rpx;
+    border-radius: $radius-pill;
+    border: 2rpx solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  &__btn-text {
+    font-size: 26rpx;
+    color: $text-secondary;
+  }
+
+  &__spinner {
+    width: 48rpx;
+    height: 48rpx;
+    border: 4rpx solid rgba(255, 255, 255, 0.12);
+    border-top-color: $text-secondary;
+    border-radius: 50%;
+    animation: rotate-slow 0.8s linear infinite;
+  }
+}

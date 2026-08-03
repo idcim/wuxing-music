@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { View, Text, Input } from '@tarojs/components';
+import Taro from '@tarojs/taro';
 import { redeemCdkey } from '@/services/cdkey';
 import { useUserStore } from '@/stores/user';
 import Icon from '@/components/Icon';
@@ -19,6 +20,8 @@ export default function CdkeyModal({ open, onClose }: Props) {
   const [status, setStatus] = useState<CdkeyStatus>('idle');
   const [planName, setPlanName] = useState('');
   const [days, setDays] = useState(0);
+  const [errMsg, setErrMsg] = useState('');
+  const [needLogin, setNeedLogin] = useState(false);
   const [posterOpen, setPosterOpen] = useState(false);
 
   const reset = () => {
@@ -26,6 +29,8 @@ export default function CdkeyModal({ open, onClose }: Props) {
     setStatus('idle');
     setPlanName('');
     setDays(0);
+    setErrMsg('');
+    setNeedLogin(false);
   };
 
   const close = () => {
@@ -49,16 +54,30 @@ export default function CdkeyModal({ open, onClose }: Props) {
         source: 'cdkey'
       });
     } else {
+      setErrMsg(res.message || '');
+      setNeedLogin(res.reason === 'auth');
       setStatus(res.reason === 'used' ? 'used' : 'error');
     }
   };
 
-  if (!open) return null;
+  const goLogin = () => {
+    onClose();
+    Taro.navigateTo({ url: '/pages/login/index' });
+  };
 
   const canRedeem = !!code.trim() && status !== 'loading';
+  const inputting = status === 'idle' || status === 'loading';
 
+  // 整个弹层常驻挂载、只切 display，不能用 `if (!open) return null`：
+  // Taro H5 的 taro-input-core 对「首屏之后才挂载」的实例不渲染内部 <input>，
+  // 弹层一旦是后挂载的，兑换码输入框会整个消失（同 login 页的处理，见陷阱 14）。
+  // display 从 none 变回 flex 时 fadeIn / fadeUp 动画会重新播放，入场效果不受影响。
   return (
-    <View className="cdkey-mask" onClick={close}>
+    <View
+      className="cdkey-mask"
+      style={{ display: open ? undefined : 'none' }}
+      onClick={close}
+    >
       <View className="cdkey-sheet" onClick={(e) => e.stopPropagation()}>
         {/* 头部 */}
         <View className="cdkey-sheet__head">
@@ -103,11 +122,24 @@ export default function CdkeyModal({ open, onClose }: Props) {
             <View className="cdkey-sheet__circle cdkey-sheet__circle--err">
               <Icon name="x" size={64} color="#f87171" strokeWidth={2} />
             </View>
-            <Text className="cdkey-sheet__result-title">兑换码无效</Text>
-            <Text className="cdkey-sheet__result-sub">请检查是否输入正确，或联系客服</Text>
-            <View className="cdkey-sheet__action cdkey-sheet__action--ghost" onClick={reset}>
-              <Text className="cdkey-sheet__action-text">重新输入</Text>
-            </View>
+            <Text className="cdkey-sheet__result-title">
+              {needLogin ? '请先登录' : '兑换失败'}
+            </Text>
+            {/* 优先显示后端给的具体原因（已过期 / 不可用 / 兑换过于频繁…） */}
+            <Text className="cdkey-sheet__result-sub">
+              {errMsg || '请检查是否输入正确，或联系客服'}
+            </Text>
+            {needLogin ? (
+              <View className="cdkey-sheet__action cdkey-sheet__action--light" onClick={goLogin}>
+                <Text className="cdkey-sheet__action-text cdkey-sheet__action-text--dark">
+                  去登录
+                </Text>
+              </View>
+            ) : (
+              <View className="cdkey-sheet__action cdkey-sheet__action--ghost" onClick={reset}>
+                <Text className="cdkey-sheet__action-text">重新输入</Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -125,8 +157,8 @@ export default function CdkeyModal({ open, onClose }: Props) {
           </View>
         )}
 
-        {/* 输入界面 */}
-        {(status === 'idle' || status === 'loading') && (
+        {/* 输入界面：同样常驻，只切 display（内含 Input，不可条件渲染） */}
+        <View style={{ display: inputting ? undefined : 'none' }}>
           <View>
             <View className="cdkey-sheet__tip">
               <View className="cdkey-sheet__tip-icon">
@@ -144,8 +176,10 @@ export default function CdkeyModal({ open, onClose }: Props) {
               placeholder="例如：WUXING-XXXX-XXXX-XXX"
               placeholderStyle="color:#475569"
               maxlength={32}
+              confirmType="done"
               value={code}
               onInput={(e) => setCode(e.detail.value.toUpperCase())}
+              onConfirm={redeem}
             />
 
             <View
@@ -165,7 +199,7 @@ export default function CdkeyModal({ open, onClose }: Props) {
               </Text>
             </View>
           </View>
-        )}
+        </View>
       </View>
 
       <PosterShare

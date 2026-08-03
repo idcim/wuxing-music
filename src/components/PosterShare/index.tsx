@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { View, Text, Canvas, Image } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { getQrcode } from '@/services/share';
+import { isWeapp } from '@/utils/platform';
 import { WUXING } from '@/constants/wuxing';
 import Icon from '@/components/Icon';
 import type { ElementId } from '@/types';
@@ -128,7 +129,16 @@ export default function PosterShare({
       ctx.setFontSize(24);
       ctx.fillText('长按识别 · 开启你的助眠音律', W / 2, qrTop + qrSize + 56);
 
-      await new Promise<void>((resolve) => ctx.draw(false, () => resolve()));
+      // ctx.draw 的回调是小程序语义，H5 shim 不保证回调；不设兜底会 await 到天荒地老，
+      // finally 里的 setLoading(false) 永远执行不到，弹层就卡在「海报生成中…」。
+      // H5 的 draw 是同步落到 2D context 的，超时后继续取图即可。
+      await new Promise<void>((resolve) => {
+        const t = setTimeout(resolve, 1000);
+        ctx.draw(false, () => {
+          clearTimeout(t);
+          resolve();
+        });
+      });
 
       const res = await Taro.canvasToTempFilePath({
         canvasId: CANVAS_ID,
@@ -138,9 +148,17 @@ export default function PosterShare({
         destHeight: H * 2
       });
       setPoster(res.tempFilePath);
-    } catch (e) {
+    } catch (e: any) {
       console.error('[poster]', e);
-      Taro.showToast({ title: '海报生成失败', icon: 'none' });
+      // 跨域图片会污染 canvas，canvasToTempFilePath 随即抛 SecurityError。
+      // 常见于存储切到 OSS 之后：封面/二维码变成跨域地址，而 OSS 桶没配 CORS。
+      const msg = String(e?.message || e?.errMsg || '');
+      const tainted = /security|taint|cross-origin/i.test(msg);
+      Taro.showToast({
+        title: tainted ? '图片跨域，无法生成海报' : '海报生成失败',
+        icon: 'none',
+        duration: 2500
+      });
     } finally {
       setLoading(false);
     }
@@ -154,6 +172,13 @@ export default function PosterShare({
 
   const savePoster = () => {
     if (!poster) return;
+    // H5 没有相册可写：Taro 的 saveImageToPhotosAlbum 在 H5 是 <a download> 合成点击，
+    // 微信内置浏览器会拦掉，但它**总是回调 success**——之前会提示「已保存到相册」而其实什么都没存。
+    // 浏览器里正确的做法是让用户长按图片调系统菜单保存。
+    if (!isWeapp) {
+      Taro.showToast({ title: '长按上方图片即可保存', icon: 'none', duration: 2500 });
+      return;
+    }
     Taro.saveImageToPhotosAlbum({
       filePath: poster,
       success: () => Taro.showToast({ title: '已保存到相册', icon: 'success' }),
@@ -208,10 +233,16 @@ export default function PosterShare({
         <View className="poster__actions">
           <View className="poster__btn poster__btn--save" onClick={savePoster}>
             <Icon name="download" size={28} color="#0a0e1a" strokeWidth={2} />
-            <Text className="poster__btn-text poster__btn-text--dark">保存到相册</Text>
+            <Text className="poster__btn-text poster__btn-text--dark">
+              {isWeapp ? '保存到相册' : '长按图片保存'}
+            </Text>
           </View>
         </View>
-        <Text className="poster__tip">保存后转发给好友，一起听五行律音</Text>
+        <Text className="poster__tip">
+          {isWeapp
+            ? '保存后转发给好友，一起听五行律音'
+            : '长按图片保存到相册，再转发给好友'}
+        </Text>
       </View>
     </View>
   );
