@@ -5,16 +5,29 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app import agent_service
 from app.database import get_db
 from app.lunar import lunar_info
-from app.models import Admin, Cdkey, Order, Plan, Track, User
+from app.models import Admin, Agent, Cdkey, Order, Plan, Track, User
 from app.schemas import ok
 from app.security import require_perm
 
 router = APIRouter(prefix="/api/admin", tags=["users-stats"])
 
 
-def _user_dict(u: User) -> dict:
+def _agent_map(db: Session, user_ids: list[int]) -> dict[int, dict]:
+    """user_id → 代理简讯。一次查完整页，别在 _user_dict 里逐行查（N+1）。"""
+    if not user_ids:
+        return {}
+    rows = db.query(Agent).filter(Agent.user_id.in_(user_ids)).all()
+    return {
+        a.user_id: {"id": a.id, "code": a.code, "name": a.name, "status": a.status}
+        for a in rows
+        if a.user_id
+    }
+
+
+def _user_dict(u: User, agents: dict[int, dict] | None = None) -> dict:
     return {
         "id": u.id,
         "openid": u.openid,
@@ -24,6 +37,8 @@ def _user_dict(u: User) -> dict:
         "avatar": u.avatar,
         "element": u.element,
         "birthday": u.birthday.isoformat() if u.birthday else None,
+        # 该用户是否已是代理：列表页显示标记 + 决定「设为代理」按钮的形态
+        "agent": (agents or {}).get(u.id),
         "membership_type": u.membership_type,
         "membership_name": u.membership_name,
         "membership_source": u.membership_source,
@@ -47,7 +62,8 @@ def list_users(
         q = q.filter(User.nickname.contains(keyword))
     total = q.count()
     rows = q.order_by(User.id.desc()).offset((page - 1) * size).limit(size).all()
-    return ok({"total": total, "items": [_user_dict(u) for u in rows]})
+    agents = _agent_map(db, [u.id for u in rows])
+    return ok({"total": total, "items": [_user_dict(u, agents) for u in rows]})
 
 
 @router.get("/users/{user_id}")
@@ -59,7 +75,14 @@ def get_user(
     u = db.query(User).filter(User.id == user_id).first()
     if not u:
         raise HTTPException(status_code=404, detail="用户不存在")
-    data = _user_dict(u)
+    data = _user_dict(u, _agent_map(db, [u.id]))
+    # 归因：这个用户是谁带来的（与「他自己是不是代理」是两回事）
+    if u.agent_id:
+        ref = db.query(Agent).filter(Agent.id == u.agent_id).first()
+        data["referrer"] = (
+            {"id": ref.id, "name": ref.name, "code": ref.code} if ref else None
+        )
+        data["agent_bound_at"] = u.agent_bound_at.isoformat() if u.agent_bound_at else None
     data["element_scores"] = json.loads(u.element_scores or "{}")
     data["quiz_completed_at"] = (
         u.quiz_completed_at.isoformat() if u.quiz_completed_at else None
@@ -111,7 +134,7 @@ def grant_membership(
         user.membership_source = ""
         db.commit()
         db.refresh(user)
-        return ok(_user_dict(user))
+        return ok(_user_dict(user, _agent_map(db, [user.id])))
 
     plan = db.query(Plan).filter(Plan.id == body.plan_id).first()
     if not plan:
@@ -130,7 +153,45 @@ def grant_membership(
     user.membership_source = "gift"
     db.commit()
     db.refresh(user)
-    return ok(_user_dict(user))
+    return ok(_user_dict(user, _agent_map(db, [user.id])))
+
+
+class SetAgentIn(BaseModel):
+    name: str = ""              # 不填则取用户昵称
+    type: str = "promoter"      # store 实体店 | promoter 网络推手
+
+
+@router.post("/users/{user_id}/agent")
+def set_user_as_agent(
+    user_id: int,
+    body: SetAgentIn,
+    db: Session = Depends(get_db),
+    _: Admin = Depends(require_perm("agents:manage")),
+):
+    """把用户设为代理。
+
+    这是「开通代理权限」的正门——从用户出发，而不是去代理页手抄一个 user_id。
+    上级按该用户当初绑定的代理**自动落定**（"我推广来的人成了代理，他就是我的下级"），
+    落定后不再更改。
+    """
+    agent_service.require_enabled(db)
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    exist = db.query(Agent).filter(Agent.user_id == user_id).first()
+    if exist:
+        raise HTTPException(status_code=400, detail=f"该用户已是代理（{exist.name} / {exist.code}）")
+    if body.type not in ("store", "promoter"):
+        raise HTTPException(status_code=400, detail="代理类型不合法")
+
+    agent = agent_service.promote_user(db, user, name=body.name, type_=body.type)
+    cfg = agent_service.agent_cfg(db)
+    data = agent_service.agent_dict(agent, cfg)
+    if agent.parent_id:
+        p = db.query(Agent).filter(Agent.id == agent.parent_id).first()
+        data["parentName"] = p.name if p else ""
+    return ok(data)
 
 
 @router.get("/dashboard")

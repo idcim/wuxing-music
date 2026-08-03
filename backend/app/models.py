@@ -9,6 +9,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -226,8 +227,8 @@ class PlayHistory(Base):
 class Agent(Base):
     """渠道代理：实体店（店内印刷推广码）/ 网络推手（分享海报链接）。
 
-    只做一级分销——「代理 → 用户」一层到底。刻意不留 parent_agent_id：
-    微信对三级及以上分销是封号级红线，模型上留了口子日后必然有人接。
+    **两级分销，到此为止。** 红线是「计酬层级不得达到三级」，不是不能有二级——
+    但 parent_id 只用于往上走一跳，record_commission 绝不递归，模型上也不再加第三级字段。
     """
 
     __tablename__ = "agent"
@@ -246,24 +247,47 @@ class Agent(Base):
     # None 表示用全局默认比例（agent_config.default_rate）——这就是「可覆盖」的实现，
     # 用 0 表示"不分成"，因此不能拿 0 当"未设置"的哨兵。
     commission_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # 上级代理。用户被提升为代理时按其 user.agent_id 自动落定，之后**不可改**
+    #（"下级永远是上级的"）。只允许为空时补填，不允许改指向。
+    parent_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    # 作为**上级**时，从下级那份分成里抽走的占比。None = 跟随全局 default_rate2。
+    # 注意语义：这个字段配在上级身上（"我能抽下级多少"），不是配在被抽的人身上。
+    commission_rate2: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="active", index=True)  # active | disabled
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
 
 class Commission(Base):
     """一笔成交产生的分成。金额与比例都是成交时点的快照——
-    事后改代理比例不影响历史记录，否则对账永远对不平。"""
+    事后改代理比例不影响历史记录，否则对账永远对不平。
+
+    一单最多两条：level=1 直推代理（实拿 = 基数 − 上级抽成），
+    level=2 其上级（抽成）。两条金额相加恒等于 base_amount。
+    """
 
     __tablename__ = "commission"
+    # 一单两条，所以唯一性是 (order_id, level) 而非 order_id 单列。
+    # ⚠️ 存量库里 order_id 上还挂着旧的单列唯一索引，_auto_migrate 不碰索引，
+    #    由 main.py::_fix_commission_index 单独换掉。
+    __table_args__ = (
+        UniqueConstraint("order_id", "level", name="uq_commission_order_level"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     agent_id: Mapped[int] = mapped_column(Integer, index=True)
-    # 唯一：支付回调可能重复投递，靠这个约束保证一单只记一次账
-    order_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    order_id: Mapped[int] = mapped_column(Integer, index=True)
+    # 1=直推，2=上级抽成。封顶就是 2，没有 3。
+    level: Mapped[int] = mapped_column(Integer, default=1, index=True)
     user_id: Mapped[int] = mapped_column(Integer, index=True)
     order_amount: Mapped[float] = mapped_column(Float, default=0)
+    # 一级基数 = 订单额 × 直推代理的一级比例，也就是平台为这一单支出的总额。
+    # 两条记录都存同一个值，对账时一眼看出「这单总共出了多少、怎么分的」。
+    base_amount: Mapped[float] = mapped_column(Float, default=0)
+    # level=1 存一级比例；level=2 存抽成占比（基于 base_amount，不是订单额）
     rate: Mapped[float] = mapped_column(Float, default=0)
     amount: Mapped[float] = mapped_column(Float, default=0)
+    # 仅 level=2 有值：这笔抽成来自哪个下级代理
+    source_agent_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     # pending(冻结中) → available(可提现) → withdrawing → paid；void = 退款冲正
     status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
     # 冻结到期时间。不设定时任务解冻：查询余额时按 available_at <= now 判定，

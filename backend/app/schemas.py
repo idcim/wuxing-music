@@ -172,6 +172,8 @@ class SmsSettingIn(BaseModel):
 class AgentSettingIn(BaseModel):
     enabled: bool = False              # 总开关，默认关（关闭时连分成记录都不产生）
     default_rate: float = Field(default=0.2, ge=0, le=1)
+    # 二级抽成占比：基数是**一级分成金额**，且从下级那份里扣，平台总支出不变
+    default_rate2: float = Field(default=0.25, ge=0, le=1)
     freeze_days: int = Field(default=7, ge=0, le=365)
     min_withdraw: float = Field(default=10, ge=0)
     payout_mode: str = "manual"        # manual 线下打款 | wxpay 微信商家转账

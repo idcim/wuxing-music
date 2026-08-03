@@ -9,6 +9,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app import agent_service, wxpay
@@ -38,8 +39,12 @@ class AgentIn(BaseModel):
     remark: str = ""
     # None = 跟随全局默认比例。0 是合法值（不分成），所以不能拿 0 当"未设置"
     commission_rate: float | None = Field(default=None, ge=0, le=1)
+    # 作为上级时从下级分成里抽走的占比；None = 跟随全局默认
+    commission_rate2: float | None = Field(default=None, ge=0, le=1)
     status: str = "active"
     user_id: int | None = None
+    # 上级代理：只在当前为空时可写，已有值一律忽略（"下级永远是上级的"）
+    parent_id: int | None = None
 
 
 @router.get("/agents")
@@ -70,12 +75,50 @@ def list_agents(
         .limit(size)
         .all()
     )
+    # 上级名字 / 下级数 / 名下用户数：整页批量算，别逐行查
+    names = {x.id: x.name for x in db.query(Agent.id, Agent.name).all()}
+    ids = [a.id for a in rows]
+    sub_counts: dict[int, int] = {}
+    user_counts: dict[int, int] = {}
+    if ids:
+        for pid, cnt in (
+            db.query(Agent.parent_id, func.count(Agent.id))
+            .filter(Agent.parent_id.in_(ids))
+            .group_by(Agent.parent_id)
+            .all()
+        ):
+            sub_counts[pid] = cnt
+        for aid, cnt in (
+            db.query(User.agent_id, func.count(User.id))
+            .filter(User.agent_id.in_(ids))
+            .group_by(User.agent_id)
+            .all()
+        ):
+            user_counts[aid] = cnt
+
     items = []
     for a in rows:
         d = agent_service.agent_dict(a, cfg)
         d["balance"] = agent_service.balance_of(db, a.id)
+        d["parentName"] = names.get(a.parent_id or 0, "")
+        d["subAgentCount"] = sub_counts.get(a.id, 0)
+        d["userCount"] = user_counts.get(a.id, 0)
         items.append(d)
     return ok({"total": total, "items": items})
+
+
+@router.get("/agents/{agent_id}/downline")
+def agent_downline(
+    agent_id: int,
+    db: Session = Depends(get_db),
+    _: Admin = Depends(require_perm("agents:view")),
+):
+    """代理的下属：直接下级代理 + 名下用户。**只看一层**，下级的下级与他无关。"""
+    agent_service.require_enabled(db)
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="代理不存在")
+    return ok(agent_service.downline_of(db, agent_id))
 
 
 @router.post("/agents")
@@ -101,13 +144,33 @@ def create_agent(
         contact=body.contact or "",
         remark=body.remark or "",
         commission_rate=body.commission_rate,
+        commission_rate2=body.commission_rate2,
         status="active",
         user_id=body.user_id,
+        parent_id=_valid_parent(db, body.parent_id, None),
     )
     db.add(agent)
     db.commit()
     db.refresh(agent)
     return ok(agent_service.agent_dict(agent, cfg))
+
+
+def _valid_parent(db: Session, parent_id: int | None, self_id: int | None) -> int | None:
+    """校验上级：不能是自己、必须存在且启用。
+
+    不校验"上级还有没有上级"——链可以长，但计酬只走两跳（见
+    agent_service.record_commission），第三层起本就拿不到钱。
+    """
+    if not parent_id:
+        return None
+    if self_id and parent_id == self_id:
+        raise HTTPException(status_code=400, detail="上级不能是自己")
+    p = db.query(Agent).filter(Agent.id == parent_id).first()
+    if not p:
+        raise HTTPException(status_code=400, detail="上级代理不存在")
+    if p.status != "active":
+        raise HTTPException(status_code=400, detail="上级代理已停用")
+    return parent_id
 
 
 def _check_user_id(db: Session, user_id: int | None, exclude_agent_id: int | None) -> None:
@@ -148,11 +211,20 @@ def update_agent(
     agent.remark = body.remark or ""
     # 改比例只影响之后的新订单——历史 commission 存的是成交时点快照，不回溯
     agent.commission_rate = body.commission_rate
+    agent.commission_rate2 = body.commission_rate2
     agent.status = body.status
     agent.user_id = body.user_id
+    # 上级只允许在为空时补填。已有值就忽略传入——"下级永远是上级的"，
+    # 允许改指向等于允许把别人的下级抢过来，历史分成也会跟着讲不清。
+    if not agent.parent_id and body.parent_id:
+        agent.parent_id = _valid_parent(db, body.parent_id, agent.id)
     db.commit()
     db.refresh(agent)
-    return ok(agent_service.agent_dict(agent, cfg))
+    data = agent_service.agent_dict(agent, cfg)
+    if agent.parent_id:
+        p = db.query(Agent).filter(Agent.id == agent.parent_id).first()
+        data["parentName"] = p.name if p else ""
+    return ok(data)
 
 
 @router.post("/agents/{agent_id}/disable")
@@ -179,6 +251,7 @@ def list_commissions(
     size: int = 20,
     agent_id: int = 0,
     status: str = "",
+    level: int = 0,
     db: Session = Depends(get_db),
     _: Admin = Depends(require_perm("agents:view")),
 ):
@@ -188,6 +261,8 @@ def list_commissions(
         q = q.filter(Commission.agent_id == agent_id)
     if status:
         q = q.filter(Commission.status == status)
+    if level in (1, 2):
+        q = q.filter(Commission.level == level)
 
     total = q.count()
     size = max(1, min(size, 100))
@@ -207,6 +282,10 @@ def list_commissions(
             "orderId": r.order_id,
             "userId": r.user_id,
             "orderAmount": r.order_amount,
+            # level=1 直推（实拿 = 基数 − 上级抽成）；level=2 上级抽成
+            "level": r.level,
+            "baseAmount": r.base_amount,
+            "sourceAgentName": names.get(r.source_agent_id or 0, ""),
             "rate": r.rate,
             "amount": r.amount,
             "status": r.status,

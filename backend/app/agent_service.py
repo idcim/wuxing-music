@@ -27,7 +27,10 @@ CODE_LEN = 6
 
 DEFAULTS: dict = {
     "enabled": False,        # ← 总开关，默认关
-    "default_rate": 0.2,     # 全局默认分成比例
+    "default_rate": 0.2,     # 一级（直推）分成比例，基数是订单金额
+    # 二级抽成占比，基数是**一级分成金额**而不是订单额，且从下级那份里扣：
+    # 订单 ¥100、一级 20%、二级 25% → 上级 ¥5、直推 ¥15、平台仍只出 ¥20。
+    "default_rate2": 0.25,
     "freeze_days": 7,        # 分成冻结天数（覆盖退款窗口）
     "min_withdraw": 10.0,    # 最低提现金额（元）
     "payout_mode": "manual", # manual 线下打款 | wxpay 微信商家转账
@@ -66,6 +69,28 @@ def rate_of(agent: Agent, cfg: dict) -> float:
     if agent.commission_rate is None:
         return float(cfg.get("default_rate") or 0)
     return float(agent.commission_rate)
+
+
+def rate2_of(agent: Agent, cfg: dict) -> float:
+    """该代理**作为上级**时，从下级分成里抽走的占比。口径同 rate_of。
+
+    注意基数是「下级那份分成」而不是订单金额——20% 的一级分成、25% 的二级抽成，
+    ¥100 的单子上级拿的是 20×25% = ¥5，不是 100×25%。
+    """
+    if agent.commission_rate2 is None:
+        return float(cfg.get("default_rate2") or 0)
+    return float(agent.commission_rate2)
+
+
+def parent_of(db: Session, agent: Agent) -> Agent | None:
+    """直接上级。**只往上一跳，绝不递归**——计酬层级封顶为 2 是红线。"""
+    if not agent or not agent.parent_id:
+        return None
+    return (
+        db.query(Agent)
+        .filter(Agent.id == agent.parent_id, Agent.status == "active")
+        .first()
+    )
 
 
 # ── 推广码 ──
@@ -117,70 +142,106 @@ def bind_agent(db: Session, user: User, code: str) -> dict:
 
 
 # ── 分成产生 ──
-def record_commission(db: Session, order: Order) -> Commission | None:
-    """订单转 paid 时记一笔分成。
+def record_commission(db: Session, order: Order) -> list[Commission]:
+    """订单转 paid 时记分成。有上级则落两条，否则一条。
 
     **只 add / flush，不 commit**——由调用方与「订单置为已支付」一起提交，
     保证两者原子生效，不会出现"订单已付款但分成没记上"的中间态。
 
-    幂等靠 commission.order_id 的唯一约束兜底：微信回调会重复投递。
+    算法（抽成是**从下级那份里扣**，平台总支出与有没有上级无关）：
+
+        base = 订单额 × 直推代理的一级比例      ← 平台为这单支出的总额，恒定
+        cut  = base   × 上级的二级抽成占比      ← 上级抽走
+        lvl1 = base − cut                       ← 直推实拿
+
+    lvl1 必须由 base − cut **反算**，不能拿 base×(1−rate2) 再独立四舍五入——
+    否则两条金额相加会与 base 差一分钱，对账永远对不平。
+
+    幂等：一单要么两条都在、要么都不在，所以只需判断该订单有没有任何记录；
+    并发的兜底是 (order_id, level) 的复合唯一约束。
     """
     cfg = agent_cfg(db)
     if not cfg.get("enabled"):
-        return None
+        return []
     if not order or order.status != "paid":
-        return None
+        return []
 
     user = db.query(User).filter(User.id == order.user_id).first()
     if not user or not user.agent_id:
-        return None
+        return []
 
     agent = db.query(Agent).filter(Agent.id == user.agent_id).first()
     if not agent or agent.status != "active":
-        return None
+        return []
 
     # 已记过就别再记（正常重复回调走这里，唯一约束是并发时的兜底）
     if db.query(Commission.id).filter(Commission.order_id == order.id).first():
-        return None
+        return []
 
     rate = rate_of(agent, cfg)
-    amount = round(float(order.amount or 0) * rate, 2)
-    if amount <= 0:
-        return None
+    base = round(float(order.amount or 0) * rate, 2)
+    if base <= 0:
+        return []
+
+    # 只往上一跳。**绝不递归**——三级及以上是红线。
+    parent = parent_of(db, agent)
+    rate2 = rate2_of(parent, cfg) if parent else 0.0
+    rate2 = min(max(rate2, 0.0), 1.0)
+    cut = round(base * rate2, 2) if parent else 0.0
+    if cut > base:
+        cut = base
+    direct = round(base - cut, 2)
 
     freeze_days = int(cfg.get("freeze_days") or 0)
-    row = Commission(
-        agent_id=agent.id,
-        order_id=order.id,
-        user_id=user.id,
-        order_amount=order.amount,
-        rate=rate,
-        amount=amount,
-        status="pending",
-        available_at=datetime.utcnow() + timedelta(days=freeze_days),
-    )
+    available_at = datetime.utcnow() + timedelta(days=freeze_days)
+    rows: list[Commission] = []
+
+    if direct > 0:
+        rows.append(Commission(
+            agent_id=agent.id, order_id=order.id, level=1, user_id=user.id,
+            order_amount=order.amount, base_amount=base, rate=rate, amount=direct,
+            status="pending", available_at=available_at,
+        ))
+    if parent and cut > 0:
+        rows.append(Commission(
+            agent_id=parent.id, order_id=order.id, level=2, user_id=user.id,
+            order_amount=order.amount, base_amount=base,
+            rate=rate2,                  # level=2 存的是抽成占比，基数是 base 不是订单额
+            amount=cut, status="pending", available_at=available_at,
+            source_agent_id=agent.id,
+        ))
+    if not rows:
+        return []
+
     try:
         with db.begin_nested():   # SAVEPOINT：撞唯一键只回滚这一步，不牵连订单状态
-            db.add(row)
+            for r in rows:
+                db.add(r)
             db.flush()
     except IntegrityError:
-        return None
-    return row
+        return []
+    return rows
 
 
-def void_commission(db: Session, order: Order, reason: str = "订单退款") -> Commission | None:
+def void_commission(db: Session, order: Order, reason: str = "订单退款") -> list[Commission]:
     """订单退款时冲正分成。同样只改不 commit，由调用方提交。
+
+    ⚠️ 必须把该订单下的**所有**记录都作废（直推 + 上级抽成）。
+    这里曾经是 .first()，只冲正直推那条，上级的抽成会留在账上照样能提走。
 
     已经打款出去的（withdrawing/paid）钱追不回来：标记 clawback 让后台看得见，
     由人工向代理追讨。freeze_days 的全部意义就是让这种情况尽量别发生。
     """
-    row = db.query(Commission).filter(Commission.order_id == order.id).first()
-    if not row or row.status == "void":
-        return None
-    row.clawback = row.status in ("withdrawing", "paid")
-    row.status = "void"
-    row.void_reason = reason
-    return row
+    rows = db.query(Commission).filter(Commission.order_id == order.id).all()
+    changed: list[Commission] = []
+    for row in rows:
+        if row.status == "void":
+            continue
+        row.clawback = row.status in ("withdrawing", "paid")
+        row.status = "void"
+        row.void_reason = reason
+        changed.append(row)
+    return changed
 
 
 # ── 余额 ──
@@ -262,6 +323,91 @@ def agent_dict(agent: Agent, cfg: dict | None = None) -> dict:
         # rate 为 None 表示跟随全局默认；effectiveRate 是实际生效值
         "rate": agent.commission_rate,
         "effectiveRate": rate_of(agent, cfg) if cfg else None,
+        # rate2 = 作为上级时能抽下级多少（基数是下级那份分成）
+        "rate2": agent.commission_rate2,
+        "effectiveRate2": rate2_of(agent, cfg) if cfg else None,
+        "parentId": agent.parent_id,
         "status": agent.status,
         "createdAt": agent.created_at.isoformat() if agent.created_at else None,
+    }
+
+
+def promote_user(db: Session, user: User, name: str = "", type_: str = "promoter") -> Agent:
+    """把一个用户提升为代理。
+
+    上级按用户当初绑定的代理**自动落定**——"我推广来的人成了代理，他就是我的下级"，
+    这是最符合直觉的口径，也免去手工指认。落定后不再更改。
+    调用方需先确认该用户还不是代理。
+    """
+    agent = Agent(
+        code=gen_code(db),
+        name=(name or user.nickname or f"代理{user.id}").strip(),
+        type=type_ if type_ in ("store", "promoter") else "promoter",
+        user_id=user.id,
+        phone=user.phone or "",
+        parent_id=user.agent_id,   # 可能为 None（本来就没人推荐他）
+        status="active",
+    )
+    db.add(agent)
+    db.commit()
+    db.refresh(agent)
+    return agent
+
+
+def downline_of(db: Session, agent_id: int) -> dict:
+    """直接下级代理 + 名下用户。**只看一层**——下级的下级与本代理无关。"""
+    subs = (
+        db.query(Agent)
+        .filter(Agent.parent_id == agent_id)
+        .order_by(Agent.created_at.desc())
+        .all()
+    )
+    # 每个下级为本代理贡献了多少（即 level=2、source 是该下级的那些抽成）
+    contrib: dict[int, float] = {}
+    rows = (
+        db.query(Commission.source_agent_id, Commission.amount)
+        .filter(
+            Commission.agent_id == agent_id,
+            Commission.level == 2,
+            Commission.status != "void",
+        )
+        .all()
+    )
+    for sid, amt in rows:
+        if sid:
+            contrib[sid] = round(contrib.get(sid, 0.0) + float(amt or 0), 2)
+
+    sub_items = []
+    for s in subs:
+        sub_items.append({
+            "id": s.id,
+            "name": s.name,
+            "code": s.code,
+            "type": s.type,
+            "status": s.status,
+            "phone": s.phone,
+            "userCount": db.query(User.id).filter(User.agent_id == s.id).count(),
+            "contributed": contrib.get(s.id, 0.0),   # 该下级为我带来的抽成
+            "createdAt": s.created_at.isoformat() if s.created_at else None,
+        })
+
+    users = (
+        db.query(User)
+        .filter(User.agent_id == agent_id)
+        .order_by(User.agent_bound_at.desc())
+        .limit(200)
+        .all()
+    )
+    return {
+        "subAgents": sub_items,
+        "subAgentCount": len(sub_items),
+        "userCount": db.query(User.id).filter(User.agent_id == agent_id).count(),
+        "users": [{
+            "id": u.id,
+            "nickname": u.nickname,
+            "avatar": u.avatar,
+            "phone": u.phone,
+            "membershipName": u.membership_name,
+            "boundAt": u.agent_bound_at.isoformat() if u.agent_bound_at else None,
+        } for u in users],
     }

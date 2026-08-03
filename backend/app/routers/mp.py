@@ -1544,9 +1544,20 @@ def mp_agent_me(
         )
         .all()
     )
+    # 有上级时把抽成规则一并下发，让代理自己能对上账，
+    # 而不是发现「怎么只拿到 15 不是 20」再来质疑。
+    parent = agent_service.parent_of(db, agent)
+    upline = None
+    if parent:
+        upline = {
+            "name": parent.name,
+            "cutRate": agent_service.rate2_of(parent, cfg),
+        }
+
     return ok({
         "isAgent": True,
         "agent": agent_service.agent_dict(agent, cfg),
+        "upline": upline,
         "balance": agent_service.balance_of(db, agent.id),
         "month": {
             "count": len(month_rows),
@@ -1585,12 +1596,21 @@ def mp_agent_commissions(
         .all()
     )
     now = datetime.utcnow()
+    # 二级抽成来自哪个下级，给代理看得懂的名字
+    src_ids = {r.source_agent_id for r in rows if r.source_agent_id}
+    src_names = (
+        {a.id: a.name for a in db.query(Agent).filter(Agent.id.in_(src_ids)).all()}
+        if src_ids else {}
+    )
     return ok({
         "total": total,
         "items": [{
             "id": r.id,
             "amount": r.amount,
             "orderAmount": r.order_amount,
+            "level": r.level,
+            "baseAmount": r.base_amount,
+            "sourceAgentName": src_names.get(r.source_agent_id or 0, ""),
             "rate": r.rate,
             # pending 但已过冻结期，对代理而言就是「可提现」，别显示成冻结中
             "status": "available" if (
@@ -1600,6 +1620,23 @@ def mp_agent_commissions(
             "createdAt": r.created_at.isoformat() if r.created_at else None,
         } for r in rows],
     })
+
+
+@router.get("/agent/downline")
+def mp_agent_downline(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """我的下级：直接下级代理（含各自为我带来的抽成）+ 我推广的用户数。
+
+    只有一层——下级的下级与我无关，这是计酬封顶为两级的直接体现。
+    """
+    agent_service.require_enabled(db)
+    agent = _require_agent(db, user)
+    d = agent_service.downline_of(db, agent.id)
+    # 代理中心不需要看到名下用户的手机号等身份信息，只给数量
+    d.pop("users", None)
+    return ok(d)
 
 
 class WithdrawIn(BaseModel):
