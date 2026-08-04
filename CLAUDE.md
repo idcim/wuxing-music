@@ -390,14 +390,27 @@ const top = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
 `record_commission` **只走两跳（直推 + 其 parent_id），绝不递归向上**；
 链可以更长（琴行→小李→小王），但小王的客户成交只付小王与小李，琴行 0。别加第三级。
 
-**分成算法：抽成从下级那份里扣，平台总支出不变**
+**分成算法（v1.6.0 起是加法模型）：直推恒定拿满，上级加成由平台额外出**
 ```
-base = 订单额 × 直推的一级比例  = 100 × 20% = ¥20   ← 平台支出，恒定
-cut  = base   × 上级的二级抽成  = 20  × 25% = ¥5
-lvl1 = base − cut               = ¥15               ← 直推实拿
+direct = 订单额 × 直推的一级比例  = 100 × 20% = ¥20   ← 与有没有上级无关，恒定
+bonus  = 订单额 × 上级的加成比例  = 100 ×  5% = ¥5    ← 平台额外支出
+平台总支出 = ¥25（无上级时只出 ¥20，**会浮动**）
 ```
-`lvl1` **必须由 `base − cut` 反算**，不能独立取整——否则两条相加与 base 差一分，对账对不平。
-`rate2` 取**上级自己的** `commission_rate2`（配在上级身上：「我能抽下级多少」）。
+两条**各按订单额独立取整**，没有跨行不变量——别再写 `base − cut` 那种反算
+（v1.5 的减法模型才需要，那时平台支出恒定）。对账口径按单汇总：
+`平台支出 = SUM(commission.amount WHERE order_id=X AND status != 'void')`，
+因此合计与 `订单额×(r1+r2)` 可能差 ±0.01（¥33.33 → 6.67+1.67=8.34），**这是可接受的**。
+
+`rate2` 取**上级自己的** `commission_rate2`（配在上级身上：「我发展的下级，每单我多拿多少」）。
+⚠️ 列名沿用 `rate2` 但**语义在 v1.6.0 反过来了**（旧义是"从下级那份里抽的占比"）。
+同理全局配置键从 `default_rate2` 改名为 **`default_bonus_rate`**——
+`agent_cfg` 是 `{**DEFAULTS, **saved}`，沿用旧键名的话存量库里存过的 `0.25`
+会被当成"订单额的 25%"照旧生效，上级分成静默翻 5 倍。**别把键名改回去。**
+
+**两个比例来自两个不同的代理行**，各自 `≤1` 也能相加超过 1（最坏赔付 200%）。
+`record_commission` 里有运行时钳制：超了削**上级加成**而不是直推——
+直推那个数是印在海报上跟人谈好的。全局默认值另有 `AgentSettingIn` 的
+`model_validator` 挡一道（单个代理的覆盖值挡不住，只能靠运行时钳制）。
 
 **上下级自动继承且永久**：用户设为代理时其 `user.agent_id` 即上级；只允许为空时补填，
 不允许改指向（改绑等于把别人的下级抢走）。
@@ -498,7 +511,7 @@ GET/PUT /settings/agent             # 代理分成设置（★ 常驻，是模�
 GET/POST /agents  PUT /agents/{id}  POST /agents/{id}/disable  GET /agents-summary  # 代理
 GET  /agents/{id}/downline          # 下属：直接下级代理 + 名下用户（只看一层）
 POST /users/{id}/agent              # ★ 把用户设为代理（上级按推广来源自动落定，不可改）
-GET  /commissions                   # 分成明细（?level=1 直推 / 2 下级抽成）
+GET  /commissions                   # 分成明细（?level=1 直推 / 2 下级加成）
 GET  /withdrawals  POST /withdrawals/{id}/approve | /reject | /paid                 # 提现审核
 GET/POST /admins  PUT/DELETE /admins/{id}  POST /admins/{id}/password   # 管理员账号
 GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色 + 权限点清单
@@ -533,8 +546,8 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 | `setting` | KV 配置 | key/value（`pay_config`/`site_config`/`storage_config`/`mp_config`/`oa_config`(公众号)/`sms_config`(短信)） |
 | `play_history` | 聆听历史 | user_id、track_id、played_at |
 | `sms_code` | 短信验证码（手机登录） | phone、code、scene、expire_at、used、attempts（失败≥5 作废） |
-| `agent` | ★ 代理（实体店/网络推手） | code(推广码)、type(store/promoter)、user_id(代理中心认人)、commission_rate(一级)/commission_rate2(作为上级的抽成，**null=跟随全局，0≠未设置**)、**parent_id(上级，永久不可改)**、status |
-| `commission` | ★ 分成记录（一单最多两条） | agent_id、order_id、**level(1直推/2上级抽成)**、**唯一键 (order_id, level)**、base_amount(一级基数=平台支出)、rate/amount(成交时点快照)、source_agent_id(二级行的来源下级)、status(pending→available→withdrawing→paid / void)、clawback |
+| `agent` | ★ 代理（实体店/网络推手） | code(推广码)、type(store/promoter)、user_id(代理中心认人)、commission_rate(直推比例)/commission_rate2(**作为上级的加成比例，基数是订单额、平台额外出**；**null=跟随全局，0≠未设置**)、**parent_id(上级，永久不可改)**、status |
+| `commission` | ★ 分成记录（一单最多两条） | agent_id、order_id、**level(1直推/2上级加成)**、**唯一键 (order_id, level)**、base_amount(**本单平台总支出=两条之和**，出参名 `platformCost`)、rate/amount(成交时点快照，**两条基数都是订单额**)、source_agent_id(二级行的来源下级)、status(pending→available→withdrawing→paid / void)、clawback |
 | `withdrawal` | ★ 提现单 | agent_id、amount、status(pending→approved→paid / rejected / failed)、payout_mode、transfer_no |
 
 ------
@@ -572,7 +585,7 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 
 ### 版本
 
-根 `version.json` 是**机读的唯一版本源**（`current.app` / `current.api` + 各端 `channels` + `changelog`），前端常量 `src/constants/version.ts` 与之对齐，APP 更新接口契约见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。**当前 v1.5.1**。发版时同步改**四处**：`version.json`、`package.json`、`src/constants/version.ts`、`docs/ROADMAP.md`（v1.2.0 曾漏改 `version.ts` 的 `API_VERSION`）。
+根 `version.json` 是**机读的唯一版本源**（`current.app` / `current.api` + 各端 `channels` + `changelog`），前端常量 `src/constants/version.ts` 与之对齐，APP 更新接口契约见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。**当前 v1.6.0**。发版时同步改**四处**：`version.json`、`package.json`、`src/constants/version.ts`、`docs/ROADMAP.md`（v1.2.0 曾漏改 `version.ts` 的 `API_VERSION`）。
 
 ⚠️ **`channels.weapp` 是唯一会与源码版本脱节的一栏**：H5/后端/后台推 `master` 即自动部署，
 小程序包却要手工上传，所以该栏另有 `published` 字段记录**线上实际发布的版本**；
@@ -742,7 +755,7 @@ ZEROER-GIFT-7DAY      → 7日体验卡
 
 ------
 
-**最后更新**：推广海报改 Canvas 2D（修 H5 字号坍塌）+ 卡片式版式；站点设置移入系统管理。
-**当前版本**：v1.5.1（见根 `version.json`）。
+**最后更新**：代理分成改加法模型（直推恒定拿满，上级加成由平台额外出）；配置键改名 `default_bonus_rate`。
+**当前版本**：v1.6.0（见根 `version.json`）。
 **当前阶段**：小程序 + H5（微信内）前端、后端管理/公开接口、管理后台均已完成，三容器已上服务器且推 `master` 即自动部署；微信支付/公众号授权/短信/OSS 待真实配置上线验证。
 ⚠️ **小程序包不随自动部署**，欠账（合法域名、待真机验证项、未接的微信原生能力、审核合规）单独记在 [`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)。
