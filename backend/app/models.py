@@ -250,8 +250,9 @@ class Agent(Base):
     # 上级代理。用户被提升为代理时按其 user.agent_id 自动落定，之后**不可改**
     #（"下级永远是上级的"）。只允许为空时补填，不允许改指向。
     parent_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
-    # 作为**上级**时，从下级那份分成里抽走的占比。None = 跟随全局 default_rate2。
-    # 注意语义：这个字段配在上级身上（"我能抽下级多少"），不是配在被抽的人身上。
+    # 作为**上级**时，下级每成一单额外拿订单额的多少。None = 跟随全局 default_bonus_rate。
+    # 语义：配在上级身上（"我发展的下级，每单我多拿多少"）；由平台额外支出，
+    # 不从下级那份里扣，下级实拿不受影响。（列名沿用 rate2，语义 v1.6.0 已改。）
     commission_rate2: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="active", index=True)  # active | disabled
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
@@ -261,8 +262,9 @@ class Commission(Base):
     """一笔成交产生的分成。金额与比例都是成交时点的快照——
     事后改代理比例不影响历史记录，否则对账永远对不平。
 
-    一单最多两条：level=1 直推代理（实拿 = 基数 − 上级抽成），
-    level=2 其上级（抽成）。两条金额相加恒等于 base_amount。
+    一单最多两条：level=1 直推代理（订单额 × 自己的比例，恒定拿满），
+    level=2 其上级（订单额 × 上级的加成比例，平台额外支出）。
+    两条各自独立取整，**没有跨行不变量**；对账按单汇总 amount 即可。
     """
 
     __tablename__ = "commission"
@@ -280,13 +282,14 @@ class Commission(Base):
     level: Mapped[int] = mapped_column(Integer, default=1, index=True)
     user_id: Mapped[int] = mapped_column(Integer, index=True)
     order_amount: Mapped[float] = mapped_column(Float, default=0)
-    # 一级基数 = 订单额 × 直推代理的一级比例，也就是平台为这一单支出的总额。
-    # 两条记录都存同一个值，对账时一眼看出「这单总共出了多少、怎么分的」。
+    # 本单平台总支出 = 直推分成 + 上级加成。两条记录都存同一个值，
+    # 对账时一眼看出「这单总共出了多少、怎么分的」。加法模型下总支出会随
+    # 有没有上级浮动，没法再从 rate 反推，所以这个列反而更有用了。
     base_amount: Mapped[float] = mapped_column(Float, default=0)
-    # level=1 存一级比例；level=2 存抽成占比（基于 base_amount，不是订单额）
+    # level=1 存直推比例，level=2 存上级加成比例——**两者基数都是订单额**
     rate: Mapped[float] = mapped_column(Float, default=0)
     amount: Mapped[float] = mapped_column(Float, default=0)
-    # 仅 level=2 有值：这笔抽成来自哪个下级代理
+    # 仅 level=2 有值：这笔加成来自哪个下级代理
     source_agent_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     # pending(冻结中) → available(可提现) → withdrawing → paid；void = 退款冲正
     status: Mapped[str] = mapped_column(String(16), default="pending", index=True)

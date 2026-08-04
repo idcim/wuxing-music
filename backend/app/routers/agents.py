@@ -39,7 +39,7 @@ class AgentIn(BaseModel):
     remark: str = ""
     # None = 跟随全局默认比例。0 是合法值（不分成），所以不能拿 0 当"未设置"
     commission_rate: float | None = Field(default=None, ge=0, le=1)
-    # 作为上级时从下级分成里抽走的占比；None = 跟随全局默认
+    # 作为上级时，下级每成一单额外拿订单额的多少（平台额外支出）；None = 跟随全局默认
     commission_rate2: float | None = Field(default=None, ge=0, le=1)
     status: str = "active"
     user_id: int | None = None
@@ -272,19 +272,26 @@ def list_commissions(
         .limit(size)
         .all()
     )
-    names = {a.id: a.name for a in db.query(Agent).all()}
+    # 只取三列，别把整个 Agent 实体水化出来（这里以前是 db.query(Agent).all()）
+    _all = db.query(Agent.id, Agent.name, Agent.parent_id).all()
+    names = {i: n for i, n, _ in _all}
+    parents = {i: p for i, _, p in _all}
     return ok({
         "total": total,
         "items": [{
             "id": r.id,
             "agentId": r.agent_id,
             "agentName": names.get(r.agent_id, ""),
+            # 该代理**当前**的上级（组织结构），与 sourceAgentName 那个成交时点快照
+            # 不是一回事：上级是事后补录的话，老的 level=1 行也会显示上级，
+            # 但当时并没产生 level=2。这一列回答的是「他归谁」，不是账务。
+            "parentName": names.get(parents.get(r.agent_id) or 0, ""),
             "orderId": r.order_id,
             "userId": r.user_id,
             "orderAmount": r.order_amount,
-            # level=1 直推（实拿 = 基数 − 上级抽成）；level=2 上级抽成
+            # level=1 直推（订单额 × 自己的比例）；level=2 上级加成（订单额 × 加成比例）
             "level": r.level,
-            "baseAmount": r.base_amount,
+            "platformCost": r.base_amount,   # 本单平台总支出 = 两条之和
             "sourceAgentName": names.get(r.source_agent_id or 0, ""),
             "rate": r.rate,
             "amount": r.amount,

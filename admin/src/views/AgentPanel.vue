@@ -18,29 +18,34 @@
         <el-input-number v-model="ratePct" :min="0" :max="100" :step="1" :precision="1" />
         <span class="unit">%</span>
         <div class="tip">
-          按<b>订单金额</b>计算，这是平台为一单支出的<b>全部</b>成本。
+          按<b>订单金额</b>计算，代理<b>恒定拿满这个比例</b>，与他有没有上级无关。
           单个代理可在「代理管理」里单独覆盖；不覆盖的就跟随这里。
         </div>
       </el-form-item>
 
-      <el-form-item label="二级抽成比例">
-        <el-input-number v-model="rate2Pct" :min="0" :max="100" :step="1" :precision="1" />
+      <el-form-item label="上级加成比例">
+        <el-input-number v-model="bonusPct" :min="0" :max="100" :step="1" :precision="1" />
         <span class="unit">%</span>
         <div class="tip">
-          上级从<b>下级那份分成里抽走</b>的占比——基数是一级分成金额，<b>不是订单金额</b>，
-          而且<b>平台总支出不变</b>。同样可对单个代理覆盖（配在上级身上：「我能抽下级多少」）。
+          下级每成一单，其上级额外拿<b>订单金额</b>的这个比例——由<b>平台额外支出</b>，
+          <b>不从下级那份里扣</b>，下级实拿一分不少。
+          同样可对单个代理覆盖（配在上级身上：「我发展的下级，每单我多拿多少」）。
         </div>
-        <div class="calc">
+        <div class="calc" :class="{ 'calc--over': over100 }">
           按当前设置，一笔 ¥100 的订单：
-          <div class="calc__line">一级基数 ＝ 100 × {{ ratePct }}% ＝ <b>¥{{ base100 }}</b>（平台支出，恒定）</div>
-          <div class="calc__line">上级抽成 ＝ {{ base100 }} × {{ rate2Pct }}% ＝ <b>¥{{ cut100 }}</b></div>
-          <div class="calc__line">直推实拿 ＝ {{ base100 }} − {{ cut100 }} ＝ <b>¥{{ direct100 }}</b></div>
+          <div class="calc__line">直推分成 ＝ 100 × {{ ratePct }}% ＝ <b>¥{{ direct100 }}</b>（直推代理实拿）</div>
+          <div class="calc__line">上级加成 ＝ 100 × {{ bonusPct }}% ＝ <b>¥{{ bonus100 }}</b>（平台额外支出）</div>
           <div class="calc__line calc__line--sum">
-            两人合计 ¥{{ base100 }}，与没有上级时完全一样——上级那份不是平台额外掏的。
+            <template v-if="over100">
+              ⚠️ 两项合计 {{ ratePct + bonusPct }}% <b>已超过订单金额</b>，平台每单倒贴，无法保存。
+            </template>
+            <template v-else>
+              平台总支出 <b>¥{{ total100 }}</b>；该代理若<b>没有上级</b>，则这一单只支出 ¥{{ direct100 }}。
+            </template>
           </div>
         </div>
         <div class="tip">
-          只有两级：上级只抽<b>直接下级</b>的。琴行 → 小李 → 小王 时，
+          只有两级：上级只拿<b>直接下级</b>的加成。琴行 → 小李 → 小王 时，
           小王的客户成交只付小王与小李，<b>琴行一分没有</b>。
         </div>
       </el-form-item>
@@ -98,22 +103,24 @@ import * as api from '@/api';
 const loading = ref(false);
 const saving = ref(false);
 const ratePct = ref(20);
-const rate2Pct = ref(25);
+const bonusPct = ref(5);
 const form = reactive({
   enabled: false,
   default_rate: 0.2,
-  default_rate2: 0.25,
+  default_bonus_rate: 0.05,
   freeze_days: 7,
   min_withdraw: 10,
   payout_mode: 'manual',
 });
 
-// 用一笔 ¥100 的单子把「抽成从下级那份里扣」讲清楚——
-// 这个字段最容易被误解成「平台额外再出 25%」。
-const base100 = computed(() => (100 * ratePct.value / 100).toFixed(2));
-const cut100 = computed(() => (Number(base100.value) * rate2Pct.value / 100).toFixed(2));
-// 直推实拿由基数减抽成反算，与后端 record_commission 的口径一致（避免独立取整产生一分钱差）
-const direct100 = computed(() => (Number(base100.value) - Number(cut100.value)).toFixed(2));
+// 用一笔 ¥100 的单子说明「加成是平台额外掏的」——这个字段最容易被误解成
+// 「从下级那份里扣」（v1.5 的旧规则正是如此，别让看惯旧版的人按老经验配）。
+// 两条各按订单额独立算，与后端 record_commission 口径一致。
+const direct100 = computed(() => (100 * ratePct.value / 100).toFixed(2));
+const bonus100 = computed(() => (100 * bonusPct.value / 100).toFixed(2));
+const total100 = computed(() => (Number(direct100.value) + Number(bonus100.value)).toFixed(2));
+// 加法模型下两个比例是真的相加，配过头平台每单倒贴。后端 AgentSettingIn 也会拒。
+const over100 = computed(() => ratePct.value + bonusPct.value > 100);
 
 async function load() {
   loading.value = true;
@@ -121,18 +128,23 @@ async function load() {
     const d = await api.getAgentSetting();
     form.enabled = !!d.enabled;
     form.default_rate = Number(d.default_rate ?? 0.2);
-    form.default_rate2 = Number(d.default_rate2 ?? 0.25);
+    // 只认新键：存量库里可能还留着旧的 default_rate2（语义相反），读到就会配错
+    form.default_bonus_rate = Number(d.default_bonus_rate ?? 0.05);
     form.freeze_days = Number(d.freeze_days ?? 7);
     form.min_withdraw = Number(d.min_withdraw ?? 10);
     form.payout_mode = d.payout_mode || 'manual';
     ratePct.value = Number((form.default_rate * 100).toFixed(1));
-    rate2Pct.value = Number((form.default_rate2 * 100).toFixed(1));
+    bonusPct.value = Number((form.default_bonus_rate * 100).toFixed(1));
   } finally {
     loading.value = false;
   }
 }
 
 async function onSave() {
+  if (over100.value) {
+    ElMessage.error('一级分成比例 + 上级加成比例不能超过 100%');
+    return;
+  }
   if (form.payout_mode === 'wxpay') {
     await ElMessageBox.confirm(
       '微信自动转账会在审核通过时真实出款，且本项目商户号尚未上线联调。确定切换？',
@@ -145,7 +157,7 @@ async function onSave() {
     await api.updateAgentSetting({
       ...form,
       default_rate: Number((ratePct.value / 100).toFixed(4)),
-      default_rate2: Number((rate2Pct.value / 100).toFixed(4)),
+      default_bonus_rate: Number((bonusPct.value / 100).toFixed(4)),
     });
     // 开关变了要让菜单跟着变——features 是登录时随 /me 下发的
     ElMessage.success('已保存，菜单将在刷新后生效');
@@ -194,6 +206,14 @@ onMounted(load);
   border-top: 1px dashed #dcdfe6;
   font-family: inherit;
   color: #909399;
+}
+.calc--over {
+  background: #fef0f0;
+  color: #f56c6c;
+}
+.calc--over .calc__line--sum {
+  color: #f56c6c;
+  border-top-color: #fbc4c4;
 }
 .warn {
   margin-top: 8px;

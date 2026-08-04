@@ -15,8 +15,10 @@ const NOT_AGENT: AgentMe = { isAgent: false };
 // mock 下的假代理，方便无后端时把页面跑通
 const MOCK_ME: AgentMe = {
   isAgent: true,
-  agent: { id: 1, code: 'A8K3N9', name: '城东琴行', type: 'store', effectiveRate: 0.2, status: 'active' },
-  upline: null,
+  agent: {
+    id: 1, code: 'A8K3N9', name: '城东琴行', type: 'store',
+    effectiveRate: 0.2, effectiveRate2: 0.05, status: 'active'
+  },
   balance: { available: 64.8, frozen: 21.6, withdrawing: 0, paid: 129.6 },
   month: { count: 12, amount: 216, gmv: 1080 },
   minWithdraw: 10,
@@ -123,8 +125,9 @@ export async function getCommissions(page = 1, size = 20): Promise<{ total: numb
     return {
       total: 2,
       items: [
-        { id: 1, amount: 2.7, orderAmount: 18, level: 1, baseAmount: 3.6, rate: 0.2, status: 'available', availableAt: null, createdAt: '2026-08-01T10:00:00' },
-        { id: 2, amount: 6.4, orderAmount: 128, level: 2, baseAmount: 25.6, sourceAgentName: '推手小李', rate: 0.25, status: 'pending', availableAt: '2026-08-10T10:00:00', createdAt: '2026-08-03T09:00:00' }
+        // 直推：18 × 20% = 3.6，拿满不被扣；下级加成：128 × 5% = 6.4，平台额外出
+        { id: 1, amount: 3.6, orderAmount: 18, level: 1, rate: 0.2, status: 'available', availableAt: null, createdAt: '2026-08-01T10:00:00' },
+        { id: 2, amount: 6.4, orderAmount: 128, level: 2, sourceAgentName: '推手小李', rate: 0.05, status: 'pending', availableAt: '2026-08-10T10:00:00', createdAt: '2026-08-03T09:00:00' }
       ]
     };
   }

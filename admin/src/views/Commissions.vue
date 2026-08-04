@@ -13,13 +13,19 @@
       </el-select>
       <el-select v-model="filterLevel" placeholder="按层级筛选" clearable style="width: 140px" @change="reload">
         <el-option label="直推" :value="1" />
-        <el-option label="下级抽成" :value="2" />
+        <el-option label="下级加成" :value="2" />
       </el-select>
       <el-button :icon="Search" @click="reload">查询</el-button>
     </div>
 
     <el-table :data="rows" v-loading="loading" border>
-      <el-table-column prop="agentName" label="代理" min-width="130" />
+      <el-table-column label="代理" min-width="150">
+        <template #default="{ row }">
+          {{ row.agentName }}
+          <!-- 组织上他挂在谁下面。与下面「来自」那个成交时点快照不是一回事 -->
+          <div v-if="row.parentName" class="muted src2">所属上级：{{ row.parentName }}</div>
+        </template>
+      </el-table-column>
       <el-table-column label="订单金额" width="110">
         <template #default="{ row }">¥{{ money(row.orderAmount) }}</template>
       </el-table-column>
@@ -29,7 +35,7 @@
       <el-table-column label="层级" width="150">
         <template #default="{ row }">
           <el-tag v-if="row.level === 2" size="small" type="warning" effect="plain">
-            下级抽成
+            下级加成
           </el-tag>
           <el-tag v-else size="small" effect="plain">直推</el-tag>
           <span v-if="row.level === 2 && row.sourceAgentName" class="muted src">
@@ -37,12 +43,12 @@
           </span>
         </template>
       </el-table-column>
-      <el-table-column label="分成" width="170">
+      <el-table-column label="分成" width="180">
         <template #default="{ row }">
           <b>¥{{ money(row.amount) }}</b>
-          <!-- 直推被上级抽走过就把差额标出来，否则「为什么只拿到 15」没人解释得清 -->
-          <span v-if="row.level === 1 && row.baseAmount > row.amount" class="muted src">
-            (基数 {{ money(row.baseAmount) }})
+          <!-- 总支出随有没有上级浮动（20% 或 25%），没法再从比例反推，只能存下来 -->
+          <span v-if="row.platformCost" class="muted src">
+            (本单平台支出 ¥{{ money(row.platformCost) }})
           </span>
         </template>
       </el-table-column>
@@ -157,6 +163,10 @@ onMounted(async () => {
 }
 .src {
   margin-left: 6px;
+  font-size: 12px;
+}
+.src2 {
+  margin-top: 2px;
   font-size: 12px;
 }
 </style>

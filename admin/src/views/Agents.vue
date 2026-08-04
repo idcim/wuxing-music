@@ -43,7 +43,7 @@
           <span v-else>{{ pct(row.rate) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="二级抽成" width="120">
+      <el-table-column label="上级加成" width="120">
         <template #default="{ row }">
           <span v-if="row.rate2 === null || row.rate2 === undefined" class="muted">
             {{ pct(row.effectiveRate2) }}（默认）
@@ -51,10 +51,15 @@
           <span v-else>{{ pct(row.rate2) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="上级" width="130">
+      <!-- 「直属 / 下级」说的是这个代理在组织里挂在谁下面，
+           与分成明细里的 level 1/2 不是一回事，别标成「一级/二级」自找混淆 -->
+      <el-table-column label="层级" width="150">
         <template #default="{ row }">
-          <span v-if="row.parentName">{{ row.parentName }}</span>
-          <span v-else class="muted">—</span>
+          <template v-if="row.parentName">
+            <el-tag type="warning" effect="plain" size="small">下级代理</el-tag>
+            <div class="muted sub">上级：{{ row.parentName }}</div>
+          </template>
+          <el-tag v-else type="info" effect="plain" size="small">直属代理</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="下属" width="120">
@@ -110,17 +115,19 @@
           <span class="unit">%</span>
           <el-checkbox v-model="useDefaultRate" style="margin-left: 12px">跟随默认</el-checkbox>
           <div class="tip">
-            他作为<b>直推人</b>时按订单金额提的比例。勾「跟随默认」即随全局设置变动；
-            填 0 表示不分成，两者不同。改比例<b>只影响之后的新订单</b>，历史按成交时点快照，不回溯。
+            他作为<b>直推人</b>时按订单金额提的比例，<b>恒定拿满</b>，有没有上级都一样。
+            勾「跟随默认」即随全局设置变动；填 0 表示不分成，两者不同。
+            改比例<b>只影响之后的新订单</b>，历史按成交时点快照，不回溯。
           </div>
         </el-form-item>
-        <el-form-item label="二级抽成">
+        <el-form-item label="上级加成">
           <el-input-number v-model="rate2Pct" :min="0" :max="100" :step="1" :precision="1" />
           <span class="unit">%</span>
           <el-checkbox v-model="useDefaultRate2" style="margin-left: 12px">跟随默认</el-checkbox>
           <div class="tip">
-            他作为<b>上级</b>时，能从下级那份分成里抽走的占比（基数是下级的分成，不是订单额）。
-            平台总支出不变——抽的是下级的钱。
+            他作为<b>上级</b>时，其下级每成一单他额外拿<b>订单额</b>的这个比例——
+            由<b>平台额外支出，不影响下级实拿</b>。勾「跟随默认」即随全局；
+            填 0 表示不给加成，两者不同。
           </div>
         </el-form-item>
         <el-form-item label="上级代理">
@@ -171,6 +178,7 @@
       <el-alert type="info" :closable="false" class="dl-note">
         <template #title>
           只显示<b>直接</b>下级。下级的下级与他无关——计酬封顶两级，第三层拿不到钱。
+          下级的分成不受影响，他的加成是平台额外出的。
         </template>
       </el-alert>
 
@@ -234,7 +242,7 @@ const form = reactive<any>({
 // 比例在界面上用百分数，存的是小数；「跟随默认」= commission_rate 为 null
 const ratePct = ref(20);
 const useDefaultRate = ref(true);
-const rate2Pct = ref(25);
+const rate2Pct = ref(5);
 const useDefaultRate2 = ref(true);
 // el-input-number 不接受 null，用 0 表示未关联
 const userIdNum = ref(0);
@@ -286,7 +294,7 @@ function openCreate() {
   useDefaultRate.value = true;
   ratePct.value = 20;
   useDefaultRate2.value = true;
-  rate2Pct.value = 25;
+  rate2Pct.value = 5;
   userIdNum.value = 0;
   parentIdSel.value = '';
   dialog.value = true;
@@ -302,7 +310,7 @@ function openEdit(row: any) {
   useDefaultRate.value = row.rate === null || row.rate === undefined;
   ratePct.value = Number(((row.rate ?? row.effectiveRate ?? 0.2) * 100).toFixed(1));
   useDefaultRate2.value = row.rate2 === null || row.rate2 === undefined;
-  rate2Pct.value = Number(((row.rate2 ?? row.effectiveRate2 ?? 0.25) * 100).toFixed(1));
+  rate2Pct.value = Number(((row.rate2 ?? row.effectiveRate2 ?? 0.05) * 100).toFixed(1));
   userIdNum.value = row.userId || 0;
   parentIdSel.value = '';
   dialog.value = true;
@@ -395,6 +403,10 @@ onMounted(reload);
 }
 .muted {
   color: #909399;
+}
+.sub {
+  margin-top: 2px;
+  font-size: 12px;
 }
 .unit {
   margin-left: 6px;

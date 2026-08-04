@@ -115,15 +115,16 @@ export interface AgentInfo {
   code: string;                    // 推广码，进海报二维码的 a=<code>
   name: string;
   type: 'store' | 'promoter';
-  effectiveRate: number | null;    // 实际生效比例（已把「跟随默认」解析掉）
+  effectiveRate: number | null;    // 实际生效的直推比例（已把「跟随默认」解析掉）
+  effectiveRate2: number | null;   // 作为上级时，下级每单我额外拿订单额的多少
   status: string;
 }
 
 export interface AgentMe {
   isAgent: boolean;
   agent?: AgentInfo;
-  // 有上级时下发抽成规则，让代理自己能对上账（否则会以为少给了钱）
-  upline?: { name: string; cutRate: number } | null;
+  // 不下发上级信息：加法模型下上级那份是平台额外出的，代理拿满自己的比例，
+  // 没有「怎么少给了」要解释——提一嘴反而让人以为被抽了。
   balance?: AgentBalance;
   month?: { count: number; amount: number; gmv: number };
   minWithdraw?: number;
@@ -137,7 +138,7 @@ export interface SubAgent {
   type: 'store' | 'promoter';
   status: string;
   userCount: number;
-  contributed: number;   // 该下级为我带来的抽成
+  contributed: number;   // 该下级为我带来的加成
   createdAt: string | null;
 }
 
@@ -151,9 +152,8 @@ export interface CommissionItem {
   id: number;
   amount: number;
   orderAmount: number;
-  // 1=直推（实拿 = 基数 − 上级抽成），2=从下级那儿抽的
+  // 1=直推（订单额 × 我的比例，恒定拿满），2=下级成交给我的加成（订单额 × 我的加成比例）
   level: number;
-  baseAmount: number;
   sourceAgentName?: string;
   rate: number;
   status: CommissionStatus;

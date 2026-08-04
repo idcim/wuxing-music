@@ -28,9 +28,13 @@ CODE_LEN = 6
 DEFAULTS: dict = {
     "enabled": False,        # ← 总开关，默认关
     "default_rate": 0.2,     # 一级（直推）分成比例，基数是订单金额
-    # 二级抽成占比，基数是**一级分成金额**而不是订单额，且从下级那份里扣：
-    # 订单 ¥100、一级 20%、二级 25% → 上级 ¥5、直推 ¥15、平台仍只出 ¥20。
-    "default_rate2": 0.25,
+    # 上级加成比例，基数同样是**订单金额**，由平台**额外**支出（不从下级那份里扣）：
+    # 订单 ¥100、一级 20%、加成 5% → 直推 ¥20、上级 ¥5、平台这单出 ¥25。
+    #
+    # ⚠️ 键名是从 default_rate2 改过来的（v1.6.0）。旧键的语义是"从下级那份里抽的占比"，
+    #    默认 0.25；agent_cfg 用 {**DEFAULTS, **saved} 合并，若沿用旧键名，存量库里
+    #    存过的 0.25 会被当成"订单额的 25%"照旧生效，上级分成静默翻 5 倍。改名即失效。
+    "default_bonus_rate": 0.05,
     "freeze_days": 7,        # 分成冻结天数（覆盖退款窗口）
     "min_withdraw": 10.0,    # 最低提现金额（元）
     "payout_mode": "manual", # manual 线下打款 | wxpay 微信商家转账
@@ -72,13 +76,15 @@ def rate_of(agent: Agent, cfg: dict) -> float:
 
 
 def rate2_of(agent: Agent, cfg: dict) -> float:
-    """该代理**作为上级**时，从下级分成里抽走的占比。口径同 rate_of。
+    """该代理**作为上级**时，下级每成一单他额外拿订单额的多少。口径同 rate_of。
 
-    注意基数是「下级那份分成」而不是订单金额——20% 的一级分成、25% 的二级抽成，
-    ¥100 的单子上级拿的是 20×25% = ¥5，不是 100×25%。
+    基数是**订单金额**，且由平台额外支出——不从下级那份里扣，下级实拿不受影响。
+    ¥100 的单子、加成 5% → 上级拿 ¥5，直推照样拿满自己的 20%。
+
+    （列名仍是 commission_rate2 是为了不动 DB 与后台字段；语义已在 v1.6.0 改掉。）
     """
     if agent.commission_rate2 is None:
-        return float(cfg.get("default_rate2") or 0)
+        return float(cfg.get("default_bonus_rate") or 0)
     return float(agent.commission_rate2)
 
 
@@ -148,14 +154,18 @@ def record_commission(db: Session, order: Order) -> list[Commission]:
     **只 add / flush，不 commit**——由调用方与「订单置为已支付」一起提交，
     保证两者原子生效，不会出现"订单已付款但分成没记上"的中间态。
 
-    算法（抽成是**从下级那份里扣**，平台总支出与有没有上级无关）：
+    算法（加法模型：直推恒定拿满，上级那份由平台**额外**支出）：
 
-        base = 订单额 × 直推代理的一级比例      ← 平台为这单支出的总额，恒定
-        cut  = base   × 上级的二级抽成占比      ← 上级抽走
-        lvl1 = base − cut                       ← 直推实拿
+        direct = 订单额 × 直推代理的一级比例    ← 与有没有上级无关，恒定
+        bonus  = 订单额 × 上级的加成比例        ← 平台额外支出
 
-    lvl1 必须由 base − cut **反算**，不能拿 base×(1−rate2) 再独立四舍五入——
-    否则两条金额相加会与 base 差一分钱，对账永远对不平。
+    平台总支出随有无上级浮动：无上级 20%、有上级 25%（按默认配置）。
+    两条**各自独立取整**，没有跨行不变量——对账口径是按单汇总：
+
+        平台为某单的支出 = SUM(amount WHERE order_id=X AND status != 'void')
+
+    因此合计与 订单额×(r1+r2) 可能差 ±0.01（¥33.33 × 20%/5% → 6.67 + 1.67 = 8.34，
+    理论值 8.33）。这是可接受的，别再去凑那一分钱。
 
     幂等：一单要么两条都在、要么都不在，所以只需判断该订单有没有任何记录；
     并发的兜底是 (order_id, level) 的复合唯一约束。
@@ -178,19 +188,27 @@ def record_commission(db: Session, order: Order) -> list[Commission]:
     if db.query(Commission.id).filter(Commission.order_id == order.id).first():
         return []
 
-    rate = rate_of(agent, cfg)
-    base = round(float(order.amount or 0) * rate, 2)
-    if base <= 0:
-        return []
+    # 比例来自自由填写的 JSON 配置与代理行，两处都钳一遍再用。
+    amount = float(order.amount or 0)
+    rate = min(max(rate_of(agent, cfg), 0.0), 1.0)
+    direct = round(amount * rate, 2)
 
     # 只往上一跳。**绝不递归**——三级及以上是红线。
+    # 上级被停用则没有加成，且直推照样拿满（旧的减法模型下停用上级会让直推多拿钱，
+    # 那是个反向激励；加法模型下上下级互不影响）。
     parent = parent_of(db, agent)
-    rate2 = rate2_of(parent, cfg) if parent else 0.0
-    rate2 = min(max(rate2, 0.0), 1.0)
-    cut = round(base * rate2, 2) if parent else 0.0
-    if cut > base:
-        cut = base
-    direct = round(base - cut, 2)
+    rate2 = min(max(rate2_of(parent, cfg), 0.0), 1.0) if parent else 0.0
+    bonus = round(amount * rate2, 2) if parent else 0.0
+
+    # 兜底：两个比例分别来自**两个不同的代理行**，各自 ≤1 也能相加超过 1，
+    # 最坏能付出订单额的 200%。超了就削**上级加成**——直推那个数是印在海报上
+    # 跟人谈好的，不能动；而付出去的钱冻结期一过就追不回来了。
+    if direct + bonus > amount:
+        bonus = max(0.0, round(amount - direct, 2))
+
+    # 本单平台总支出，两条存同一个值：加法模型下总支出会浮动（有无上级差一截），
+    # 后台再也没法从 rate 反推成本，靠这个列一眼看出「这单一共出了多少」。
+    platform_cost = round(direct + bonus, 2)
 
     freeze_days = int(cfg.get("freeze_days") or 0)
     available_at = datetime.utcnow() + timedelta(days=freeze_days)
@@ -199,18 +217,20 @@ def record_commission(db: Session, order: Order) -> list[Commission]:
     if direct > 0:
         rows.append(Commission(
             agent_id=agent.id, order_id=order.id, level=1, user_id=user.id,
-            order_amount=order.amount, base_amount=base, rate=rate, amount=direct,
+            order_amount=order.amount, base_amount=platform_cost, rate=rate, amount=direct,
             status="pending", available_at=available_at,
         ))
-    if parent and cut > 0:
+    if parent and bonus > 0:
         rows.append(Commission(
             agent_id=parent.id, order_id=order.id, level=2, user_id=user.id,
-            order_amount=order.amount, base_amount=base,
-            rate=rate2,                  # level=2 存的是抽成占比，基数是 base 不是订单额
-            amount=cut, status="pending", available_at=available_at,
+            order_amount=order.amount, base_amount=platform_cost,
+            rate=rate2,                  # level=2 存的是加成比例，基数同为订单额
+            amount=bonus, status="pending", available_at=available_at,
             source_agent_id=agent.id,
         ))
     if not rows:
+        # 两个比例都是 0 才会走到这（直推 0% 但上级有加成时，上级那条照样要记——
+        # 这正是旧代码 `if base <= 0: return []` 会吞掉的场景）。
         return []
 
     try:
@@ -323,7 +343,7 @@ def agent_dict(agent: Agent, cfg: dict | None = None) -> dict:
         # rate 为 None 表示跟随全局默认；effectiveRate 是实际生效值
         "rate": agent.commission_rate,
         "effectiveRate": rate_of(agent, cfg) if cfg else None,
-        # rate2 = 作为上级时能抽下级多少（基数是下级那份分成）
+        # rate2 = 作为上级时，下级每成一单自己额外拿订单额的多少（平台额外支出）
         "rate2": agent.commission_rate2,
         "effectiveRate2": rate2_of(agent, cfg) if cfg else None,
         "parentId": agent.parent_id,

@@ -133,7 +133,8 @@
           系统会自动生成推广码。
           <template v-if="current.referrer">
             该用户是<b>「{{ current.referrer.name }}」</b>推广来的，
-            将<b>自动成为其下级</b>，对方可从他的分成里抽成。
+            将<b>自动成为其下级</b>；他成交时对方可额外拿一份加成，
+            <b>由平台支出，不影响他自己的分成</b>。
           </template>
           <template v-else>该用户没有推荐人，将作为独立代理（无上级）。</template>
           <b>上下级关系一旦确定不可更改。</b>

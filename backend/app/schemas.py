@@ -1,6 +1,6 @@
 from typing import Any, Generic, Optional, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 T = TypeVar("T")
 
@@ -172,11 +172,21 @@ class SmsSettingIn(BaseModel):
 class AgentSettingIn(BaseModel):
     enabled: bool = False              # 总开关，默认关（关闭时连分成记录都不产生）
     default_rate: float = Field(default=0.2, ge=0, le=1)
-    # 二级抽成占比：基数是**一级分成金额**，且从下级那份里扣，平台总支出不变
-    default_rate2: float = Field(default=0.25, ge=0, le=1)
+    # 上级加成比例：基数同为**订单金额**，由平台额外支出，不从下级那份里扣。
+    # 键名从 default_rate2 改过来（v1.6.0），旧键语义相反，不能复用。
+    default_bonus_rate: float = Field(default=0.05, ge=0, le=1)
     freeze_days: int = Field(default=7, ge=0, le=365)
     min_withdraw: float = Field(default=10, ge=0)
     payout_mode: str = "manual"        # manual 线下打款 | wxpay 微信商家转账
+
+    @model_validator(mode="after")
+    def _check_total(self):
+        # 加法模型下两个比例是真的相加：配成 60% + 60% 平台每单倒贴。
+        # 单个代理的覆盖值挡不住（两个数分属两个代理行），这里只守住全局默认；
+        # 真正的硬保证在 agent_service.record_commission 的运行时钳制。
+        if self.default_rate + self.default_bonus_rate > 1:
+            raise ValueError("一级分成比例 + 上级加成比例不能超过 100%")
+        return self
 
 
 # ── 退款 ──

@@ -164,13 +164,6 @@ export default function AgentCenter() {
                 成交后冻结 {me.freezeDays} 天转为可提现{me.minWithdraw ? `，满 ${money(me.minWithdraw)} 元可提` : ''}
               </Text>
             )}
-            {/* 有上级就把规则摆明，别让代理自己去猜为什么金额对不上 */}
-            {!!me.upline && (
-              <Text className="agent__card-tip">
-                你的上级为「{me.upline.name}」，每笔直推分成中有
-                {(me.upline.cutRate * 100).toFixed(0)}% 归上级
-              </Text>
-            )}
           </View>
 
           {/* 本月业绩 */}
@@ -200,6 +193,13 @@ export default function AgentCenter() {
                   {downline.subAgentCount} 位代理 · {downline.userCount} 位用户
                 </Text>
               </View>
+              {/* 加成是平台额外给的，不从下级那份里扣——说清楚才敢放心去发展下级 */}
+              {downline.subAgentCount > 0 && agent.effectiveRate2 != null && (
+                <Text className="agent__team-tip">
+                  下级每成一单，你额外得订单额的 {(agent.effectiveRate2 * 100).toFixed(0)}%，
+                  不影响下级自己的分成
+                </Text>
+              )}
               {downline.subAgents.map((s) => (
                 <View key={s.id} className="agent__team-item">
                   <View className="agent__team-item-left">
@@ -210,7 +210,7 @@ export default function AgentCenter() {
                   </View>
                   <View className="agent__team-item-right">
                     <Text className="agent__team-amount">+{money(s.contributed)}</Text>
-                    <Text className="agent__team-label">累计抽成</Text>
+                    <Text className="agent__team-label">累计加成</Text>
                   </View>
                 </View>
               ))}
@@ -274,7 +274,7 @@ export default function AgentCenter() {
                   <View className="agent__item-main">
                     <Text className="agent__item-amount">+{money(r.amount)}</Text>
                     <View className="agent__item-tags">
-                      {r.level === 2 && <Text className="agent__item-level">下级抽成</Text>}
+                      {r.level === 2 && <Text className="agent__item-level">下级加成</Text>}
                       <Text className={`agent__item-status agent__item-status--${r.status}`}>
                         {COMMISSION_TEXT[r.status] || r.status}
                       </Text>
@@ -283,17 +283,11 @@ export default function AgentCenter() {
                   <View className="agent__item-meta">
                     <Text className="agent__item-desc">
                       {r.level === 2
-                        ? `${r.sourceAgentName || '下级'}的成交 · 抽成 ${(Number(r.rate || 0) * 100).toFixed(0)}%`
+                        ? `${r.sourceAgentName || '下级'}的成交 · 加成 ${(Number(r.rate || 0) * 100).toFixed(0)}%`
                         : `订单 ¥${money(r.orderAmount)} · ${(Number(r.rate || 0) * 100).toFixed(0)}%`}
                     </Text>
                     <Text className="agent__item-time">{fmt(r.createdAt)}</Text>
                   </View>
-                  {/* 直推被上级抽走过就说明白，否则「怎么不是 20 块」会被反复问 */}
-                  {r.level === 1 && r.baseAmount > r.amount && (
-                    <Text className="agent__item-note">
-                      本单分成 ¥{money(r.baseAmount)}，上级抽 ¥{money(r.baseAmount - r.amount)}
-                    </Text>
-                  )}
                 </View>
               ))}
             </View>

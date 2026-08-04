@@ -1544,20 +1544,11 @@ def mp_agent_me(
         )
         .all()
     )
-    # 有上级时把抽成规则一并下发，让代理自己能对上账，
-    # 而不是发现「怎么只拿到 15 不是 20」再来质疑。
-    parent = agent_service.parent_of(db, agent)
-    upline = None
-    if parent:
-        upline = {
-            "name": parent.name,
-            "cutRate": agent_service.rate2_of(parent, cfg),
-        }
-
+    # 不再下发上级信息：加法模型下上级那份是平台额外出的，代理拿满自己的比例，
+    # 没有「怎么只拿到 15 不是 20」可解释——多说反而让人以为被抽了。
     return ok({
         "isAgent": True,
         "agent": agent_service.agent_dict(agent, cfg),
-        "upline": upline,
         "balance": agent_service.balance_of(db, agent.id),
         "month": {
             "count": len(month_rows),
@@ -1596,7 +1587,7 @@ def mp_agent_commissions(
         .all()
     )
     now = datetime.utcnow()
-    # 二级抽成来自哪个下级，给代理看得懂的名字
+    # 加成来自哪个下级，给代理看得懂的名字
     src_ids = {r.source_agent_id for r in rows if r.source_agent_id}
     src_names = (
         {a.id: a.name for a in db.query(Agent).filter(Agent.id.in_(src_ids)).all()}
@@ -1609,7 +1600,7 @@ def mp_agent_commissions(
             "amount": r.amount,
             "orderAmount": r.order_amount,
             "level": r.level,
-            "baseAmount": r.base_amount,
+            # 不下发 base_amount：那是本单的平台总支出，代理不该看到平台成本
             "sourceAgentName": src_names.get(r.source_agent_id or 0, ""),
             "rate": r.rate,
             # pending 但已过冻结期，对代理而言就是「可提现」，别显示成冻结中

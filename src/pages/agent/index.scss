@@ -164,6 +164,14 @@
       color: $text-tertiary;
     }
 
+    &-tip {
+      display: block;
+      margin-top: 18rpx;
+      font-size: 22rpx;
+      color: $text-quaternary;
+      line-height: 1.6;
+    }
+
     &-item {
       display: flex;
       align-items: center;
@@ -343,13 +351,6 @@
       padding: 4rpx 14rpx;
       border-radius: $radius-pill;
       background: rgba(234, 179, 8, 0.12);
-    }
-
-    &-note {
-      display: block;
-      margin-top: 10rpx;
-      font-size: 20rpx;
-      color: $text-quaternary;
     }
 
     &-status {
