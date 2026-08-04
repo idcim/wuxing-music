@@ -30,6 +30,7 @@ from app.routers import (
     users,
 )
 from app.seed import seed
+from app.version import version_info
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -246,4 +247,12 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 @app.get("/api/health")
 def health():
-    return {"code": 0, "data": {"status": "ok"}, "msg": "ok"}
+    """健康检查 + 版本信息（公开，免鉴权）。
+
+    带上版本是为了**从外部确认部署有没有生效**——此前这里只回 {"status": "ok"}，
+    容器是新是旧完全看不出来，只能上服务器翻 /var/log/wuxing-deploy.log。
+    自动部署脚本轮询的也是本接口，加字段不影响它（只判 HTTP 200）。
+
+    看 `commit` 而不是 `version`：文档类改动不 bump 版本号。
+    """
+    return {"code": 0, "data": {"status": "ok", **version_info()}, "msg": "ok"}

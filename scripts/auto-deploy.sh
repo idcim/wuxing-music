@@ -81,6 +81,11 @@ OLD_SHA="$LOCAL"
 git reset --hard "origin/$BRANCH"
 log "代码已更新到 $(git rev-parse --short HEAD)。重建并重启容器…"
 
+# 把提交号带进容器，GET /api/health 会回显——否则线上跑的是哪个版本，
+# 只能上服务器翻日志。回滚分支里要重新 export，那时 HEAD 已经变了。
+export GIT_COMMIT="$(git rev-parse --short HEAD)"
+export BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
 if $COMPOSE up -d --build >>"$LOG_FILE" 2>&1 && health_ok; then
   log "✅ 部署成功，健康检查通过（$(git rev-parse --short HEAD)）。"
   notify "部署成功 → $(git rev-parse --short HEAD)"
@@ -92,6 +97,8 @@ log "❌ 构建/启动或健康检查失败。"
 if [ "$ROLLBACK_ON_FAIL" = "1" ]; then
   log "↩️ 回滚到旧版本 ${OLD_SHA:0:7} 并重建…"
   git reset --hard "$OLD_SHA"
+  export GIT_COMMIT="$(git rev-parse --short HEAD)"   # 回滚后 HEAD 变了，重新取
+  export BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   if $COMPOSE up -d --build >>"$LOG_FILE" 2>&1 && health_ok; then
     log "✅ 已回滚到旧版本，服务恢复。"; notify "部署失败已回滚到 ${OLD_SHA:0:7}"
   else

@@ -15,6 +15,11 @@ services:
     restart: unless-stopped
     env_file:
       - ./backend/.env
+    environment:
+      # 由 scripts/auto-deploy.sh 在 up 之前 export；本地手动起就是空。
+      # 供 GET /api/health 回显，用来从外部确认线上跑的到底是哪个提交。
+      - GIT_COMMIT=${GIT_COMMIT:-}
+      - BUILT_AT=${BUILT_AT:-}
     ports:
       - "8000:8000"
     volumes:

@@ -568,7 +568,7 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 
 | 组件 | 容器 | 端口 | 说明 |
 | ---- | ---- | ---- | ---- |
-| 后端 API | `wuxing-backend` | 8000 | `/api/mp/*` 公开端 + `/api/admin/*` 管理端；健康检查 `GET /api/health` |
+| 后端 API | `wuxing-backend` | 8000 | `/api/mp/*` 公开端 + `/api/admin/*` 管理端；健康检查 `GET /api/health`（★ 同时回显版本与提交号，见下） |
 | 管理后台 | `wuxing-admin` | 8080 | Nginx 托管，`/api` 反代到后端（同源无跨域） |
 | H5 前端 | `wuxing-h5` | 8081 | `docker/Dockerfile.h5` 内跑 `build:h5`，Nginx 托管产物 + 反代 `/api`、`/uploads` |
 | MySQL | 外部（`1panel-network`） | 3306 | 不随 compose 起落，单独维护 |
@@ -583,9 +583,23 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 
 **推论：推到 `master` 即上线。** 提交前请确认改动可直接上生产；日志在 `/var/log/wuxing-deploy.log`。
 
+**怎么从外部确认部署生效**（不用登服务器）：`GET /api/health` 是公开免鉴权的，返回
+
+```json
+{"code":0,"data":{"status":"ok","version":"1.6.0","api":"1.3.0",
+                  "commit":"a7d46ea","builtAt":"…","startedAt":"…"},"msg":"ok"}
+```
+
+**看 `commit` 而不是 `version`**——文档类改动不 bump 版本号，只盯 `version` 会误判成没上去；
+`startedAt` 则能看出容器有没有真的重建过。`commit`/`builtAt` 由 `scripts/auto-deploy.sh`
+在 `compose up` 前 `export`、经 `docker-compose.yml` 的 `environment` 注入，**本地手动起是空串**。
+⚠️ 回滚分支里必须重新 `export`（那时 HEAD 已经变了），否则回滚后 health 还报着新提交号。
+
 ### 版本
 
-根 `version.json` 是**机读的唯一版本源**（`current.app` / `current.api` + 各端 `channels` + `changelog`），前端常量 `src/constants/version.ts` 与之对齐，APP 更新接口契约见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。**当前 v1.6.0**。发版时同步改**四处**：`version.json`、`package.json`、`src/constants/version.ts`、`docs/ROADMAP.md`（v1.2.0 曾漏改 `version.ts` 的 `API_VERSION`）。
+根 `version.json` 是**机读的唯一版本源**（`current.app` / `current.api` + 各端 `channels` + `changelog`），前端常量 `src/constants/version.ts` 与之对齐，APP 更新接口契约见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。**当前 v1.6.0**。发版时同步改**五处**：`version.json`、`package.json`、`src/constants/version.ts`、**`backend/app/version.py`**、`docs/ROADMAP.md`（v1.2.0 曾漏改 `version.ts` 的 `API_VERSION`）。
+
+> 后端为什么另存一份而不读 `version.json`：后端镜像的构建上下文是 `./backend`（见 `docker-compose.yml`），根目录的 `version.json` **进不到容器里**。这份重复是为了让 `/api/health` 能报版本，代价是发版多改一处。
 
 ⚠️ **`channels.weapp` 是唯一会与源码版本脱节的一栏**：H5/后端/后台推 `master` 即自动部署，
 小程序包却要手工上传，所以该栏另有 `published` 字段记录**线上实际发布的版本**；
