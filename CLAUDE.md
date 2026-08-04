@@ -581,6 +581,9 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 
 拉取式部署，由 **1Panel 计划任务**定时调用（非 GitHub Actions）：检测远程有新提交 → `git pull` → `docker compose up -d --build` → 轮询 `/api/health` → **失败自动回滚到上个 commit 并重建**。带文件锁防并发重入，无更新则立即退出（幂等，可每分钟跑）。行为通过环境变量覆盖（`WUXING_REPO_DIR` / `WUXING_BRANCH` / `WUXING_HEALTH_URL` / `WUXING_ROLLBACK` …）。
 
+⚠️ **脚本开头的「自我复制再执行」不是冗余，别删**。`git reset --hard` 会重写正在执行的本文件，而 bash 按字节偏移边读边执行——实测后果不是"少跑一行"，而是**先把某行残段当命令执行，再从头把整个脚本又跑一遍，且最终 exit 0**（cron 完全看不出异常）。对本脚本意味着 `compose up --build` 与回滚逻辑可能重复执行。跑副本后 `git reset` 改的只是磁盘原件。该段必须在 `flock` **之前**，否则父子进程互抢锁。
+⚠️ **`flock` 缺失要显式报错**，不能沿用 `if ! flock` 一把兜：那样它不存在时会走进「已有部署进程在运行 → exit 0」，**每次静默跳过、永远返回 0**，日志还写着一句骗人的话。
+
 **推论：推到 `master` 即上线。** 提交前请确认改动可直接上生产；日志在 `/var/log/wuxing-deploy.log`。
 
 **怎么从外部确认部署生效**（不用登服务器）：`GET /api/health` 是公开免鉴权的，返回

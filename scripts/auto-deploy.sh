@@ -17,6 +17,27 @@
 # ================================================================
 set -uo pipefail
 
+# ── 先把自己复制到临时文件，改跑副本 ─────────────────────────
+# 下面的 git reset --hard 会**重写本文件**，而 bash 是按字节偏移边读边执行的：
+# 正在运行的脚本被换掉后，它会拿旧偏移去读新内容。实测后果不是"少跑一行"——
+# 而是先把某行的残段当命令执行（command not found），再从头把整个脚本又跑一遍，
+# 且最终 exit 0，cron 完全看不出异常。对本脚本意味着 compose up --build 与
+# 回滚逻辑可能重复执行。（v1.6.0 那次部署就因此丢掉了新加的两行 export。）
+#
+# 跑副本之后，git reset 改的只是磁盘上的原件，本次执行的字节流不再变动。
+# 必须放在 flock 之前：否则父子进程会互相抢锁。
+if [ -z "${WUXING_SELF_COPY:-}" ]; then
+  _self="$(mktemp "${TMPDIR:-/tmp}/wuxing-deploy.XXXXXX")" \
+    || { echo "❌ 无法创建临时文件，放弃部署。" >&2; exit 1; }
+  cp "$0" "$_self" \
+    || { rm -f "$_self"; echo "❌ 复制部署脚本失败，放弃部署。" >&2; exit 1; }
+  export WUXING_SELF_COPY=1
+  bash "$_self" "$@"      # 用 bash 显式调用，临时目录挂了 noexec 也不受影响
+  _rc=$?
+  rm -f "$_self"
+  exit "$_rc"
+fi
+
 # ── 可配置项（环境变量覆盖，在 1Panel 计划任务里 export 即可）──
 REPO_DIR="${WUXING_REPO_DIR:-/opt/1panel/www/sites/app/index/wuxing-music}"   # 仓库路径（1Panel 站点目录）
 BRANCH="${WUXING_BRANCH:-master}"                                # 部署分支
@@ -60,6 +81,15 @@ health_ok() {
 }
 
 # ── 单实例锁：拿不到说明上次部署还在跑（构建慢于调用间隔），本次跳过 ──
+# ⚠️ 先单独判断 flock 在不在。否则它缺失时 `! flock` 同样为真，会走进
+#    「已有部署进程在运行 → exit 0」——**每次都静默跳过、永远返回 0**，
+#    日志还写着一句骗人的话，你会以为 cron 好好的，其实一次都没部署过。
+#    宁可显式失败：并发跑两个 git reset --hard + compose up 会毁掉一次部署，
+#    所以这里不降级为"无锁继续"。
+if ! command -v flock >/dev/null 2>&1; then
+  log "❌ 未找到 flock（util-linux），无法保证单实例，拒绝部署。请先安装。"
+  exit 1
+fi
 exec 9>"$LOCK_FILE"
 if ! flock -n 9; then
   log "已有部署进程在运行，跳过本次。"; exit 0
