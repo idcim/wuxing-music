@@ -1,16 +1,16 @@
 {
   "current": {
-    "app": "1.6.0",
-    "api": "1.2.0"
+    "app": "1.7.0",
+    "api": "1.3.0"
   },
   "channels": {
     "weapp": {
-      "version": "1.6.0",
+      "version": "1.7.0",
       "published": "unconfirmed",
       "note": "version 为源码版本；线上已发布的包版本待人工确认（不随服务器自动部署，需 build:weapp + 开发者工具上传）。发布后请把实际版本填进 published。欠账清单见 docs/WEAPP-TODO.md"
     },
     "h5": {
-      "version": "1.6.0",
+      "version": "1.7.0",
       "note": "H5（微信内）端，随 master 自动部署"
     },
     "android": {
@@ -29,6 +29,22 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.7.0",
+      "date": "2026-08-08",
+      "notes": [
+        "新增 docs/WUXING-REFERENCE.md：飞书《五音对照知识》全文落库，五行内容与文案的唯一基准",
+        "五行新增 33 项文化对照维度（五志/五神/简谱/调式/情绪转化/时间感/空间感等），存 element.meta JSON 列，后台可编辑",
+        "合规改造：五行文案从「疏肝理气·柔肝宁神」等中医治疗口吻改为「音乐气质 / 适合直播讲法」口径",
+        "测评题库重写：不再问身体症状（「肝胆·眼睛·筋骨紧张」），改为情绪失衡表现与感受偏好",
+        "结果页「Healing Direction / 调理建议」改为「情绪转化方向」，并常驻免责声明",
+        "引导页去掉 BASED ON TRADITIONAL CHINESE MEDICINE 与「中医体质测评」表述",
+        "元素详情页新增文化维度网格（调式/五化/方位/五色/五志/五神/时间感/空间感）",
+        "存量库自动升级：meta 自动补齐；desc/sleep_tip/题库仅在运营未改过时才覆盖",
+        "接口 /api/mp/elements 新增 meta 字段（纯新增，旧包读到 undefined 走原有兜底，无需重传）",
+        "UI 主色仍不等于传统五色（水=黑/玄 在深色底不可用），五色作为 meta.colorName 保留"
+      ]
+    },
     {
       "version": "1.6.0",
       "date": "2026-08-04",
