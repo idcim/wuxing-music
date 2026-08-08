@@ -38,7 +38,7 @@ export default function Home() {
   useDidShow(() => {
     openShareMenu();
     // H5 的「···」转发文案要靠 JS-SDK 设，useShareAppMessage 在 H5 是空操作
-    setH5Share(`我的本命是${el.id}型·${el.note}音，来五行律音找你的助眠音律`, '按中医五行体质匹配专属安神助眠音律', '/pages/home/index');
+    setH5Share(`我的本命是${el.id}型·${el.note}音，来五行律音找你的助眠音律`, '循五行五音，为你匹配今晚适合的声音', '/pages/home/index');
   });
   useShareAppMessage(() => ({
     title: `我的本命是${el.id}型·${el.note}音，来五行律音找你的助眠音律`,

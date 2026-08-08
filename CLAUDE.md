@@ -17,6 +17,8 @@
 
 > ⚠️ 本文档一度停留在"待初始化"阶段，现已按实际实现全面校正。运行/部署的**操作细节**见 [`README.md`](README.md)、[`backend/README.md`](backend/README.md)、[`admin/README.md`](admin/README.md)、[`docs/DEPLOY.md`](docs/DEPLOY.md)；本文件负责讲"**是什么 / 规范 / 数据结构 / 协作约定**"。
 >
+> 📖 **五行/五音的内容基准是 [`docs/WUXING-REFERENCE.md`](docs/WUXING-REFERENCE.md)**（飞书《五音对照知识》全文）。任何涉及五行对照、元素文案、测评题干的改动，**先改那份文档再改代码**；它同时规定了避免被判为养生医疗的三条硬约束。
+>
 > 🚀 **推到 `master` 即上线**：服务器上 1Panel 计划任务每分钟拉取本仓库并重建容器（见「部署与版本」）。提交前请确认改动可直接上生产。
 
 本项目是一个 **monorepo**，三部分均已落地：
@@ -117,7 +119,7 @@ wuxing-music/
 │   │   ├── wechat/             #   微信能力（分端：JS-SDK 签名 / chooseWXPay / 网页授权）
 │   │   └── storage/            #   本地存储（index.ts，统一封装）
 │   ├── constants/
-│   │   ├── wuxing.ts           #   五行运行时数据（角徵宫商羽 / 五脏 / 曲目）
+│   │   ├── wuxing.ts           #   五行运行时数据（角徵宫商羽 / 五脏 / 曲目 / meta 文化维度 / 免责声明）
 │   │   ├── quiz.ts             #   测评题库
 │   │   ├── plans.ts            #   会员套餐兜底数据
 │   │   ├── version.ts          #   前端版本常量（与根 version.json 对齐）
@@ -161,6 +163,7 @@ wuxing-music/
 ├── scripts/auto-deploy.sh      # ★ 1Panel 计划任务自动部署（拉取→重建→健康检查→失败回滚）
 ├── docs/                       # DEPLOY.md（部署与域名清单）/ ROADMAP.md（版本路线 + 安全清单）
 │                               # WEAPP-TODO.md（★ 小程序端欠账清单，包不随自动部署，独立记账）
+│                               # WUXING-REFERENCE.md（★ 五音对照知识：五行内容/文案唯一基准 + 合规红线）
 ├── version.json                # ★ 机读版本清单（app/api + 各端 + changelog）
 ├── docker-compose.yml          # 一键起 backend + admin + h5（连外部 MySQL）
 ├── project.config.json         # 微信开发者工具配置
@@ -219,7 +222,7 @@ $surface: rgba(255,255,255,0.025);
 
 #### 五行色板（必备核心数据）
 
-`variables.scss` 存 `$wuxing-colors` map 供样式循环；运行时数据（含频率/五脏/曲目）在 `src/constants/wuxing.ts`。二者色值一致：
+`variables.scss` 存 `$wuxing-colors` map 供样式循环；运行时数据（含频率/五脏/曲目/文化维度）在 `src/constants/wuxing.ts`。二者色值一致：
 
 | 元素 | primary   | accent    | glow                    | 对应五脏 | 频率示例     |
 | ---- | --------- | --------- | ----------------------- | -------- | ------------ |
@@ -228,6 +231,9 @@ $surface: rgba(255,255,255,0.025);
 | 土   | `#eab308` | `#fde047` | `rgba(234,179,8,0.25)`  | 脾胃     | 528Hz / 宫调 |
 | 金   | `#cbd5e1` | `#f1f5f9` | `rgba(203,213,225,0.2)` | 肺大肠   | 741Hz / 商调 |
 | 水   | `#38bdf8` | `#7dd3fc` | `rgba(56,189,248,0.25)` | 肾膀胱   | 174Hz / 羽调 |
+
+⚠️ **UI 主色刻意不等于传统五色**（青赤黄白黑）。深色冥想底下「水 = 黑/玄」作主色不可见、「火 = 正赤」对比过硬，所以只有土（黄）金（白）与正色重合。**五色作为文化字段存在 `meta.colorName`**，供文案取用。这是权衡过的，不是漏了——理由见 [`docs/WUXING-REFERENCE.md`](docs/WUXING-REFERENCE.md) 5.3。
+⚠️ **174/396/528/741Hz 是现代频率疗法，飞书文档里没有这套对应**，是产品自己叠的一层。可以并行，但**文案上别说成"古法"，也别宣称频率有生理疗效**。
 
 #### 圆角与间距（`variables.scss`）
 
@@ -287,12 +293,17 @@ export interface Track {
   previewSec?: number;       // 免费试听秒数（默认 30）
 }
 
+// 文化对照维度（33 项：五志/五神/简谱/调式/情绪转化/时间感/空间感…）
+// 全部可选——后台是自由编辑的 JSON，缺键要能降级。键名见 docs/WUXING-REFERENCE.md 5.2
+export interface ElementMeta { notation?: string; mode?: string; emotion?: string; transform?: string; /* …共 33 项 */ }
+
 export interface WuxingElement {
   id: ElementId; en: string; icon: string;
   primary: string; accent: string; glow: string; bg: string;
   note: NoteName; notePinyin: string;
   organ: string; season: string; quality: string;
   desc: string; sleepTip: string;
+  meta?: ElementMeta;        // 后端 element.meta（JSON 列）解析后下发
   tracks: Track[];
 }
 
@@ -317,8 +328,10 @@ export interface User {
 }
 ```
 
-- 五行完整配置见 `src/constants/wuxing.ts`（含 `bg` 渐变、每元素曲目）。
+- 五行完整配置见 `src/constants/wuxing.ts`（含 `bg` 渐变、每元素曲目、`meta` 文化维度）。
 - 测评题库见 `src/constants/quiz.ts`。
+- ⚠️ **`wuxing.ts` 与 `backend/app/seed.py::ELEMENTS` 是同一份数据的两个副本**（后端镜像构建上下文是 `./backend`，读不到前端源码），改一处必须同步另一处；两者的内容基准都是 [`docs/WUXING-REFERENCE.md`](docs/WUXING-REFERENCE.md)。`quiz.ts` 与 `seed.py::QUIZ` 同理。
+- ⚠️ **元素页/探律页/结果页直接 `import { WUXING }`，但读到的可能是后端数据**——`stores/content.ts` 的 `hydrate()` 拉完 `/api/mp/elements` 会**回写 `WUXING[id] = e`**。所以改后台的五行文案对**已发布的旧小程序包也生效**；而 `quiz.ts` 这类纯常量则必须重传包才更新（欠账见 [`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)）。
 
 ------
 
@@ -331,6 +344,8 @@ export interface User {
 ```typescript
 const top = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
 ```
+
+⚠️ **题干只问情绪状态与感受偏好，不问身体症状**。v1.7.0 之前第 3 题是「您身体哪方面最需要调理？肝胆 · 眼睛 · 筋骨紧张」——那是问诊式题干，平台会判为养生医疗。现四题分别取材于 [`docs/WUXING-REFERENCE.md`](docs/WUXING-REFERENCE.md) 的**情绪失衡表现 / 情绪转化方向 / 音乐气质 / 适合画面**四行。加题改题照这个口径来。
 
 ### 2. 音频播放 `services/audio/`（分端）
 
@@ -535,7 +550,7 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 | -- | ---- | -------- |
 | `admin` | 管理员 | username / password_hash / is_active / **role_id** / **is_super** |
 | `role` | 后台角色 | name / remark / permissions(JSON 权限点数组) / is_builtin |
-| `element` | 五行配置（id=木火土金水） | primary/accent/glow/bg、note/organ/season、sleep_tip |
+| `element` | 五行配置（id=木火土金水） | primary/accent/glow/bg、note/organ/season、sleep_tip、**meta**（JSON，33 项文化对照维度；后台一个 JSON 文本框编辑，前后端各校验一次格式，`/api/mp/elements` 解析失败降级 `{}`） |
 | `track` | 曲目 | element_id(FK)、hz、audio_url、cover_url、is_premium、preview_sec、is_online |
 | `plan` | 套餐 | id(free/month/year/trial)、price、duration_days、features(JSON) |
 | `user` | 用户 | openid/unionid/**oa_openid**/phone/**password_hash**、element、**birthday/birth_hour**、**agent_id/agent_bound_at**（代理归因，永久绑定）、membership_type/name/expire_at/source |
@@ -750,6 +765,18 @@ feat: 新功能   fix: 修复   style: 样式   refactor: 重构   docs: 文档 
 - **中医宣称**：UI 文案避免"治疗/治愈"等违反《广告法》的医疗宣称，"疗愈/安神"等谨慎使用。
 - **服务条款**：明确标注「本应用提供的音乐为放松辅助，不替代医疗诊断」。
 
+### 写文案的三条硬约束（v1.7.0 起，出自 [`docs/WUXING-REFERENCE.md`](docs/WUXING-REFERENCE.md) 第一节）
+
+内容方在飞书原文里写着：「容易被平台误判成养生医疗，可以讲文化，但不要讲成'吃什么治什么'」。
+
+1. **讲文化，不讲疗效。** 面向用户的文案走「音乐气质 / 情绪转化方向 / 适合直播讲法」三行的口径。
+   ✅「角音像春天的风，让人慢慢舒展开。」 ❌「疏肝理气」「柔肝宁神」「引火归元」这类治疗动宾结构。
+2. **五脏/五味/五谷只作文化对照展示，不与"改善/治疗"连用。** 可以标注，不可以承诺。
+3. **测评只问情绪与感受，不问身体症状。** 问诊式题干（「肝胆·眼睛·筋骨紧张」）已清除，别再加回来。
+
+免责声明常量 `WUXING_DISCLAIMER`（`src/constants/wuxing.ts`）在**结果页与关于页常驻**，
+硬编码而非读后台「关于我们」——后者可能被清空。新增展示五行/五脏对照的页面时一并挂上。
+
 ------
 
 ## 测试 CDKEY（`USE_MOCK` 模式下 `services/cdkey.ts` 内置）
@@ -766,13 +793,14 @@ ZEROER-GIFT-7DAY      → 7日体验卡
 
 ## 参考资源
 
-- 本仓库：[`README.md`](README.md)（如何跑）、[`backend/README.md`](backend/README.md)、[`admin/README.md`](admin/README.md)、[`docs/DEPLOY.md`](docs/DEPLOY.md)（部署 + 域名清单 + 上线检查单）、[`docs/ROADMAP.md`](docs/ROADMAP.md)（版本路线图 + APP 更新接口契约 + 安全加固清单）、[`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)（小程序端欠账清单）、根 `version.json`（机读版本清单）
+- 本仓库：[`README.md`](README.md)（如何跑）、[`backend/README.md`](backend/README.md)、[`admin/README.md`](admin/README.md)、[`docs/DEPLOY.md`](docs/DEPLOY.md)（部署 + 域名清单 + 上线检查单）、[`docs/ROADMAP.md`](docs/ROADMAP.md)（版本路线图 + APP 更新接口契约 + 安全加固清单）、[`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)（小程序端欠账清单）、**[`docs/WUXING-REFERENCE.md`](docs/WUXING-REFERENCE.md)（★ 五音对照知识：五行内容与文案的唯一基准 + 合规红线）**、根 `version.json`（机读版本清单）
+- 内容来源：飞书知识库《五音对照知识》 <https://icnjykc5ztnv.feishu.cn/wiki/TSYAweh2liTheBkwohEcNQnenxe>（已全文落地为上面那份文档，表格是 canvas 渲染的，页面上复制不出来）
 - 原型预览：`prototype/wuxing-music-app.jsx`（React Web 版）
 - Taro 文档：https://docs.taro.zone/ ｜ 微信小程序：https://developers.weixin.qq.com/miniprogram/dev/framework/
 
 ------
 
-**最后更新**：代理分成改加法模型（直推恒定拿满，上级加成由平台额外出）；配置键改名 `default_bonus_rate`。
-**当前版本**：v1.6.0（见根 `version.json`）。
+**最后更新**：飞书《五音对照知识》落地为 `docs/WUXING-REFERENCE.md`；五行新增 `meta` 文化维度（JSON 列）；五行文案与测评题按合规口径重写。
+**当前版本**：v1.7.0（见根 `version.json`）。
 **当前阶段**：小程序 + H5（微信内）前端、后端管理/公开接口、管理后台均已完成，三容器已上服务器且推 `master` 即自动部署；微信支付/公众号授权/短信/OSS 待真实配置上线验证。
 ⚠️ **小程序包不随自动部署**，欠账（合法域名、待真机验证项、未接的微信原生能力、审核合规）单独记在 [`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)。

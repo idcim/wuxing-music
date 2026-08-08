@@ -845,6 +845,15 @@ def _track_dict(t: Track, counts: dict | None = None) -> dict:
     }
 
 
+def _element_meta(raw: str | None) -> dict:
+    """五行的文化对照维度（docs/WUXING-REFERENCE.md）。解析失败一律降级成空对象。"""
+    try:
+        obj = json.loads(raw or "{}")
+    except ValueError:
+        return {}
+    return obj if isinstance(obj, dict) else {}
+
+
 @router.get("/elements")
 def mp_elements(db: Session = Depends(get_db)):
     els = db.query(Element).order_by(Element.sort).all()
@@ -872,6 +881,8 @@ def mp_elements(db: Session = Depends(get_db)):
             "quality": e.quality,
             "desc": e.desc,
             "sleepTip": e.sleep_tip,
+            # 文化对照维度；后台可能存了非法 JSON（历史数据/手滑），坏一个元素不该整页 500
+            "meta": _element_meta(e.meta),
             "tracks": [_track_dict(t, counts) for t in tracks],
         })
     return ok(result)

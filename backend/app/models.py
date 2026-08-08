@@ -69,6 +69,10 @@ class Element(Base):
     quality: Mapped[str] = mapped_column(String(16))
     desc: Mapped[str] = mapped_column(String(128), default="")
     sleep_tip: Mapped[str] = mapped_column(Text, default="")
+    # 文化对照维度（五志/五神/简谱/调式/时间感…），JSON 字符串。
+    # 三十多个维度只做展示与文案取材，塞一个 JSON 列而不是各加一列，
+    # 否则 ElementIn 与后台表单会被撑成三十多个输入框。基准见 docs/WUXING-REFERENCE.md。
+    meta: Mapped[str] = mapped_column(Text, default="{}")
     sort: Mapped[int] = mapped_column(Integer, default=0)
 
     tracks: Mapped[list["Track"]] = relationship(back_populates="element")

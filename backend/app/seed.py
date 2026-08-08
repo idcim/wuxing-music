@@ -19,17 +19,36 @@ from app.permissions import ALL_PERMISSIONS, SUPER_ROLE_NAME
 from app.security import hash_password
 
 # 五行配置（与小程序 constants/wuxing.ts 对齐）
+#
+# ⚠️ desc / sleep_tip 走「音乐气质 / 适合直播讲法 / 情绪转化方向」的口径，
+# 不写「疏肝理气」「柔肝宁神」这类治疗动宾结构——平台会判为养生医疗宣称。
+# meta 是文化对照维度，内容基准见 docs/WUXING-REFERENCE.md。
 ELEMENTS = [
     {
         "id": "木", "en": "WOOD", "icon": "sprout",
         "primary": "#84cc16", "accent": "#bef264", "glow": "rgba(132,204,22,0.25)",
         "bg": "radial-gradient(ellipse at 25% 15%, #0a1a08 0%, #050a04 50%, #020503 100%)",
         "note": "角", "note_pinyin": "Jué", "organ": "肝胆", "season": "春", "quality": "生发",
-        "desc": "疏肝理气 · 调和情志",
-        "sleep_tip": "春木升发，肝气易郁。角调音律帮助疏泄郁结，柔肝宁神。", "sort": 0,
+        "desc": "清新生发 · 舒展流动",
+        "sleep_tip": "角音像春天的风，让人慢慢舒展开。从郁结到舒展，适合心里绷着一股劲的夜晚。",
+        "sort": 0,
+        "meta": {
+            "temperament": "生发、舒展、条达", "direction": "东", "climate": "风", "phase": "生",
+            "colorName": "青 / 绿", "taste": "酸", "smell": "臊",
+            "notation": "3 / mi", "mode": "角调式",
+            "musicMood": "清新、生发、舒展、流动", "keywords": "疏展、春天、成长、郁结舒开",
+            "organZang": "肝", "organFu": "胆", "sense": "目", "tissue": "筋",
+            "bloom": "爪", "fluid": "泪", "emotion": "怒", "spirit": "魂", "voice": "呼",
+            "imbalance": "易怒、郁闷、憋屈、紧绷", "transform": "从郁结到舒展",
+            "virtue": "仁", "virtueFeel": "生生之德", "beast": "青龙", "star": "岁星",
+            "gan": "甲乙", "zhi": "寅卯", "gua": "震、巽",
+            "timeFeel": "清晨、生发", "spaceFeel": "林、风、竹、山间新绿",
+            "imagery": "竹林、春风、绿植、舒展身体",
+            "mnemonic": "木主生发，音为角，脏为肝，志为怒，色为青，季为春。",
+        },
         "tracks": [
             ("竹林晨露", "38:20", 2300, "324Hz", "深度睡眠", "12.4k", False),
-            ("春风过陌", "45:00", 2700, "角调", "舒肝解郁", "8.9k", True),
+            ("春风过陌", "45:00", 2700, "角调", "舒展流动", "8.9k", True),
             ("新芽初绿", "52:15", 3135, "324Hz", "助眠冥想", "6.2k", True),
         ],
     },
@@ -37,12 +56,27 @@ ELEMENTS = [
         "id": "火", "en": "FIRE", "icon": "flame",
         "primary": "#f97316", "accent": "#fdba74", "glow": "rgba(249,115,22,0.25)",
         "bg": "radial-gradient(ellipse at 70% 20%, #1a0a02 0%, #0d0502 50%, #050201 100%)",
-        "note": "徵", "note_pinyin": "Zhǐ", "organ": "心小肠", "season": "夏", "quality": "温煦",
-        "desc": "养心安神 · 清热除烦",
-        "sleep_tip": "心火扰神则难寐。徵调音律引火归元，宁心定志。", "sort": 1,
+        "note": "徵", "note_pinyin": "Zhǐ", "organ": "心小肠", "season": "夏", "quality": "明亮",
+        "desc": "明亮热烈 · 振奋外放",
+        "sleep_tip": "徵音像一束光，把人的状态点亮。从沉闷到明亮，适合提不起劲的时候听。",
+        "sort": 1,
+        "meta": {
+            "temperament": "炎上、明亮、温热", "direction": "南", "climate": "暑 / 热", "phase": "长",
+            "colorName": "赤 / 红", "taste": "苦", "smell": "焦",
+            "notation": "5 / sol", "mode": "徵调式",
+            "musicMood": "明亮、热烈、振奋、外放", "keywords": "点亮、心气、热情、表达",
+            "organZang": "心", "organFu": "小肠", "sense": "舌", "tissue": "脉 / 血脉",
+            "bloom": "面", "fluid": "汗", "emotion": "喜", "spirit": "神", "voice": "笑",
+            "imbalance": "亢奋、烦躁、心神不宁", "transform": "从沉闷到明亮",
+            "virtue": "礼", "virtueFeel": "光明之德", "beast": "朱雀", "star": "荧惑",
+            "gan": "丙丁", "zhi": "巳午", "gua": "离",
+            "timeFeel": "正午、旺盛", "spaceFeel": "日光、火焰、灯、红墙",
+            "imagery": "烛火、阳光、红色织物、笑容",
+            "mnemonic": "火主明亮，音为徵，脏为心，志为喜，色为赤，季为夏。",
+        },
         "tracks": [
             ("暖阳归处", "40:00", 2400, "396Hz", "安心助眠", "15.7k", False),
-            ("晚霞余温", "36:30", 2190, "徵调", "清热宁神", "11.2k", True),
+            ("晚霞余温", "36:30", 2190, "徵调", "明亮振奋", "11.2k", True),
             ("炉火细语", "48:45", 2925, "396Hz", "冥想放松", "9.8k", True),
         ],
     },
@@ -50,12 +84,27 @@ ELEMENTS = [
         "id": "土", "en": "EARTH", "icon": "mountain",
         "primary": "#eab308", "accent": "#fde047", "glow": "rgba(234,179,8,0.25)",
         "bg": "radial-gradient(ellipse at 50% 70%, #1a1305 0%, #0d0903 50%, #050402 100%)",
-        "note": "宫", "note_pinyin": "Gōng", "organ": "脾胃", "season": "长夏", "quality": "运化",
-        "desc": "健脾和胃 · 安中定志",
-        "sleep_tip": "土居中宫，脾健则思虑少。宫调音律培土宁心，稳定入眠。", "sort": 2,
+        "note": "宫", "note_pinyin": "Gōng", "organ": "脾胃", "season": "长夏", "quality": "承载",
+        "desc": "平稳厚重 · 安定包容",
+        "sleep_tip": "宫音像大地，把散乱的心慢慢托住。从散乱到安定，适合睡前收心。",
+        "sort": 2,
+        "meta": {
+            "temperament": "承载、稳定、化生", "direction": "中", "climate": "湿", "phase": "化",
+            "colorName": "黄", "taste": "甘", "smell": "香",
+            "notation": "1 / do", "mode": "宫调式",
+            "musicMood": "平稳、厚重、安定、包容", "keywords": "安住、稳定、中心、承托",
+            "organZang": "脾", "organFu": "胃", "sense": "口", "tissue": "肉 / 肌肉",
+            "bloom": "唇", "fluid": "涎", "emotion": "思", "spirit": "意", "voice": "歌",
+            "imbalance": "过度思虑、纠结、担忧", "transform": "从散乱到安定",
+            "virtue": "信", "virtueFeel": "厚载之德", "beast": "黄龙 / 麒麟", "star": "镇星",
+            "gan": "戊己", "zhi": "辰戌丑未", "gua": "坤、艮",
+            "timeFeel": "午后、转化", "spaceFeel": "大地、陶土、茶席、中庭",
+            "imagery": "茶席、陶器、黄土、稳定构图",
+            "mnemonic": "土主承载，音为宫，脏为脾，志为思，色为黄，季为长夏。",
+        },
         "tracks": [
             ("黄土大地", "42:00", 2520, "528Hz", "深度睡眠", "18.3k", False),
-            ("麦浪轻摇", "39:15", 2355, "宫调", "健脾安神", "13.5k", True),
+            ("麦浪轻摇", "39:15", 2355, "宫调", "安定承托", "13.5k", True),
             ("稻香归田", "55:00", 3300, "528Hz", "冥想放松", "10.1k", True),
         ],
     },
@@ -64,11 +113,26 @@ ELEMENTS = [
         "primary": "#cbd5e1", "accent": "#f1f5f9", "glow": "rgba(203,213,225,0.2)",
         "bg": "radial-gradient(ellipse at 80% 25%, #0e131a 0%, #070a0f 50%, #030507 100%)",
         "note": "商", "note_pinyin": "Shāng", "organ": "肺大肠", "season": "秋", "quality": "收敛",
-        "desc": "润肺敛神 · 收引归精",
-        "sleep_tip": "秋金主降，肃降则神安。商调音律顺应敛降之性。", "sort": 3,
+        "desc": "清肃空灵 · 收敛克制",
+        "sleep_tip": "商音像秋天的风，帮你把情绪收一收、清一清。从沉重到释放，适合心里堵得慌的时候。",
+        "sort": 3,
+        "meta": {
+            "temperament": "收敛、清肃、秩序", "direction": "西", "climate": "燥", "phase": "收",
+            "colorName": "白", "taste": "辛", "smell": "腥",
+            "notation": "2 / re", "mode": "商调式",
+            "musicMood": "清肃、空灵、收敛、克制", "keywords": "清理、边界、秩序、断舍离",
+            "organZang": "肺", "organFu": "大肠", "sense": "鼻", "tissue": "皮 / 皮毛",
+            "bloom": "毛", "fluid": "涕", "emotion": "悲 / 忧", "spirit": "魄", "voice": "哭",
+            "imbalance": "悲伤、失落、压抑、孤独", "transform": "从沉重到释放",
+            "virtue": "义", "virtueFeel": "清正之德", "beast": "白虎", "star": "太白",
+            "gan": "庚辛", "zhi": "申酉", "gua": "乾、兑",
+            "timeFeel": "傍晚、收束", "spaceFeel": "月光、金石、白墙、秋风",
+            "imagery": "白瓷、金属、留白、秋景",
+            "mnemonic": "金主收敛，音为商，脏为肺，志为悲，色为白，季为秋。",
+        },
         "tracks": [
             ("白露秋霜", "44:30", 2670, "741Hz", "助眠减压", "14.6k", False),
-            ("金风玉露", "37:00", 2220, "商调", "润肺宁神", "9.4k", True),
+            ("金风玉露", "37:00", 2220, "商调", "空灵清肃", "9.4k", True),
             ("霜叶无声", "50:20", 3020, "741Hz", "深度冥想", "7.8k", True),
         ],
     },
@@ -76,15 +140,47 @@ ELEMENTS = [
         "id": "水", "en": "WATER", "icon": "droplets",
         "primary": "#38bdf8", "accent": "#7dd3fc", "glow": "rgba(56,189,248,0.25)",
         "bg": "radial-gradient(ellipse at 15% 80%, #021018 0%, #01080f 50%, #000408 100%)",
-        "note": "羽", "note_pinyin": "Yǔ", "organ": "肾膀胱", "season": "冬", "quality": "藏精",
-        "desc": "滋肾填精 · 镇静安眠",
-        "sleep_tip": "水主藏精，肾精充则神宁。羽调音律引气归肾，深度助眠。", "sort": 4,
+        "note": "羽", "note_pinyin": "Yǔ", "organ": "肾膀胱", "season": "冬", "quality": "收藏",
+        "desc": "深沉幽远 · 静谧内省",
+        "sleep_tip": "羽音像夜里的水，适合慢下来，往内走。从焦虑到沉静，一路归藏。",
+        "sort": 4,
+        "meta": {
+            "temperament": "下行、收藏、滋润", "direction": "北", "climate": "寒", "phase": "藏",
+            "colorName": "黑 / 玄", "taste": "咸", "smell": "腐",
+            "notation": "6 / la", "mode": "羽调式",
+            "musicMood": "深沉、幽远、静谧、内省", "keywords": "入静、沉潜、睡前、归藏",
+            "organZang": "肾", "organFu": "膀胱", "sense": "耳", "tissue": "骨",
+            "bloom": "发", "fluid": "唾", "emotion": "恐 / 惊", "spirit": "志", "voice": "呻",
+            "imbalance": "恐惧、不安、无力、退缩", "transform": "从焦虑到沉静",
+            "virtue": "智", "virtueFeel": "深藏之德", "beast": "玄武", "star": "辰星",
+            "gan": "壬癸", "zhi": "亥子", "gua": "坎",
+            "timeFeel": "夜晚、收藏", "spaceFeel": "水面、夜色、深潭、雪、黑瓦",
+            "imagery": "水波、夜色、黑白、静坐",
+            "mnemonic": "水主收藏，音为羽，脏为肾，志为恐，色为黑，季为冬。",
+        },
         "tracks": [
             ("深海之息", "60:00", 3600, "174Hz", "深度睡眠", "22.1k", False),
-            ("冬雪无声", "48:00", 2880, "羽调", "滋肾安神", "16.8k", True),
+            ("冬雪无声", "48:00", 2880, "羽调", "静谧内省", "16.8k", True),
             ("潜流暗涌", "53:30", 3210, "174Hz", "冥想放松", "12.3k", True),
         ],
     },
+]
+
+# v1.6.0 及更早的五行文案，用于存量库判断「运营没改过」才覆盖（见 _migrate_wuxing_content）。
+LEGACY_ELEMENT_COPY = {
+    "木": ("疏肝理气 · 调和情志", "春木升发，肝气易郁。角调音律帮助疏泄郁结，柔肝宁神。", "生发"),
+    "火": ("养心安神 · 清热除烦", "心火扰神则难寐。徵调音律引火归元，宁心定志。", "温煦"),
+    "土": ("健脾和胃 · 安中定志", "土居中宫，脾健则思虑少。宫调音律培土宁心，稳定入眠。", "运化"),
+    "金": ("润肺敛神 · 收引归精", "秋金主降，肃降则神安。商调音律顺应敛降之性。", "收敛"),
+    "水": ("滋肾填精 · 镇静安眠", "水主藏精，肾精充则神宁。羽调音律引气归肾，深度助眠。", "藏精"),
+}
+
+# 同上：被替换掉的旧测评题（问身体症状，有养生医疗风险），按题干精确匹配后整题替换。
+LEGACY_QUIZ_Q = [
+    "您平时睡眠状况如何？",
+    "您的情绪状态偏向？",
+    "您身体哪方面最需要调理？",
+    "您更偏爱哪种音乐氛围？",
 ]
 
 PLANS = [
@@ -107,43 +203,48 @@ PLANS = [
     },
 ]
 
+# 测评题库（与 src/constants/quiz.ts 对齐）。
+# ⚠️ 只问情绪状态与感受偏好，不问身体症状——问诊式题干会被判为养生医疗。
+# 题干取材见 docs/WUXING-REFERENCE.md 的「情绪失衡表现 / 情绪转化方向 / 音乐气质 / 适合画面」。
 QUIZ = [
     {
-        "q": "您平时睡眠状况如何？",
+        "q": "夜里睡不着的时候，你更接近哪种状态？",
         "options": [
-            {"text": "难以入睡，思虑过多", "score": {"火": 2, "木": 1}},
-            {"text": "易醒多梦，心跳加速", "score": {"火": 2, "水": 1}},
-            {"text": "嗜睡无力，醒后疲乏", "score": {"土": 2, "金": 1}},
-            {"text": "浅眠易惊，腰酸耳鸣", "score": {"水": 2, "金": 1}},
+            {"text": "心里绷着一股劲，越想越憋屈", "score": {"木": 3}},
+            {"text": "脑子停不下来，心神不宁", "score": {"火": 3}},
+            {"text": "反复想白天的事，纠结放不下", "score": {"土": 3}},
+            {"text": "一阵阵失落，觉得有点孤单", "score": {"金": 3}},
+            {"text": "莫名不安，整个人提不起力气", "score": {"水": 3}},
         ],
     },
     {
-        "q": "您的情绪状态偏向？",
+        "q": "你最希望自己往哪个方向走一走？",
         "options": [
-            {"text": "容易焦虑烦躁，情绪波动大", "score": {"木": 2, "火": 1}},
-            {"text": "喜悦外向，但易过度兴奋", "score": {"火": 2}},
-            {"text": "多思多虑，难以放下", "score": {"土": 2, "木": 1}},
-            {"text": "忧郁寡言，悲观失落", "score": {"金": 2, "水": 1}},
+            {"text": "从郁结到舒展", "score": {"木": 3}},
+            {"text": "从沉闷到明亮", "score": {"火": 3}},
+            {"text": "从散乱到安定", "score": {"土": 3}},
+            {"text": "从沉重到释放", "score": {"金": 3}},
+            {"text": "从焦虑到沉静", "score": {"水": 3}},
         ],
     },
     {
-        "q": "您身体哪方面最需要调理？",
+        "q": "哪一种声音氛围最能让你放松？",
         "options": [
-            {"text": "肝胆 · 眼睛 · 筋骨紧张", "score": {"木": 3}},
-            {"text": "心脏 · 血压 · 头面潮热", "score": {"火": 3}},
-            {"text": "脾胃 · 消化 · 体重管理", "score": {"土": 3}},
-            {"text": "肺部 · 皮肤 · 呼吸问题", "score": {"金": 3}},
-            {"text": "肾脏 · 腰膝 · 精力不足", "score": {"水": 3}},
+            {"text": "清新舒展 · 像流动的风", "score": {"木": 2}},
+            {"text": "明亮温暖 · 像一束光", "score": {"火": 2}},
+            {"text": "平稳厚重 · 像大地回响", "score": {"土": 2}},
+            {"text": "空灵清冷 · 像秋夜留白", "score": {"金": 2}},
+            {"text": "深沉幽远 · 像夜里的水", "score": {"水": 2}},
         ],
     },
     {
-        "q": "您更偏爱哪种音乐氛围？",
+        "q": "闭上眼，你最先想到的画面是？",
         "options": [
-            {"text": "清新自然 · 如竹林鸟鸣", "score": {"木": 2}},
-            {"text": "温暖明亮 · 如炉火轻语", "score": {"火": 2}},
-            {"text": "沉稳厚重 · 如大地回响", "score": {"土": 2}},
-            {"text": "空灵清冷 · 如秋月高悬", "score": {"金": 2}},
-            {"text": "深沉流动 · 如海潮涌动", "score": {"水": 2}},
+            {"text": "竹林春风，一片新绿", "score": {"木": 2}},
+            {"text": "烛火日光，暖色织物", "score": {"火": 2}},
+            {"text": "茶席陶器，一方黄土", "score": {"土": 2}},
+            {"text": "白瓷金石，秋景留白", "score": {"金": 2}},
+            {"text": "水波夜色，独自静坐", "score": {"水": 2}},
         ],
     },
 ]
@@ -154,6 +255,54 @@ TEST_CDKEYS = [
     ("MOON-LIGHT-VIP-365", "year", 365, "年藏会员卡"),
     ("ZEROER-GIFT-7DAY", "trial", 7, "7日体验卡"),
 ]
+
+
+def _migrate_wuxing_content(db: Session) -> None:
+    """存量库的五行内容升级（v1.7.0）：补 meta，并把没被运营改过的旧文案换成合规口径。
+
+    幂等：meta 只在为空时写；desc / sleep_tip / quality 只在**恰好等于旧种子值**时覆盖——
+    运营在后台改过的一律不动，否则一次发版就把人家写的文案冲掉了。
+    """
+    for e in ELEMENTS:
+        row = db.query(Element).filter(Element.id == e["id"]).first()
+        if not row:
+            continue
+
+        # meta：新列，存量行是 NULL / 空串 / "{}"，都视为未填
+        try:
+            cur_meta = json.loads(row.meta or "{}")
+        except ValueError:
+            cur_meta = {}
+        if not cur_meta:
+            row.meta = json.dumps(e["meta"], ensure_ascii=False)
+
+        legacy = LEGACY_ELEMENT_COPY.get(e["id"])
+        if not legacy:
+            continue
+        old_desc, old_tip, old_quality = legacy
+        if (row.desc or "").strip() == old_desc:
+            row.desc = e["desc"]
+        if (row.sleep_tip or "").strip() == old_tip:
+            row.sleep_tip = e["sleep_tip"]
+        if (row.quality or "").strip() == old_quality:
+            row.quality = e["quality"]
+
+
+def _migrate_quiz_content(db: Session) -> None:
+    """存量库的测评题升级（v1.7.0）：把旧的「问身体症状」题库整体换成情绪口径。
+
+    只在库里**四道题原封不动全是旧题**时才替换——只要运营动过任何一题（改了题干、
+    加了题、删了题），就整体跳过，人工处理。宁可不改，也不能把运营编排的题库冲了。
+    """
+    rows = db.query(QuizQuestion).order_by(QuizQuestion.sort).all()
+    if len(rows) != len(LEGACY_QUIZ_Q):
+        return
+    if [r.q.strip() for r in rows] != LEGACY_QUIZ_Q:
+        return
+
+    for row, q in zip(rows, QUIZ):
+        row.q = q["q"]
+        row.options = json.dumps(q["options"], ensure_ascii=False)
 
 
 def seed(db: Session) -> None:
@@ -195,14 +344,17 @@ def seed(db: Session) -> None:
     # 五行 + 曲目
     if db.query(Element).count() == 0:
         for e in ELEMENTS:
-            tracks = e.pop("tracks")
-            db.add(Element(**e))
-            for i, (title, dur, sec, hz, tag, plays, premium) in enumerate(tracks):
+            data = {k: v for k, v in e.items() if k != "tracks"}
+            data["meta"] = json.dumps(data.get("meta") or {}, ensure_ascii=False)
+            db.add(Element(**data))
+            for i, (title, dur, sec, hz, tag, plays, premium) in enumerate(e["tracks"]):
                 db.add(Track(
                     element_id=e["id"], title=title, duration=dur, duration_sec=sec,
                     hz=hz, tag=tag, plays=plays, is_premium=premium,
                     preview_sec=30, sort=i,
                 ))
+    else:
+        _migrate_wuxing_content(db)
 
     # 套餐
     if db.query(Plan).count() == 0:
@@ -219,6 +371,8 @@ def seed(db: Session) -> None:
                 options=json.dumps(q["options"], ensure_ascii=False),
                 sort=i,
             ))
+    else:
+        _migrate_quiz_content(db)
 
     # 测试兑换码：仅开发态植入（含 365 天年藏卡）。生产（debug=false）不植入，
     # 避免公开测试码被白嫖领取会员。

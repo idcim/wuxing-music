@@ -47,12 +47,14 @@ export default function Onboard() {
       ))}
 
       <View className="onboard__head fade-up" style={{ animationDelay: '0.1s' }}>
+        {/* 原为 BASED ON TRADITIONAL CHINESE MEDICINE / 「中医体质测评」，
+            是医疗宣称口吻；按 docs/WUXING-REFERENCE.md 改成文化象征口径 */}
         <Text className="onboard__tagline cormorant italic">
-          BASED ON TRADITIONAL CHINESE MEDICINE
+          THE FIVE TONES OF EASTERN TRADITION
         </Text>
         <Text className="onboard__title">探寻你的五行音律</Text>
         <Text className="onboard__desc">
-          通过中医五行体质测评{'\n'}为你匹配专属的安神助眠音律方案
+          循角徵宫商羽的东方声音传统{'\n'}测出你的音律偏向，匹配今晚适合的声音
         </Text>
       </View>
 

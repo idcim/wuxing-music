@@ -3,6 +3,7 @@ import { View, Text, Image } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { goBack } from '@/utils/nav';
 import { getSiteInfo, type SiteInfo } from '@/services/site';
+import { WUXING_DISCLAIMER, WUXING_MNEMONIC } from '@/constants/wuxing';
 import { resolveUrl } from '@/utils/url';
 import './index.scss';
 
@@ -44,6 +45,14 @@ export default function About() {
           <Text className="about__text">{info.service_terms}</Text>
         </View>
       )}
+
+      {/* 合规免责：不依赖后台「关于我们」是否填了这句，硬编码常驻
+          （docs/WUXING-REFERENCE.md 一 · 合规红线） */}
+      <View className="about__section fade-up">
+        <Text className="about__section-title">关于五音五行</Text>
+        <Text className="about__text">{WUXING_DISCLAIMER}</Text>
+        <Text className="about__mnemonic serif">{WUXING_MNEMONIC}</Text>
+      </View>
 
       <View className="about__footer">
         {!!info?.contact_email && (

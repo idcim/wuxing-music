@@ -33,7 +33,7 @@ export default function Member() {
   useDidShow(() => {
     openShareMenu();
     // H5 的「···」转发文案要靠 JS-SDK 设，useShareAppMessage 在 H5 是空操作
-    setH5Share('五行律音会员 · 解锁全部助眠音律', '按中医五行体质匹配专属安神助眠音律', '/pages/member/index');
+    setH5Share('五行律音会员 · 解锁全部助眠音律', '循五行五音，为你匹配今晚适合的声音', '/pages/member/index');
   });
   useShareAppMessage(() => ({
     title: '五行律音会员 · 解锁全部助眠音律',

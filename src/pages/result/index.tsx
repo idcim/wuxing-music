@@ -2,7 +2,7 @@ import { View, Text } from '@tarojs/components';
 import Taro, { useRouter } from '@tarojs/taro';
 import Icon from '@/components/Icon';
 import type { IconName } from '@/components/Icon/paths';
-import { WUXING } from '@/constants/wuxing';
+import { WUXING, WUXING_DISCLAIMER } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
 import { A } from '@/utils/color';
 import { rpx } from '@/utils/unit';
@@ -67,7 +67,7 @@ export default function Result() {
           {el.en} · {el.notePinyin}
         </Text>
         <Text className="result__meta">
-          {el.note}音 · {el.organ} · {el.season}季
+          {el.note}音 · {el.meta?.notation || el.notePinyin} · {el.season}季
         </Text>
       </View>
 
@@ -107,12 +107,19 @@ export default function Result() {
           border: `${rpx(2)} solid ${A.a25(el.primary)}`
         }}
       >
+        {/* 原文案是「Healing Direction / 调理建议」，医疗宣称口吻，已按
+            docs/WUXING-REFERENCE.md 改成「情绪转化方向」——讲的是感受，不是疗效 */}
         <View className="result__heal-head">
           <Icon name="sparkles" size={28} color={el.accent} strokeWidth={1.5} />
           <Text className="result__heal-title cormorant italic" style={{ color: el.accent }}>
-            Healing Direction
+            Sound Direction
           </Text>
         </View>
+        {!!el.meta?.transform && (
+          <Text className="result__heal-tag" style={{ color: el.accent }}>
+            {el.meta.transform}
+          </Text>
+        )}
         <Text className="result__heal-text">{el.sleepTip}</Text>
       </View>
 
@@ -137,6 +144,9 @@ export default function Result() {
           <Icon name="chevronRight" size={26} color={el.accent} strokeWidth={1.5} />
         </View>
       )}
+
+      {/* 合规：凡是展示五行/五脏对照的页面都要能看到这句（docs/WUXING-REFERENCE.md 一） */}
+      <Text className="result__disclaimer">{WUXING_DISCLAIMER}</Text>
     </View>
   );
 }

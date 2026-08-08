@@ -151,6 +151,14 @@
       letter-spacing: 4rpx;
     }
 
+    // 情绪转化方向（「从郁结到舒展」），压在英文小标下面的一行中文
+    &-tag {
+      display: block;
+      font-size: 26rpx;
+      letter-spacing: 4rpx;
+      margin-bottom: 16rpx;
+    }
+
     &-text {
       display: block;
       font-size: 26rpx;
@@ -189,6 +197,17 @@
 
   &__upsell-text {
     font-size: 26rpx;
+  }
+
+  // 合规免责声明：弱化但必须可见
+  &__disclaimer {
+    display: block;
+    max-width: 680rpx;
+    margin-top: 56rpx;
+    font-size: 20rpx;
+    line-height: 1.8;
+    text-align: center;
+    color: #475569;
   }
 }
 

@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -5,7 +7,7 @@ from app.database import get_db
 from app.models import Admin, Element
 from app.schemas import ok
 from app.security import require_perm
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 router = APIRouter(prefix="/api/admin/elements", tags=["elements"])
 
@@ -25,7 +27,22 @@ class ElementIn(BaseModel):
     quality: str
     desc: str = ""
     sleep_tip: str = ""
+    # 文化对照维度，后台是一个自由编辑的 JSON 文本框，这里挡一道格式
+    meta: str = "{}"
     sort: int = 0
+
+    @field_validator("meta")
+    @classmethod
+    def _valid_meta(cls, v: str) -> str:
+        v = (v or "").strip() or "{}"
+        try:
+            obj = json.loads(v)
+        except ValueError:
+            raise ValueError("meta 不是合法 JSON")
+        if not isinstance(obj, dict):
+            raise ValueError("meta 必须是 JSON 对象")
+        # 存回紧凑形式，免得后台粘进来一大坨缩进
+        return json.dumps(obj, ensure_ascii=False)
 
 
 def _to_dict(e: Element) -> dict:

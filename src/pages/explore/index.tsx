@@ -33,7 +33,7 @@ export default function Explore() {
   useDidShow(() => {
     openShareMenu();
     // H5 的「···」转发文案要靠 JS-SDK 设，useShareAppMessage 在 H5 是空操作
-    setH5Share(`${we.id}音 · ${we.desc}，来五行律音听听`, '按中医五行体质匹配专属安神助眠音律', '/pages/explore/index');
+    setH5Share(`${we.id}音 · ${we.desc}，来五行律音听听`, '循五行五音，为你匹配今晚适合的声音', '/pages/explore/index');
   });
   useShareAppMessage(() => ({
     title: `${we.id}音 · ${we.desc}，来五行律音听听`,
@@ -123,7 +123,7 @@ export default function Explore() {
                   </Text>
                 </View>
                 <Text className="explore__el-meta">
-                  {we.note}音 · {we.organ} · {we.season}季 · {we.quality}
+                  {we.note}音 · {we.meta?.notation || we.notePinyin} · {we.season}季 · {we.quality}
                 </Text>
                 <Text className="explore__el-desc">{we.desc}</Text>
               </View>

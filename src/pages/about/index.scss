@@ -81,6 +81,15 @@
     white-space: pre-line;
   }
 
+  // 五音记忆口诀，弱化的一行装饰性引文
+  &__mnemonic {
+    display: block;
+    margin-top: 24rpx;
+    font-size: 26rpx;
+    letter-spacing: 4rpx;
+    color: $text-quaternary;
+  }
+
   &__footer {
     margin-top: 60rpx;
     text-align: center;

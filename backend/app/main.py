@@ -65,7 +65,17 @@ def _auto_migrate() -> None:
             try:
                 col_type = col.type.compile(dialect=engine.dialect)
                 default = ""
-                if col.default is not None and getattr(col.default, "arg", None) is not None:
+                # ⚠️ MySQL 不允许 TEXT/BLOB/JSON 列带字面量 DEFAULT（8.0.13 前直接报 1101，
+                # 之后也要写成 DEFAULT ('x') 的表达式形式）。这里的 except 会把失败吞成一条
+                # warning，于是列没加上、应用照常起，之后每次查该表都炸 Unknown column。
+                # 加列本来也不需要 SQL 默认值：SQLAlchemy 的 default= 是 Python 侧的，
+                # 只对新插入生效；存量行拿 NULL，由读取处兜底即可。
+                is_lob = any(k in col_type.upper() for k in ("TEXT", "BLOB", "JSON"))
+                if (
+                    not is_lob
+                    and col.default is not None
+                    and getattr(col.default, "arg", None) is not None
+                ):
                     arg = col.default.arg
                     if isinstance(arg, str):
                         default = f" DEFAULT '{arg}'"

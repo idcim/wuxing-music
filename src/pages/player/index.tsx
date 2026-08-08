@@ -59,7 +59,7 @@ export default function Player() {
       currentTrack
         ? `我在听《${currentTrack.title}》· ${el.note}音助眠`
         : '五行律音 · 按体质定制的助眠音律',
-      '按中医五行体质匹配专属安神助眠音律',
+      '循五行五音，为你匹配今晚适合的声音',
       '/pages/home/index'
     );
   });
