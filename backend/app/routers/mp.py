@@ -37,6 +37,7 @@ from app.models import (
     Withdrawal,
 )
 from app.security import hash_password, verify_password
+from app.user_merge import resolve_login, resolve_user
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -81,6 +82,9 @@ def get_current_user(
     except (JWTError, ValueError):
         raise exc
     user = db.query(User).filter(User.id == uid).first()
+    # 账号可能已被并入另一条（开放平台 unionid 打通），老 token 里的 id 得跟着指针走，
+    # 否则用户拿着旧 token 会落到一条已经搬空的行上，看着像会员突然没了。
+    user = resolve_user(db, user)
     if not user:
         raise exc
     return user
@@ -202,11 +206,8 @@ def mp_login(body: LoginIn, db: Session = Depends(get_db)):
     if not openid or openid.startswith("phone:"):
         raise HTTPException(status_code=400, detail="登录凭证无效")
 
-    user = None
-    if unionid:
-        user = db.query(User).filter(User.unionid == unionid).first()
-    if not user:
-        user = db.query(User).filter(User.openid == openid).first()
+    # unionid > openid；两边命中不同行时就地合并（见 user_merge.resolve_login）
+    user = resolve_login(db, unionid, openid=openid)
 
     if not user:
         user = User(
@@ -510,11 +511,8 @@ def h5_login(body: H5LoginIn, db: Session = Depends(get_db)):
         if not oa_openid:
             raise HTTPException(status_code=400, detail="缺少登录凭证")
 
-    user = None
-    if unionid:
-        user = db.query(User).filter(User.unionid == unionid).first()
-    if not user:
-        user = db.query(User).filter(User.oa_openid == oa_openid).first()
+    # unionid > oa_openid；两边命中不同行时就地合并（见 user_merge.resolve_login）
+    user = resolve_login(db, unionid, oa_openid=oa_openid)
 
     if not user:
         user = User(

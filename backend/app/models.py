@@ -124,6 +124,10 @@ class User(Base):
     openid: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     unionid: Mapped[str] = mapped_column(String(64), default="", index=True)
     oa_openid: Mapped[str] = mapped_column(String(64), default="", index=True)  # 公众号 openid（H5 网页授权/JSAPI 支付 payer）
+    # 非空表示这条行已被合并进 merged_into 指向的行（接入微信开放平台后，
+    # 同一个人在小程序与公众号各留了一条账号，靠 unionid 认出来并入一条）。
+    # 行不删除：订单等历史仍指着它，删了不好追溯；登录与鉴权时跟着指针走。
+    merged_into: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     phone: Mapped[str] = mapped_column(String(20), default="", index=True)
     password_hash: Mapped[str] = mapped_column(String(255), default="")         # 手机号密码登录（bcrypt）
     nickname: Mapped[str] = mapped_column(String(64), default="律音用户")
@@ -340,4 +344,23 @@ class SmsCode(Base):
     expire_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     used: Mapped[bool] = mapped_column(Boolean, default=False)
     attempts: Mapped[int] = mapped_column(Integer, default=0)  # 校验失败次数，达上限即作废（防暴力）
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class UserMergeLog(Base):
+    """账号合并审计。
+
+    接入微信开放平台后，同一个人在小程序与公众号各留下的两条账号行会按 unionid
+    并成一条。这是**不可逆**的数据搬迁（订单、聆听历史、兑换记录都要改指向），
+    必须留痕：出了争议要能回答「这个人的会员是从哪条行搬过来的」。
+    """
+
+    __tablename__ = "user_merge_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    keep_user_id: Mapped[int] = mapped_column(Integer, index=True)   # 存活行
+    drop_user_id: Mapped[int] = mapped_column(Integer, index=True)   # 被并入的行
+    reason: Mapped[str] = mapped_column(String(32), default="")      # unionid / manual
+    operator: Mapped[str] = mapped_column(String(64), default="")    # 后台手动合并时记管理员账号
+    detail: Mapped[str] = mapped_column(Text, default="{}")          # 搬了哪些表各多少行、字段取舍
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)

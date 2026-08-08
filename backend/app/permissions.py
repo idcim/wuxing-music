@@ -70,6 +70,8 @@ PERMISSION_GROUPS: list[dict] = [
         "items": [
             {"key": "users:view", "label": "查看"},
             {"key": "users:grant", "label": "后台开通会员"},
+            # 合并会搬走订单/历史且不可逆，与「开通会员」分开授权
+            {"key": "users:merge", "label": "合并重复账号"},
         ],
     },
     {

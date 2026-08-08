@@ -135,6 +135,7 @@ wuxing-music/
 │       ├── main.py             #   应用入口 + 路由挂载 + 建表
 │       ├── config.py           #   .env 配置（DATABASE_URL / JWT / 管理员 / ★ DEBUG 开关）
 │       ├── ratelimit.py        #   ★ 进程内滑动窗口限流（短信/密码登录/兑换失败）
+│       ├── user_merge.py       #   ★ 跨端账号合并（开放平台 unionid 打通，见 docs/OPEN-PLATFORM.md）
 │       ├── database.py         #   引擎 / Session / Base
 │       ├── models.py           #   ★ 13 张表（见「后端数据模型」）
 │       ├── permissions.py      #   ★ 后台权限点定义（RBAC 唯一来源）
@@ -577,7 +578,7 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 | `element` | 五行配置（id=木火土金水） | primary/accent/glow/bg、note/organ/season、sleep_tip、**meta**（JSON，33 项文化对照维度；后台一个 JSON 文本框编辑，前后端各校验一次格式，`/api/mp/elements` 解析失败降级 `{}`） |
 | `track` | 曲目 | element_id(FK)、hz、audio_url、cover_url、is_premium、preview_sec、is_online |
 | `plan` | 套餐 | id(free/month/year/trial)、price、duration_days、features(JSON) |
-| `user` | 用户 | openid/unionid/**oa_openid**/phone/**password_hash**、element、**birthday/birth_hour**、**agent_id/agent_bound_at**（代理归因，永久绑定）、membership_type/name/expire_at/source |
+| `user` | 用户 | openid/unionid/**oa_openid**/**merged_into**（非空=已并入他行，登录与鉴权跟指针走）/phone/**password_hash**、element、**birthday/birth_hour**、**agent_id/agent_bound_at**（代理归因，永久绑定）、membership_type/name/expire_at/source |
 | `cdkey` | 兑换码 | code、batch_id、plan_type、status(unused/used/disabled/expired) |
 | `cdkey_redeem_log` | 兑换日志 | user_id、cdkey_id、ip、device |
 | `app_order` | 订单 | order_no、status(pending/paid/refunding/refunded…)、**is_gift/gift_code**、**refund_*** |
@@ -822,14 +823,14 @@ ZEROER-GIFT-7DAY      → 7日体验卡
 
 ## 参考资源
 
-- 本仓库：[`README.md`](README.md)（如何跑）、[`backend/README.md`](backend/README.md)、[`admin/README.md`](admin/README.md)、[`docs/DEPLOY.md`](docs/DEPLOY.md)（部署 + 域名清单 + 上线检查单）、[`docs/ROADMAP.md`](docs/ROADMAP.md)（版本路线图 + APP 更新接口契约 + 安全加固清单）、[`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)（小程序端欠账清单）、**[`docs/WUXING-REFERENCE.md`](docs/WUXING-REFERENCE.md)（★ 五音对照知识：五行内容与文案的唯一基准 + 合规红线）**、根 `version.json`（机读版本清单）
+- 本仓库：[`docs/OPEN-PLATFORM.md`](docs/OPEN-PLATFORM.md)（★ 微信开放平台用户互通：**必须先上线合并逻辑再绑定**）、[`README.md`](README.md)（如何跑）、[`backend/README.md`](backend/README.md)、[`admin/README.md`](admin/README.md)、[`docs/DEPLOY.md`](docs/DEPLOY.md)（部署 + 域名清单 + 上线检查单）、[`docs/ROADMAP.md`](docs/ROADMAP.md)（版本路线图 + APP 更新接口契约 + 安全加固清单）、[`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)（小程序端欠账清单）、**[`docs/WUXING-REFERENCE.md`](docs/WUXING-REFERENCE.md)（★ 五音对照知识：五行内容与文案的唯一基准 + 合规红线）**、根 `version.json`（机读版本清单）
 - 内容来源：飞书知识库《五音对照知识》 <https://icnjykc5ztnv.feishu.cn/wiki/TSYAweh2liTheBkwohEcNQnenxe>（已全文落地为上面那份文档，表格是 canvas 渲染的，页面上复制不出来）
 - 原型预览：`prototype/wuxing-music-app.jsx`（React Web 版）
 - Taro 文档：https://docs.taro.zone/ ｜ 微信小程序：https://developers.weixin.qq.com/miniprogram/dev/framework/
 
 ------
 
-**最后更新**：修试听断流后播放键永久转圈（看门狗未解除 `isLoading` + `release()` 未摘回调）。
-**当前版本**：v1.8.2（见根 `version.json`）。
+**最后更新**：为接入微信开放平台做准备——登录时按 unionid 合并跨端账号，后台加「重复账号」排查。
+**当前版本**：v1.9.0（见根 `version.json`）。
 **当前阶段**：小程序 + H5（微信内）前端、后端管理/公开接口、管理后台均已完成，三容器已上服务器且推 `master` 即自动部署；微信支付/公众号授权/短信/OSS 待真实配置上线验证。
 ⚠️ **小程序包不随自动部署**，欠账（合法域名、待真机验证项、未接的微信原生能力、审核合规）单独记在 [`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)。

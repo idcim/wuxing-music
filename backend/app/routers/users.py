@@ -11,6 +11,7 @@ from app.lunar import lunar_info
 from app.models import Admin, Agent, Cdkey, Order, Plan, Track, User
 from app.schemas import ok
 from app.security import require_perm
+from app.user_merge import find_duplicates, merge_users
 
 router = APIRouter(prefix="/api/admin", tags=["users-stats"])
 
@@ -57,13 +58,56 @@ def list_users(
     db: Session = Depends(get_db),
     _: Admin = Depends(require_perm("users:view")),
 ):
-    q = db.query(User)
+    # 已被合并的行是墓碑（历史订单仍指着它），不算真实账号，列表里不出现，
+    # 要看它们走「重复账号」那一页
+    q = db.query(User).filter(User.merged_into.is_(None))
     if keyword:
         q = q.filter(User.nickname.contains(keyword))
     total = q.count()
     rows = q.order_by(User.id.desc()).offset((page - 1) * size).limit(size).all()
     agents = _agent_map(db, [u.id for u in rows])
     return ok({"total": total, "items": [_user_dict(u, agents) for u in rows]})
+
+
+@router.get("/users/duplicates")
+def list_duplicate_users(
+    db: Session = Depends(get_db),
+    _: Admin = Depends(require_perm("users:view")),
+):
+    """疑似重复账号。**必须声明在 /users/{user_id} 之前**，否则 "duplicates"
+    会先去匹配那条路由并因为转不成 int 而 422。"""
+    return ok(find_duplicates(db))
+
+
+class MergeIn(BaseModel):
+    into: int          # 保留哪条（另一条并入它）
+
+
+@router.post("/users/{user_id}/merge")
+def merge_user(
+    user_id: int,
+    body: MergeIn,
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(require_perm("users:merge")),
+):
+    """把 user_id 并入 body.into。**不可逆**：订单、聆听历史、兑换记录都会改指向。
+
+    自动合并只认 unionid（同一次微信授权拿到的两个标识，可证是同一个人）；
+    手机号相同则一律走这里人工确认——家人共用号码是真实存在的。
+    """
+    drop = db.query(User).filter(User.id == user_id).first()
+    keep = db.query(User).filter(User.id == body.into).first()
+    if not drop or not keep:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if drop.id == keep.id:
+        raise HTTPException(status_code=400, detail="不能与自己合并")
+    if drop.merged_into or keep.merged_into:
+        raise HTTPException(status_code=400, detail="所选账号已被合并过，请刷新后重试")
+
+    detail = merge_users(db, keep, drop, reason="manual", operator=admin.username)
+    db.commit()
+    db.refresh(keep)
+    return ok({"keep": _user_dict(keep), "detail": detail})
 
 
 @router.get("/users/{user_id}")

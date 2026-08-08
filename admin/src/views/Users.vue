@@ -3,6 +3,11 @@
     <div class="toolbar">
       <el-input v-model="keyword" placeholder="按昵称搜索" clearable style="width: 200px" @keyup.enter="reload" />
       <el-button :icon="Search" @click="reload">搜索</el-button>
+      <el-button :icon="CopyDocument" @click="openDup">重复账号</el-button>
+      <span class="hint">
+        同一人在小程序与公众号各有一条账号时，接入微信开放平台后会按 unionid 自动并成一条；
+        这里列出还没并掉的（同手机号的不自动并，需人工确认）。
+      </span>
     </div>
     <el-table :data="rows" v-loading="loading" border>
       <el-table-column prop="id" label="ID" width="70" />
@@ -168,14 +173,66 @@
         <el-button type="primary" :loading="submitting" @click="onGrant">确认开通</el-button>
       </template>
     </el-dialog>
+
+    <!-- 重复账号排查与人工合并 -->
+    <el-drawer v-model="dupDrawer" title="重复账号" size="60%">
+      <el-alert type="warning" :closable="false" show-icon class="dup-tip">
+        合并**不可逆**：被并入的一方，其订单、聆听历史、兑换记录都会改指向保留方；
+        会员取两者中到期更晚的那一组。同手机号未必是同一个人（家人共用），请先核对再合并。
+      </el-alert>
+      <el-empty v-if="!dupLoading && !dupGroups.length" description="没有发现重复账号" />
+      <div v-for="(g, gi) in dupGroups" :key="gi" v-loading="dupLoading" class="dup-group">
+        <div class="dup-head">
+          按 <b>{{ g.by === 'phone' ? '手机号' : 'unionid' }}</b> 匹配：
+          <code>{{ g.value }}</code> 共 {{ g.count }} 条
+          <el-tag v-if="g.by === 'unionid'" type="danger" size="small">
+            理应已自动合并，出现在这里说明有异常
+          </el-tag>
+        </div>
+        <el-table :data="g.users" border size="small">
+          <el-table-column prop="id" label="ID" width="70" />
+          <el-table-column prop="nickname" label="昵称" min-width="120" />
+          <el-table-column label="会员" width="150">
+            <template #default="{ row }">
+              {{ row.membership }}
+              <span class="dup-exp">{{ row.expireAt ? fmt(row.expireAt) : '' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="标识" min-width="200">
+            <template #default="{ row }">
+              <div class="dup-id">openid: {{ row.openid || '-' }}</div>
+              <div class="dup-id">oa: {{ row.oaOpenid || '-' }}</div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="createdAt" label="注册" width="170">
+            <template #default="{ row }">{{ fmt(row.createdAt) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="150" fixed="right">
+            <template #default="{ row }">
+              <el-button size="small" type="danger" plain
+                :disabled="g.users.length !== 2"
+                @click="onMerge(g, row)">
+                并入另一条
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div v-if="g.users.length !== 2" class="dup-warn">
+          超过两条时不提供一键合并，请先人工判断后逐对处理。
+        </div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
-import { Search } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
-import { listUsers, grantMembership, listPlans, getUser, setUserAsAgent } from '@/api';
+import { Search, CopyDocument } from '@element-plus/icons-vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import {
+  listUsers, grantMembership, listPlans, getUser, setUserAsAgent,
+  listDuplicateUsers, mergeUsers
+} from '@/api';
 import { useAuthStore } from '@/stores/auth';
 
 const auth = useAuthStore();
@@ -199,6 +256,41 @@ const scoreList = computed(() =>
 async function openDetail(row: any) {
   detail.value = await getUser(row.id);
   detailDialog.value = true;
+}
+
+// ── 重复账号排查 / 人工合并 ──
+const dupDrawer = ref(false);
+const dupLoading = ref(false);
+const dupGroups = ref<any[]>([]);
+
+async function loadDup() {
+  dupLoading.value = true;
+  try {
+    dupGroups.value = await listDuplicateUsers();
+  } finally {
+    dupLoading.value = false;
+  }
+}
+function openDup() {
+  dupDrawer.value = true;
+  loadDup();
+}
+
+// row 是被并入的一方，同组另一条为保留方
+async function onMerge(group: any, row: any) {
+  const keep = group.users.find((u: any) => u.id !== row.id);
+  if (!keep) return;
+  await ElMessageBox.confirm(
+    `确定把 #${row.id}「${row.nickname}」并入 #${keep.id}「${keep.nickname}」？\n` +
+    `#${row.id} 的订单、聆听历史、兑换记录都会改指向 #${keep.id}，会员取两者中到期更晚的。\n` +
+    '此操作不可逆。',
+    '合并账号',
+    { type: 'warning', confirmButtonText: '确认合并', confirmButtonClass: 'el-button--danger' }
+  );
+  await mergeUsers(row.id, keep.id);
+  ElMessage.success(`已并入 #${keep.id}`);
+  loadDup();
+  load();
 }
 
 // ── 设为代理 ──
@@ -306,7 +398,14 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.toolbar { margin-bottom: 16px; display: flex; gap: 12px; }
+.toolbar { margin-bottom: 16px; display: flex; gap: 12px; align-items: center; }
+.dup-tip { margin-bottom: 16px; }
+.dup-group { margin-bottom: 24px; }
+.dup-head { margin-bottom: 8px; font-size: 13px; color: #606266; }
+.dup-head code { background: #f4f4f5; padding: 1px 6px; border-radius: 3px; }
+.dup-id { font-size: 12px; color: #909399; line-height: 1.5; word-break: break-all; }
+.dup-exp { display: block; font-size: 12px; color: #909399; }
+.dup-warn { margin-top: 6px; font-size: 12px; color: #e6a23c; }
 .pager { margin-top: 16px; justify-content: flex-end; }
 .src { margin-left: 4px; }
 .hint { margin-left: 10px; color: #999; font-size: 12px; }
