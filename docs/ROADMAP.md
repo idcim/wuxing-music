@@ -25,6 +25,7 @@
 | **v1.6.0** | 分成改加法模型：直推恒定拿满，上级加成由平台额外出 | ✅ 已完成 |
 | **v1.7.0** | 五音对照知识落库 + 五行文案合规改造 | ✅ 已完成 |
 | **v1.8.0** | 把五音理念铺到主路径 + 新增「五音对照」页 | ✅ 已完成 |
+| **v1.8.1** | 修进度轴拖不动、会员曲目无法试听、H5 输入框文字贴顶 | ✅ 已完成 |
 | **v2.0.0** | App 化（Taro RN：iOS / Android 打包上架） | ⏳ 规划 |
 | v2.1.0 | **App 更新接口** + 应用内更新（强更/灰度） | ⏳ 规划（接口契约见下，已预留） |
 
@@ -426,6 +427,51 @@ UI 主色保持现状，五色作为 `meta.colorName` 保留为文化字段。�
 
 **小程序端**：新页与主路径改动同样不随自动部署，见 [`WEAPP-TODO.md`](WEAPP-TODO.md)。
 
+### v1.8.1 · 三个实测缺陷（本次）
+
+v1.8.0 上线后实测发现的三处问题，都不是这次改动引入的，是一直存在、这回才被摸到。
+
+**一、播放进度轴拉不动 —— Taro `<Slider>` 在 H5 上基本不能用**
+
+读 `node_modules/@tarojs/components/dist/collection/components/slider/slider.js` 就一目了然：
+
+1. `componentDidLoad` 只把 `touchstart/touchmove/touchend` 绑在 **`this.handler`**，
+   也就是 `.weui-slider__handler` 那个圆点上 —— **轨道上点按拖动一概无效**，
+   必须精准摁住圆点；而我们传的 `blockSize={16}`，命中区只有 16px。
+2. **完全没有 mouse / pointer 监听** → 桌面浏览器里 100% 拖不动。
+3. `value` 上挂着 watcher，属性一变就 `updateByStep()` 重置内部 `percent`；
+   而 `onTimeUpdate` 每秒推好几次 `currentTime`，**拖到一半会被播放进度拽回去**。
+
+改为自绘 `src/components/SeekBar`：整条 88rpx 高的命中区可点可拖（不用 `::before` 撑——
+伪元素在小程序端不参与父节点触摸命中）、拖动期间以手指位置渲染并忽略 `currentTime`、
+松手才 `seek`、H5 另经 `document` 补一套鼠标拖动（Taro 的组件 props 只声明了 touch 系列）。
+缓冲轨道并进同一条，顺手去掉了以前用负 margin 把缓冲条叠在 Slider 上的写法。
+
+> 排查记录：一度以为是 `taro-slider-core` 没水合（线上实测 `hydrated: false`、宽度 0）。
+> 但做对照实验发现**同环境下 `taro-view-core` / `taro-text-core` 也全是 `hydrated: false`**，
+> 而页面明明正常显示 —— 说明那是自动化浏览器的测量假象，不能拿来判断真机。
+> 这正是 `CLAUDE.md` 已记的那条坑（输入框相关行为本地复现不了）。最终结论来自读源码，与环境无关。
+
+**二、会员专属曲目无法试听**
+
+`player.ts::onTimeUpdate` 里 30 秒断流 + `UpgradePrompt`（「试听结束 / 开通会员」）
+早就写好了，但**永远走不到**：首页 / 探律 / 元素详情三处都是
+`onPlay={() => (locked ? goMember() : onTrack(t.id))}` —— 非会员点付费曲目直接跳会员页，
+从来没机会开始播。于是「把曲目设为会员专属」的实际效果是彻底锁死而不是试听 30 秒，
+与 `CLAUDE.md`、套餐文案（「30秒曲目预览」）和 `UpgradePrompt` 的措辞全都对不上。
+
+改为一律 `onPlay={() => onTrack(t.id)}`，由 store 的 `previewSec` 断流兜底。
+曲目卡也不再对会员专属曲目画锁头（画锁头会让人以为点不动），换成「试听 30s」徽标。
+
+**三、H5 输入框文字贴顶**
+
+Taro 把 `className` 落在外层 `taro-input-core` 上，它是 `display: block`；
+而内层真正的 `<input class="weui-input">` 被 Taro 自带样式把高度钉死在 `1.47059em`（约 23px）。
+于是我们设的 96rpx 高度只撑开了盒子，真 input 作为块级子元素贴在顶部，下方空一大截。
+登录 / 兑换码 / 资料编辑 / 个人信息四处全中招。
+在 `app.scss` 加一条全局 `taro-input-core { display: flex; align-items: center }` —— 
+小程序端没有这个标签，规则不命中，无副作用。
+
 ### v2.0.0 · App 化（规划）
 
 Taro RN 编译 iOS/Android。补 `services/*/*.rn.ts` 与 `*.rn.scss`；支付 iOS 走 Apple IAP、Android 走微信/支付宝 H5；登录补开放平台/手机号。详见 `CLAUDE.md`「未来扩展到 App」。
@@ -486,6 +532,9 @@ H5 鉴权 + 支付上线前处理项（🔴 严重 / 🟠 高 / 🟢 中低）�
 
 与 `version.json` 的 `changelog` 保持一致：
 
+- **1.8.1**（2026-08-09）：三个实测反馈的修复 —— 播放进度轴拖不动（弃用 Taro `<Slider>`，
+  自绘 `components/SeekBar`）、会员专属曲目点了直接跳会员页导致 30 秒试听成了死代码、
+  H5 输入框文字贴着框顶。
 - **1.8.0**（2026-08-09）：把五音理念铺到主路径 —— 首页「今夜之音」、探律讲法与关键词、
   播放器调式与气质；新增「五音对照」页（五组 30 余项 + 口诀）。
   播放器 / 迷你条 / 播放列表改按**曲目所属元素**取音名与配色（此前用用户体质，

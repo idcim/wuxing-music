@@ -1,5 +1,5 @@
 import { View, Text } from '@tarojs/components';
-import Taro, { useRouter, useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/taro';
+import { useRouter, useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/taro';
 import { goBack } from '@/utils/nav';
 import { WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
@@ -50,7 +50,6 @@ export default function ElementDetail() {
   }));
 
   const back = () => goBack();
-  const goMember = () => Taro.redirectTo({ url: '/pages/member/index' });
 
   const onTrack = (trackId: number) => {
     const track = el.tracks.find((t) => t.id === trackId)!;
@@ -100,7 +99,7 @@ export default function ElementDetail() {
               isActive={currentTrack?.id === t.id}
               isPlaying={isPlaying}
               locked={locked}
-              onPlay={() => (locked ? goMember() : onTrack(t.id))}
+              onPlay={() => onTrack(t.id)}
             />
           );
         })}

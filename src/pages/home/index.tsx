@@ -58,7 +58,6 @@ export default function Home() {
     }
   };
 
-  const goMember = () => Taro.redirectTo({ url: '/pages/member/index' });
   const goExplore = () => Taro.redirectTo({ url: '/pages/explore/index' });
   const goElement = (id: ElementId) =>
     Taro.navigateTo({ url: `/pages/element/index?id=${id}` });
@@ -249,7 +248,7 @@ export default function Home() {
               isPlaying={isPlaying}
               locked={locked}
               delay={i * 0.08}
-              onPlay={() => (locked ? goMember() : onTrack(t.id))}
+              onPlay={() => onTrack(t.id)}
             />
           );
         })}

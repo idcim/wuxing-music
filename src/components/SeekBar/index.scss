@@ -1,0 +1,58 @@
+@import '../../styles/variables.scss';
+
+// 命中区是这个 View 本身：88rpx（约 44px）高，整条都能按。
+// 不能靠 ::before 撑——伪元素在小程序端不参与父节点的触摸命中，
+// 那样 touch 目标就只剩 8rpx 的轨道，和 Taro Slider 只能摁 16px 圆点是一个毛病。
+.seekbar {
+  position: relative;
+  height: 88rpx;
+  margin: 0 8rpx;
+
+  // 轨道在命中区里垂直居中
+  &__track {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    margin-top: -4rpx;
+    height: 8rpx;
+    border-radius: 4rpx;
+    background: rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+  }
+
+  // 缓冲进度：与播放进度同一条轨道。
+  // 以前是在 Slider 下面另画一条再用负 margin 叠上去，边缘对不齐还挡着滑块。
+  &__buffer {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.22);
+    transition: width 0.3s linear;
+  }
+
+  &__fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    border-radius: 4rpx;
+  }
+
+  &__thumb {
+    position: absolute;
+    top: 50%;
+    width: 24rpx;
+    height: 24rpx;
+    margin-top: -12rpx;
+    margin-left: -12rpx;
+    border-radius: 50%;
+    transition: transform 0.15s ease;
+  }
+
+  // 按住时放大，给一点「抓住了」的反馈
+  &__thumb--on {
+    transform: scale(1.5);
+  }
+}

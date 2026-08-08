@@ -85,4 +85,20 @@
     font-size: 20rpx;
     letter-spacing: 2rpx;
   }
+
+  // 会员专属曲目的试听徽标：描边而非实底，与普通 tag 区分开
+  &__preview {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6rpx;
+    border: 2rpx solid;
+    border-radius: 20rpx;
+    padding: 6rpx 16rpx;
+  }
+
+  &__preview-text {
+    font-size: 20rpx;
+    letter-spacing: 1rpx;
+  }
 }

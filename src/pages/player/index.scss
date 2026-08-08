@@ -116,27 +116,8 @@
     margin-bottom: 56rpx;
   }
 
-  &__slider {
-    margin: 0 8rpx;
-  }
-
-  // 缓冲进度条：Taro 的 <Slider> 没有缓冲轨道，只能在其下方另画一条。
-  // 上百 MB 的曲目弱网时，用户至少看得见「在下」而不是干等。
-  &__buffer {
-    position: relative;
-    height: 4rpx;
-    margin: 0 20rpx;
-    margin-top: -6rpx;
-    background: rgba(255, 255, 255, 0.08);
-    border-radius: 2rpx;
-    overflow: hidden;
-  }
-
-  &__buffer-fill {
-    height: 100%;
-    background: rgba(255, 255, 255, 0.22);
-    transition: width 0.3s linear;
-  }
+  // 进度轴与缓冲轨道都在 components/SeekBar 里（原先用 Taro <Slider> 拖不动，
+  // 缓冲条还得在它下面用负 margin 另画一条叠上去，现在合成同一条了）
 
   // 加载失败 / 超时：给出原因与重试，别让用户对着永远转的 spinner
   &__error {

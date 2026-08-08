@@ -27,6 +27,21 @@ button {
   box-sizing: border-box;
 }
 
+// H5 输入框文字垂直居中。
+//
+// Taro 把 className 落在外层 `taro-input-core` 上，它是 `display: block`；
+// 而内层真正的 `<input class="weui-input">` 被 Taro 自带样式把高度钉死在
+// `1.47059em`（约 23px）。于是我们给外层设的 96rpx 高度只是撑开了盒子，
+// 真 input 作为块级子元素贴在顶部，**文字看着偏上、下方空一大截**。
+// 四处输入框（登录 / 兑换码 / 资料编辑 / 个人信息）全中招。
+//
+// 小程序端 className 直接落在原生 input 上、由组件自身垂直居中，没有这个问题；
+// 且 `taro-input-core` 这个标签在小程序里不存在，本规则不会命中任何元素。
+taro-input-core {
+  display: flex;
+  align-items: center;
+}
+
 // 中文衬线（约等于 Noto Serif SC）
 .serif {
   font-family: 'STSong', 'Songti SC', 'SimSun', serif;

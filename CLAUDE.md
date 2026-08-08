@@ -103,8 +103,9 @@ wuxing-music/
 │   │   ├── player/             #   全屏播放器（旋转罗盘 / seek）
 │   │   ├── agent/              #   代理中心（★ 仅代理可见，模块关闭时无入口）
 │   │   └── about/              #   关于 / 条款
-│   ├── components/             # 8 个：CdkeyModal / Icon / MiniPlayer / Playlist
-│   │   │                       #        PosterShare / SleepTimer / TabBar / TrackCard
+│   ├── components/             # 12 个：CdkeyModal / Icon / ListState / MiniPlayer / Playlist
+│   │   │                       #        PosterShare / SeekBar / SleepTimer / TabBar / TrackCard
+│   │   │                       #        UpgradePrompt / UserEditSheet
 │   ├── stores/                 # zustand：user / player / content
 │   ├── services/               # 业务与平台能力封装（禁止组件里直接 wx.xxx）
 │   │   ├── api.ts              #   request()：{code,data,msg} 信封 + Bearer
@@ -372,7 +373,8 @@ const top = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
 
 - 小程序：`Taro.getBackgroundAudioManager()`（**用 BackgroundAudioManager 才能后台/锁屏播放**，`app.config.ts` 已配 `requiredBackgroundModes: ['audio']`）。
 - H5：`index.h5.ts` 对应实现；统一接口见 `types.ts`。
-- 非会员 **30 秒试听**：`previewSec` 到点暂停并提示升级。
+- 非会员 **30 秒试听**：`previewSec` 到点由 `stores/player.ts::onTimeUpdate` **release 音源**（不是 pause——暂停后底层仍会把整包缓冲完），并经 `components/UpgradePrompt` 弹升级引导。
+- ⚠️ **「会员专属」不等于不能播**：付费曲目对非会员**照样点得动**，只是听到 `previewSec` 就断。列表页一律 `onPlay={() => onTrack(t.id)}`，**不要**再写成 `locked ? goMember() : onTrack(...)` —— v1.8.1 之前三个列表页都是那么写的，结果把曲目设成会员专属就等于彻底锁死，`player.ts` 里的断流逻辑和 `UpgradePrompt` 成了永远走不到的死代码。`TrackCard` 的 `locked` 只控制右侧的「试听 30s」徽标，**不控制能否播放**（也别再画锁头图标，那会让人以为点不动）。
 - iOS 弱网首次加载慢，需 loading 态；`audioUrl` 当前多为占位，真机需在微信后台配 `downloadFile` 合法域名，mock 下回退 `MOCK_AUDIO_URL`。
 
 ### 3. 睡眠定时器 `components/SleepTimer/`
@@ -752,7 +754,12 @@ iOS 端订阅类商品**必须走 Apple IAP**（苹果抽 30%，禁止引导外�
 
 21. **别再用 `Taro.createCanvasContext`（旧画布 API）**：它在 H5 shim 里**设置立即生效、绘制却入队**——`setFontSize` / `setTextAlign` 直接写 `ctx`，`fillText` 却排队等 `ctx.draw()` 回放。于是回放时所有文字都用**最后一次**设的字号，整张海报的字全变成同一个大小（v1.5.1 前 H5 海报正是如此，「木」140px 被压成 24px）。另外 H5 的 `canvasToTempFilePath` 源码里写着 `@todo 暂未支持尺寸相关功能`，**`destWidth/destHeight` 是无效参数**，导出恒为 1x。一律改用 **Canvas 2D**（`<Canvas type="2d">` + `getContext('2d')`，立即模式）：小程序用 `createSelectorQuery().fields({node:true})` 取节点、导出传 `{canvas}`；H5 直接拿 DOM 里的 `<canvas>`、`toDataURL()` 导出。两端都要自己按 `pixelRatio`/`devicePixelRatio` 设背板再 `ctx.scale(dpr,dpr)`，否则一样糊。⚠️ H5 上 Taro 的 Canvas 组件会在 `componentDidRender` 里按计算样式**回写** `canvas.width/height`，DPR 背板必须在**取到节点之后**再设一次。另：`ctx.roundRect` 在小程序 2D 不保证有，圆角自己用 `arcTo` 画。参考实现见 `src/services/poster/`。
 
+22. **别用 Taro 的 `<Slider>`**（v1.8.1 已换掉，进度轴见 `src/components/SeekBar/`）。看它的源码 `node_modules/@tarojs/components/dist/collection/components/slider/slider.js` 就明白为什么它「拉不动」：① `componentDidLoad` 只把 `touchstart/touchmove/touchend` 绑在 **`this.handler`（那个圆点）** 上——**轨道上点按拖动一概无效**，必须精准摁住圆点，而 `blockSize` 上限 28、我们当时传 16，命中区只有 16px；② **完全没有 mouse/pointer 监听**，桌面浏览器里 100% 拖不动；③ `value` 上挂着 watcher，属性一变就 `updateByStep()` 重置内部 percent，而播放器每秒推好几次 `currentTime`，**拖到一半会被播放进度拽回去**。自绘时三件事都要办到：命中区做成**真实的高盒子**（`::before` 撑出来的区域在小程序端不参与父节点触摸命中）、拖动期间用本地状态渲染并忽略外部 value、H5 另经 DOM 补鼠标监听（Taro 的组件 props 只声明了 touch 系列，没有 mouse）。
+23. **H5 输入框文字会贴着框顶**：Taro 把 `className` 落在外层 `taro-input-core` 上，它是 `display: block`；而内层真正的 `<input class="weui-input">` 被 Taro 自带样式把高度钉死在 **`1.47059em`**（约 23px）。于是给外层设的 96rpx 高度只撑开了盒子，真 input 作为块级子元素贴在顶部、下方空一大截。`src/app.scss` 已加一条全局 `taro-input-core { display: flex; align-items: center }` 兜住所有输入框（小程序端没有这个标签，规则不命中）。**给输入框设高度时不必再各自处理垂直居中**。
+
 > 本地验证的坑：`npm run dev:h5` 起的 dev server 与 `python -m http.server` 托管的 `build:h5` 产物里，`taro-input-core` 都**不渲染内部 `<input>`**（新建实例也一样，`document.querySelectorAll('input').length === 0`），登录页这个已上线可用的页面同样如此。也就是说**输入框相关的行为无法在本地浏览器复现验证**，只能上真机/真环境看。排查 Input 问题时别被本地现象误导。
+>
+> ⚠️ 更进一步（v1.8.1 排查所得）：**所有 stencil 组件在自动化/无头浏览器里都报 `hydrated: false`**——`taro-view-core`、`taro-text-core` 也一样，而页面明明正常显示。所以「某个 Taro 组件没水合/宽度为 0」这类观察**不能作为线上有问题的证据**。定位这类问题请直接读 `node_modules/@tarojs/components` 里的源码，结论与环境无关。
 
 ------
 
@@ -821,7 +828,7 @@ ZEROER-GIFT-7DAY      → 7日体验卡
 
 ------
 
-**最后更新**：把五音理念铺到主路径（首页「今夜之音」/ 探律讲法与关键词 / 播放器调式）；新增「五音对照」页；播放器按曲目所属元素取色；曲目标签合规迁移。
-**当前版本**：v1.8.0（见根 `version.json`）。
+**最后更新**：修三处实测缺陷 —— 进度轴改自绘 `SeekBar`（Taro `<Slider>` 拉不动）、会员专属曲目恢复 30 秒试听、H5 输入框文字贴顶。
+**当前版本**：v1.8.1（见根 `version.json`）。
 **当前阶段**：小程序 + H5（微信内）前端、后端管理/公开接口、管理后台均已完成，三容器已上服务器且推 `master` 即自动部署；微信支付/公众号授权/短信/OSS 待真实配置上线验证。
 ⚠️ **小程序包不随自动部署**，欠账（合法域名、待真机验证项、未接的微信原生能力、审核合规）单独记在 [`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)。

@@ -44,7 +44,6 @@ export default function Explore() {
     query: ''
   }));
 
-  const goMember = () => Taro.redirectTo({ url: '/pages/member/index' });
   const goTones = () =>
     Taro.navigateTo({ url: `/pages/tones/index?id=${encodeURIComponent(selected)}` });
 
@@ -168,7 +167,7 @@ export default function Explore() {
                   isPlaying={isPlaying}
                   locked={locked}
                   delay={i * 0.08}
-                  onPlay={() => (locked ? goMember() : onTrack(t.id))}
+                  onPlay={() => onTrack(t.id)}
                 />
               );
             })}

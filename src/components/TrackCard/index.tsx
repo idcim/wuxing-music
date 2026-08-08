@@ -10,7 +10,9 @@ interface Props {
   element: WuxingElement;
   isActive: boolean;
   isPlaying: boolean;
-  locked?: boolean;          // 会员锁（非会员看付费曲目）
+  // 会员专属且当前用户非会员。**不等于不能播**——可以试听 previewSec 秒，
+  // 到点由 player store 断流并弹升级引导。这里只负责把「会员专属」标出来。
+  locked?: boolean;
   onPlay: () => void;
   delay?: number;            // fade-up 进场延迟（秒）
 }
@@ -44,9 +46,9 @@ export default function TrackCard({
           />
         )}
         {track.coverUrl && <View className="track-card__cover-mask" />}
-        {locked ? (
-          <Icon name="lock" size={24} color={track.coverUrl ? '#fff' : el.accent} strokeWidth={1.8} />
-        ) : isActive ? (
+        {/* 会员专属也画播放键：画锁头会让人以为点不动，而它其实能试听。
+            「会员专属」的信息由右侧的试听徽标承担。 */}
+        {isActive ? (
           <Icon name="pause" size={28} fill={track.coverUrl ? '#fff' : '#0a0e1a'} strokeWidth={0} color={track.coverUrl ? '#fff' : '#0a0e1a'} />
         ) : (
           <Icon name="play" size={26} fill={track.coverUrl ? '#fff' : el.primary} strokeWidth={0} color={track.coverUrl ? '#fff' : el.primary} />
@@ -70,12 +72,21 @@ export default function TrackCard({
         </View>
       </View>
 
-      <Text
-        className="track-card__tag"
-        style={{ background: A.a15(el.primary), color: el.accent }}
-      >
-        {track.tag}
-      </Text>
+      {locked ? (
+        <View className="track-card__preview" style={{ borderColor: A.a30(el.primary) }}>
+          <Icon name="crown" size={20} color={el.accent} strokeWidth={1.6} />
+          <Text className="track-card__preview-text" style={{ color: el.accent }}>
+            试听 {track.previewSec ?? 30}s
+          </Text>
+        </View>
+      ) : (
+        <Text
+          className="track-card__tag"
+          style={{ background: A.a15(el.primary), color: el.accent }}
+        >
+          {track.tag}
+        </Text>
+      )}
     </View>
   );
 }

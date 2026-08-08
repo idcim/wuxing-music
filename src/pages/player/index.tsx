@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, Slider, Image } from '@tarojs/components';
+import { View, Text, Image } from '@tarojs/components';
 import Taro, { useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/taro';
 import { goBack } from '@/utils/nav';
 import { openShareMenu, setH5Share } from '@/utils/share';
@@ -9,6 +9,7 @@ import { useContentStore } from '@/stores/content';
 import { fmtTime } from '@/utils/format';
 import { resolveUrl } from '@/utils/url';
 import Icon from '@/components/Icon';
+import SeekBar from '@/components/SeekBar';
 import SleepTimer from '@/components/SleepTimer';
 import Playlist from '@/components/Playlist';
 import UpgradePrompt from '@/components/UpgradePrompt';
@@ -53,6 +54,8 @@ export default function Player() {
 
   const [timerOpen, setTimerOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);
+  // 拖动进度轴时显示目标时间而不是播放位置，否则手指在动、左侧数字不动
+  const [dragSec, setDragSec] = useState<number | null>(null);
   const hasQueue = queue.length > 1;
 
   useDidShow(() => {
@@ -94,12 +97,10 @@ export default function Player() {
   // 只靠它 dur 会退化成 1，进度条变成「1 秒的歌」——拖一下就到底，
   // 而右侧时长文字仍显示真实值，两者自相矛盾。
   const dur = Math.round(storeDuration) || currentTrack.durationSec || 1;
-  const bufferedPct = dur ? Math.min(100, (buffered / dur) * 100) : 0;
   const toggle = () => {
     if (isLoading) return;
     isPlaying ? pause() : resume();
   };
-  const onSeek = (e: { detail: { value: number } }) => seek(e.detail.value);
 
   return (
     <View className="player" style={{ background: el.bg }}>
@@ -143,20 +144,14 @@ export default function Player() {
       </View>
 
       <View className="player__progress">
-        <Slider
-          className="player__slider"
-          min={0}
-          max={dur}
-          value={Math.min(currentTime, dur)}
-          activeColor={el.primary}
-          backgroundColor="rgba(255,255,255,0.1)"
-          blockSize={16}
-          blockColor={el.primary}
-          onChange={onSeek}
+        <SeekBar
+          duration={dur}
+          currentTime={currentTime}
+          buffered={buffered}
+          color={el.primary}
+          onSeek={seek}
+          onSeeking={setDragSec}
         />
-        <View className="player__buffer">
-          <View className="player__buffer-fill" style={{ width: `${bufferedPct}%` }} />
-        </View>
         {!!loadError && (
           <View className="player__error">
             <Text className="player__error-text">{loadError}</Text>
@@ -166,7 +161,9 @@ export default function Player() {
           </View>
         )}
         <View className="player__time">
-          <Text className="player__time-cur serif">{fmtTime(currentTime)}</Text>
+          <Text className="player__time-cur serif">
+            {fmtTime(dragSec !== null ? dragSec : currentTime)}
+          </Text>
           {/* 音频报了真实时长就以它为准，与进度条同源，避免条与文字对不上 */}
           <Text className="player__time-dur serif">
             {storeDuration ? fmtTime(storeDuration) : currentTrack.duration || fmtTime(dur)}
