@@ -14,7 +14,7 @@ import os
 from datetime import datetime
 
 # ⚠️ 与根 version.json 的 current.app / current.api 保持一致
-APP_VERSION = "1.7.0"
+APP_VERSION = "1.8.0"
 API_VERSION = "1.3.0"
 
 # 部署时注入；本地为空字符串
