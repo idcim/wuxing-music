@@ -26,6 +26,7 @@
 | **v1.7.0** | 五音对照知识落库 + 五行文案合规改造 | ✅ 已完成 |
 | **v1.8.0** | 把五音理念铺到主路径 + 新增「五音对照」页 | ✅ 已完成 |
 | **v1.8.1** | 修进度轴拖不动、会员曲目无法试听、H5 输入框文字贴顶 | ✅ 已完成 |
+| **v1.8.2** | 修试听断流后播放键永久转圈 | ✅ 已完成 |
 | **v2.0.0** | App 化（Taro RN：iOS / Android 打包上架） | ⏳ 规划 |
 | v2.1.0 | **App 更新接口** + 应用内更新（强更/灰度） | ⏳ 规划（接口契约见下，已预留） |
 
@@ -472,6 +473,44 @@ Taro 把 `className` 落在外层 `taro-input-core` 上，它是 `display: block
 在 `app.scss` 加一条全局 `taro-input-core { display: flex; align-items: center }` —— 
 小程序端没有这个标签，规则不命中，无副作用。
 
+### v1.8.2 · 试听断流后播放键永久转圈（本次）
+
+**症状**：试听结束提示弹过一次之后，回到播放详情页点大播放键，一直转圈、不出声、
+点了没反应，只能刷新页面。
+
+**这是 v1.8.1 暴露出来的存量缺陷**，不是它引入的：v1.8.1 之前没有任何入口能触发
+试听断流（付费曲目点了直接跳会员页），所以「断流之后再播」这条路在生产环境从未跑过。
+
+**根因一：看门狗只写文案，没解除 `isLoading`**
+
+```js
+loadTimer = setTimeout(() => {
+  if (get().isLoading && !get().isPlaying) {
+    set({ loadError: '加载较慢，请检查网络后重试' });   // ← isLoading 仍是 true
+  }
+}, 15000)
+```
+
+而播放器页的 `toggle()` 第一行是 `if (isLoading) return`。于是只要一次加载没能等到
+`canplay`，播放键就**永久失效**且一直转圈——这正是用户描述的现象，也解释了「只能刷新」
+（刷新即重置内存态）。现在超时同时置 `isLoading: false`。
+
+**根因二：`release()` 拆掉音源却没摘回调**
+
+`removeAttribute('src') + load()` 之后元素仍会吐 `abort` / `emptied` / `stalled` / `waiting`，
+其中 `stalled` 与 `waiting` 都接在 `onWaiting` 上 → `set({ isLoading: true })`。
+此刻已经没有音源，`canplay` 永远不会来把它清掉。现在 `release()` 先 `bound = {}` 再拆，
+`load()` 时自然会重新赋值。小程序端 `BackgroundAudioManager.stop()` 后同样可能回调
+`onWaiting`，一并修。
+
+**另**：播放器主播放键在 `loadError` 时兼作重试（与 MiniPlayer 一致），
+此前出错后主按钮是个死键，只有下面那个小重试按钮能用。
+
+**验证的边界（要如实说）**：桌面 Chrome 上这条路径本来就是通的——
+断流后点播放能正常从 0 重播，`canplay` 总是立刻到达，**这个卡死复现不出来**；
+往元素上补发合成 `waiting` 也没能让它卡住。所以本次修的是**读代码可证的结构性缺陷**
+（看门狗那条尤其确定），而不是一个已复现的失败用例。需要在真机上回归确认。
+
 ### v2.0.0 · App 化（规划）
 
 Taro RN 编译 iOS/Android。补 `services/*/*.rn.ts` 与 `*.rn.scss`；支付 iOS 走 Apple IAP、Android 走微信/支付宝 H5；登录补开放平台/手机号。详见 `CLAUDE.md`「未来扩展到 App」。
@@ -532,6 +571,9 @@ H5 鉴权 + 支付上线前处理项（🔴 严重 / 🟠 高 / 🟢 中低）�
 
 与 `version.json` 的 `changelog` 保持一致：
 
+- **1.8.2**（2026-08-09）：修「试听结束提示出现过一次后，歌就再也播不了」——
+  看门狗超时只写 `loadError` 没解除 `isLoading`，而播放器 `toggle()` 首行就 `if (isLoading) return`；
+  且 `release()` 拆音源后没摘回调，收尾事件会把 `isLoading` 重新置真。
 - **1.8.1**（2026-08-09）：三个实测反馈的修复 —— 播放进度轴拖不动（弃用 Taro `<Slider>`，
   自绘 `components/SeekBar`）、会员专属曲目点了直接跳会员页导致 30 秒试听成了死代码、
   H5 输入框文字贴着框顶。

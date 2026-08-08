@@ -114,6 +114,14 @@ const service: AudioService = {
   // 保留元素本身（复用其「已被用户手势激活」的状态，见文件头注释）。
   release() {
     if (!el) return;
+    // 先摘掉回调再拆音源。removeAttribute('src') + load() 会让元素继续吐
+    // abort / emptied / stalled / waiting 这些「收尾事件」，其中 stalled 与 waiting
+    // 都接在 onWaiting 上，会把 store 的 isLoading 重新置为 true——
+    // 而此刻已经没有音源了，canplay 永远不会来把它清掉。
+    // 结果就是播放键永久转圈、toggle() 里的 `if (isLoading) return` 把点击全吞掉，
+    // 用户只能刷新页面。试听到点断流是唯一会走到这里的路径，所以症状表现为
+    // 「弹过一次试听结束提示后，歌就再也放不了」。
+    bound = {};
     el.pause();
     el.removeAttribute('src');
     el.load();

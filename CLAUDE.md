@@ -374,6 +374,7 @@ const top = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
 - 小程序：`Taro.getBackgroundAudioManager()`（**用 BackgroundAudioManager 才能后台/锁屏播放**，`app.config.ts` 已配 `requiredBackgroundModes: ['audio']`）。
 - H5：`index.h5.ts` 对应实现；统一接口见 `types.ts`。
 - 非会员 **30 秒试听**：`previewSec` 到点由 `stores/player.ts::onTimeUpdate` **release 音源**（不是 pause——暂停后底层仍会把整包缓冲完），并经 `components/UpgradePrompt` 弹升级引导。
+- ⚠️ **`isLoading` 绝不能有「进得去出不来」的路径**：播放器页 `toggle()` 首行是 `if (isLoading) return`，一旦 `isLoading` 卡在 true，播放键就永久失效、一直转圈，用户只能刷新。两条已修的坑：① 加载看门狗超时必须**同时**置 `isLoading:false`，只写 `loadError` 等于把按钮焊死；② `audioService.release()` 拆音源前先 `bound = {}`，否则元素收尾时吐的 `stalled`/`waiting` 会把 `isLoading` 重新置真，而没了音源 `canplay` 永不到达。新增任何 `set({isLoading:true})` 都要问一句「谁保证它会被清掉」。
 - ⚠️ **「会员专属」不等于不能播**：付费曲目对非会员**照样点得动**，只是听到 `previewSec` 就断。列表页一律 `onPlay={() => onTrack(t.id)}`，**不要**再写成 `locked ? goMember() : onTrack(...)` —— v1.8.1 之前三个列表页都是那么写的，结果把曲目设成会员专属就等于彻底锁死，`player.ts` 里的断流逻辑和 `UpgradePrompt` 成了永远走不到的死代码。`TrackCard` 的 `locked` 只控制右侧的「试听 30s」徽标，**不控制能否播放**（也别再画锁头图标，那会让人以为点不动）。
 - iOS 弱网首次加载慢，需 loading 态；`audioUrl` 当前多为占位，真机需在微信后台配 `downloadFile` 合法域名，mock 下回退 `MOCK_AUDIO_URL`。
 
@@ -828,7 +829,7 @@ ZEROER-GIFT-7DAY      → 7日体验卡
 
 ------
 
-**最后更新**：修三处实测缺陷 —— 进度轴改自绘 `SeekBar`（Taro `<Slider>` 拉不动）、会员专属曲目恢复 30 秒试听、H5 输入框文字贴顶。
-**当前版本**：v1.8.1（见根 `version.json`）。
+**最后更新**：修试听断流后播放键永久转圈（看门狗未解除 `isLoading` + `release()` 未摘回调）。
+**当前版本**：v1.8.2（见根 `version.json`）。
 **当前阶段**：小程序 + H5（微信内）前端、后端管理/公开接口、管理后台均已完成，三容器已上服务器且推 `master` 即自动部署；微信支付/公众号授权/短信/OSS 待真实配置上线验证。
 ⚠️ **小程序包不随自动部署**，欠账（合法域名、待真机验证项、未接的微信原生能力、审核合规）单独记在 [`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)。

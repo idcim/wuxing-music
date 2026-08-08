@@ -60,8 +60,13 @@ const service: AudioService = {
     getMgr().seek(sec);
   },
   // 断流：小程序侧 stop() 即会终止当前音源的加载并清空播放态。
-  // 与 destroy() 的区别是保留单例与已注册的回调，便于随后重新 load。
+  // 与 destroy() 的区别是保留单例（以及 bindOnce 在管理器上注册的监听），便于随后重新 load。
+  //
+  // 先摘掉 bound 再 stop：停掉音源后管理器仍可能吐 onWaiting，而它会把 store 的
+  // isLoading 重新置真，此时已无音源、onCanplay 永不到达，播放键就永久转圈了
+  // （与 H5 端同一个坑，详见 index.h5.ts 的 release）。load() 时会重新赋值 bound。
   release() {
+    bound = {};
     mgr?.stop();
   },
   destroy() {

@@ -98,6 +98,9 @@ export default function Player() {
   // 而右侧时长文字仍显示真实值，两者自相矛盾。
   const dur = Math.round(storeDuration) || currentTrack.durationSec || 1;
   const toggle = () => {
+    // 加载失败时按钮兼作「重试」，与 MiniPlayer 口径一致。
+    // 少了这条，出错后主按钮就是个死键——只有下面那个小重试按钮能用。
+    if (loadError) { retry(); return; }
     if (isLoading) return;
     isPlaying ? pause() : resume();
   };

@@ -126,9 +126,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     clearLoadTimer();
     // 加载看门狗：迟迟等不到 canplay 就给用户一句话，
     // 而不是让 spinner 永远转下去（大文件 + 弱网时最容易发生）。
+    //
+    // ⚠️ 必须同时把 isLoading 放开。只写 loadError 是不够的——播放器页的 toggle()
+    // 第一行就是 `if (isLoading) return`，isLoading 不解除的话按钮会永久失效：
+    // 用户看到的就是「一直转圈、点了没反应，只能刷新」。
     loadTimer = setTimeout(() => {
       if (get().isLoading && !get().isPlaying) {
-        set({ loadError: '加载较慢，请检查网络后重试' });
+        set({ isLoading: false, loadError: '加载较慢，请检查网络后重试' });
       }
     }, LOAD_TIMEOUT_MS);
 
