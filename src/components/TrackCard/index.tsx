@@ -63,8 +63,13 @@ export default function TrackCard({
           {track.title}
         </Text>
         <View className="track-card__meta">
-          <Text className="track-card__hz cormorant" style={{ color: el.accent }}>{track.hz}</Text>
-          <Text className="track-card__dot">·</Text>
+          {/* hz 后台可留空（运营自建曲目常只填标题和音频），空的话连分隔点一起不渲染 */}
+          {!!track.hz && (
+            <>
+              <Text className="track-card__hz cormorant" style={{ color: el.accent }}>{track.hz}</Text>
+              <Text className="track-card__dot">·</Text>
+            </>
+          )}
           <Text className="track-card__sub">{track.duration}</Text>
           <Text className="track-card__dot">·</Text>
           <Icon name="headphones" size={20} color="#475569" strokeWidth={1.5} />

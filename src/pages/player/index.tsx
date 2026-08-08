@@ -133,8 +133,10 @@ export default function Player() {
 
       <View className="player__meta">
         <Text className="player__title serif">{currentTrack.title}</Text>
+        {/* hz / tag 后台可以留空（运营自建的曲目常常只填标题和音频），
+            直接用 · 串起来会渲染成「· · 角音」，得先滤掉空的 */}
         <Text className="player__sub" style={{ color: el.accent }}>
-          {currentTrack.hz} · {currentTrack.tag} · {el.note}音
+          {[currentTrack.hz, currentTrack.tag, `${el.note}音`].filter(Boolean).join(' · ')}
         </Text>
         {!!(el.meta?.mode || el.meta?.musicMood) && (
           <Text className="player__mood">
