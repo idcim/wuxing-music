@@ -128,6 +128,47 @@
     line-height: 1.7;
   }
 
+  // ── 讲法引文 / 关键词 / 知识页入口 ──
+  &__el-quote {
+    display: block;
+    position: relative;
+    margin-top: 32rpx;
+    padding-top: 28rpx;
+    border-top: 2rpx solid $border;
+    font-size: 26rpx;
+    line-height: 1.9;
+    color: $text-secondary;
+  }
+
+  &__el-keys {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12rpx;
+    margin-top: 24rpx;
+  }
+
+  &__el-key {
+    border-radius: $radius-pill;
+    padding: 8rpx 20rpx;
+    font-size: 22rpx;
+    line-height: 1.4;
+  }
+
+  &__el-more {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6rpx;
+    margin-top: 24rpx;
+  }
+
+  &__el-more-text {
+    font-size: 24rpx;
+    letter-spacing: 2rpx;
+  }
+
   // ── 曲目列表 ──
   &__list {
     display: flex;

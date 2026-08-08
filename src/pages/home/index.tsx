@@ -81,7 +81,9 @@ export default function Home() {
       <View className="home__header fade-up" style={navTopStyle()}>
         <View>
           <Text className="home__greeting cormorant italic">Good evening</Text>
-          <Text className="home__el">{el.id}型 · {el.note}音</Text>
+          <Text className="home__el">
+            {el.id}型 · {el.note}音{el.meta?.notation ? ` · ${el.meta.notation}` : ''}
+          </Text>
         </View>
         <View className="home__actions">
           <Button className="home__icon-btn" openType="share">
@@ -160,6 +162,36 @@ export default function Home() {
           </View>
         </View>
       </View>
+
+      {/* 今夜之音：把五行讲法放在落地页第一屏。
+          此前整个首页只有「火型 · 徵音」五个字，五音体系在主路径上等于不存在。
+          文案口径见 docs/WUXING-REFERENCE.md（情绪转化方向 + 适合直播讲法）。
+          meta 后台可清空，每行各自兜底，缺了就不渲染那行。 */}
+      {!!(el.sleepTip || el.meta?.transform) && (
+        <View
+          className="home__tone fade-up"
+          style={{
+            animationDelay: '0.15s',
+            background: `linear-gradient(135deg, ${A.a10(el.primary)}, transparent)`,
+            borderColor: A.a25(el.primary)
+          }}
+        >
+          {!!el.meta?.transform && (
+            <View className="home__tone-head">
+              <Icon name="sparkles" size={26} color={el.accent} strokeWidth={1.5} />
+              <Text className="home__tone-transform" style={{ color: el.accent }}>
+                {el.meta.transform}
+              </Text>
+            </View>
+          )}
+          {!!el.sleepTip && <Text className="home__tone-text serif">{el.sleepTip}</Text>}
+          {!!(el.meta?.timeFeel || el.meta?.imagery) && (
+            <Text className="home__tone-scene">
+              {[el.meta?.timeFeel, el.meta?.imagery].filter(Boolean).join(' · ')}
+            </Text>
+          )}
+        </View>
+      )}
 
       {/* 五行分类 */}
       <View className="home__section-head">

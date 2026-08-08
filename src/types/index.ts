@@ -4,6 +4,7 @@ export type NoteName = '角' | '徵' | '宫' | '商' | '羽';
 
 export interface Track {
   id: number;
+  elementId?: ElementId;     // 所属五行。播放器/迷你条据此取音名与配色（后端 /elements 下发）
   title: string;
   duration: string;          // "MM:SS"
   durationSec: number;       // 用于实际播放

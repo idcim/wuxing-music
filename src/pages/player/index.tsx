@@ -5,7 +5,7 @@ import { goBack } from '@/utils/nav';
 import { openShareMenu, setH5Share } from '@/utils/share';
 import { usePlayerStore } from '@/stores/player';
 import { useUserStore } from '@/stores/user';
-import { WUXING } from '@/constants/wuxing';
+import { useContentStore } from '@/stores/content';
 import { fmtTime } from '@/utils/format';
 import { resolveUrl } from '@/utils/url';
 import Icon from '@/components/Icon';
@@ -45,8 +45,11 @@ export default function Player() {
   const next = usePlayerStore((s) => s.next);
   const prev = usePlayerStore((s) => s.prev);
   const cyclePlayMode = usePlayerStore((s) => s.cyclePlayMode);
-  const element = useUserStore((s) => s.element) || ('木' as ElementId);
-  const el = WUXING[element];
+  // 音名/调式/配色跟随「正在听的这首曲」所属元素，不是用户体质——
+  // 否则听水的曲子会写着「徵音」、背景还是火的橙色。无曲时才退回体质。
+  const userElement = useUserStore((s) => s.element);
+  const getElementOfTrack = useContentStore((s) => s.getElementOfTrack);
+  const el = getElementOfTrack(currentTrack, userElement as ElementId | null);
 
   const [timerOpen, setTimerOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);
@@ -132,6 +135,11 @@ export default function Player() {
         <Text className="player__sub" style={{ color: el.accent }}>
           {currentTrack.hz} · {currentTrack.tag} · {el.note}音
         </Text>
+        {!!(el.meta?.mode || el.meta?.musicMood) && (
+          <Text className="player__mood">
+            {[el.meta?.mode, el.meta?.musicMood].filter(Boolean).join(' · ')}
+          </Text>
+        )}
       </View>
 
       <View className="player__progress">

@@ -1,7 +1,7 @@
 import { View, Text, ScrollView } from '@tarojs/components';
 import { usePlayerStore } from '@/stores/player';
 import { useUserStore } from '@/stores/user';
-import { WUXING } from '@/constants/wuxing';
+import { useContentStore } from '@/stores/content';
 import Icon from '@/components/Icon';
 import type { ElementId } from '@/types';
 import './index.scss';
@@ -30,8 +30,10 @@ export default function Playlist({ open, onClose }: Props) {
   const playMode = usePlayerStore((s) => s.playMode);
   const playAt = usePlayerStore((s) => s.playAt);
   const cyclePlayMode = usePlayerStore((s) => s.cyclePlayMode);
-  const element = useUserStore((s) => s.element) || ('木' as ElementId);
-  const el = WUXING[element];
+  // 与播放器同源：跟随当前曲目所属元素
+  const userElement = useUserStore((s) => s.element);
+  const getElementOfTrack = useContentStore((s) => s.getElementOfTrack);
+  const el = getElementOfTrack(currentTrack, userElement as ElementId | null);
 
   if (!open) return null;
 

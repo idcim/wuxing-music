@@ -175,6 +175,18 @@ LEGACY_ELEMENT_COPY = {
     "水": ("滋肾填精 · 镇静安眠", "水主藏精，肾精充则神宁。羽调音律引气归肾，深度助眠。", "藏精"),
 }
 
+# 曲目标签里的治疗口吻旧值 → 合规说法（v1.8.0）。
+# 与 element 文案不同，这里**按 tag 值全局匹配、不看是哪个元素也不看是不是运营新建的**：
+# 这五个串本身就是要清掉的东西，运营新建的曲目若也填了同样的串，一样得换。
+# 其余 tag（深度睡眠 / 冥想放松 / 助眠减压…）一律不动。
+LEGACY_TRACK_TAGS = {
+    "舒肝解郁": "舒展流动",
+    "清热宁神": "明亮振奋",
+    "健脾安神": "安定承托",
+    "润肺宁神": "空灵清肃",
+    "滋肾安神": "静谧内省",
+}
+
 # 同上：被替换掉的旧测评题（问身体症状，有养生医疗风险），按题干精确匹配后整题替换。
 LEGACY_QUIZ_Q = [
     "您平时睡眠状况如何？",
@@ -288,6 +300,20 @@ def _migrate_wuxing_content(db: Session) -> None:
             row.quality = e["quality"]
 
 
+def _migrate_track_tags(db: Session) -> None:
+    """存量库的曲目标签合规化（v1.8.0）。
+
+    v1.7.0 只给 element 写了迁移，漏了 track——而曲目卡上的 tag 走后端数据优先，
+    于是「舒肝解郁 / 清热宁神」这类治疗口吻一直挂在首页和探律的每张卡上，
+    是全站曝光量最高的位置。
+
+    幂等：只替换 LEGACY_TRACK_TAGS 里的精确旧值，跑几遍结果一样。
+    """
+    rows = db.query(Track).filter(Track.tag.in_(list(LEGACY_TRACK_TAGS))).all()
+    for t in rows:
+        t.tag = LEGACY_TRACK_TAGS[t.tag]
+
+
 def _migrate_quiz_content(db: Session) -> None:
     """存量库的测评题升级（v1.7.0）：把旧的「问身体症状」题库整体换成情绪口径。
 
@@ -355,6 +381,7 @@ def seed(db: Session) -> None:
                 ))
     else:
         _migrate_wuxing_content(db)
+        _migrate_track_tags(db)
 
     # 套餐
     if db.query(Plan).count() == 0:

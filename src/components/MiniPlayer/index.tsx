@@ -3,7 +3,7 @@ import { View, Text, Image } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { usePlayerStore } from '@/stores/player';
 import { useUserStore } from '@/stores/user';
-import { WUXING } from '@/constants/wuxing';
+import { useContentStore } from '@/stores/content';
 import { A } from '@/utils/color';
 import { rpx } from '@/utils/unit';
 import { fmtTime } from '@/utils/format';
@@ -28,7 +28,8 @@ export default function MiniPlayer() {
   const timerVal = usePlayerStore((s) => s.timerVal);
   const pause = usePlayerStore((s) => s.pause);
   const resume = usePlayerStore((s) => s.resume);
-  const element = useUserStore((s) => s.element) || ('木' as ElementId);
+  const userElement = useUserStore((s) => s.element);
+  const getElementOfTrack = useContentStore((s) => s.getElementOfTrack);
 
   const [timerOpen, setTimerOpen] = useState(false);
 
@@ -37,7 +38,8 @@ export default function MiniPlayer() {
   // 这里主要保证「停止播放后清空 currentTrack」不会把待弹的提示一起吞掉。
   if (!currentTrack) return <UpgradePrompt />;
 
-  const el = WUXING[element];
+  // 与全屏播放器同源：跟随曲目所属元素，否则两处颜色会打架
+  const el = getElementOfTrack(currentTrack, userElement as ElementId | null);
   const toggle = () => {
     // 加载失败时按钮变成「重试」，别让用户对着一个没反应的播放键
     if (loadError) { retry(); return; }

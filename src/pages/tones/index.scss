@@ -1,0 +1,196 @@
+@import '../../styles/variables.scss';
+
+.tones {
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 0 $pad-outer 120rpx;
+
+  &__nav {
+    display: flex;
+    align-items: center;
+    padding-bottom: 24rpx;
+  }
+
+  &__back {
+    width: 80rpx;
+    font-size: 56rpx;
+    line-height: 1;
+    color: $text-primary;
+  }
+
+  &__nav-title {
+    flex: 1;
+    text-align: center;
+    font-size: 30rpx;
+    color: $text-primary;
+  }
+
+  &__nav-spacer {
+    width: 80rpx;
+  }
+
+  // ── 五音横轴 ──
+  &__axis {
+    display: flex;
+    margin: 24rpx 0 56rpx;
+  }
+
+  &__axis-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8rpx;
+  }
+
+  &__axis-note {
+    font-size: 44rpx;
+    line-height: 1.2;
+  }
+
+  &__axis-el {
+    font-size: 22rpx;
+  }
+
+  &__axis-dot {
+    width: 10rpx;
+    height: 10rpx;
+    border-radius: 50%;
+    margin-top: 4rpx;
+  }
+
+  // ── 当前音 ──
+  &__hero {
+    margin-bottom: 64rpx;
+  }
+
+  &__hero-note {
+    display: block;
+    font-size: 140rpx;
+    line-height: 1.1;
+  }
+
+  &__hero-line {
+    display: block;
+    margin-top: 12rpx;
+    font-size: 26rpx;
+    letter-spacing: 2rpx;
+  }
+
+  &__hero-mood {
+    display: block;
+    margin-top: 12rpx;
+    font-size: 28rpx;
+    color: $text-primary;
+  }
+
+  &__quote {
+    margin-top: 32rpx;
+    border: 2rpx solid;
+    border-radius: $radius-lg;
+    padding: 32rpx;
+  }
+
+  &__quote-text {
+    display: block;
+    font-size: 28rpx;
+    line-height: 1.9;
+    color: $text-secondary;
+  }
+
+  // ── 分组 ──
+  &__section {
+    margin-bottom: 56rpx;
+  }
+
+  &__section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 16rpx;
+    margin-bottom: 20rpx;
+  }
+
+  &__section-zh {
+    font-size: 28rpx;
+    letter-spacing: 4rpx;
+    color: $text-primary;
+  }
+
+  &__section-en {
+    font-size: 22rpx;
+    letter-spacing: 4rpx;
+    color: $text-quaternary;
+  }
+
+  &__section-note {
+    display: block;
+    margin-bottom: 20rpx;
+    font-size: 20rpx;
+    line-height: 1.7;
+    color: $text-quaternary;
+  }
+
+  &__rows {
+    border-top: 2rpx solid $border;
+  }
+
+  &__row {
+    display: flex;
+    align-items: baseline;
+    gap: 24rpx;
+    padding: 20rpx 0;
+    border-bottom: 2rpx solid $border;
+  }
+
+  &__row-k {
+    flex-shrink: 0;
+    width: 160rpx;
+    font-size: 24rpx;
+    color: $text-tertiary;
+  }
+
+  &__row-v {
+    flex: 1;
+    font-size: 26rpx;
+    line-height: 1.6;
+  }
+
+  // ── 口诀 ──
+  &__mnemonic {
+    padding: 36rpx;
+    border-radius: $radius-lg;
+    background: $surface;
+    border: 2rpx solid $border;
+  }
+
+  &__mnemonic-head {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+    margin-bottom: 20rpx;
+  }
+
+  &__mnemonic-one {
+    display: block;
+    font-size: 26rpx;
+    line-height: 1.9;
+    margin-bottom: 12rpx;
+  }
+
+  &__mnemonic-all {
+    display: block;
+    font-size: 24rpx;
+    line-height: 1.9;
+    letter-spacing: 2rpx;
+    color: $text-quaternary;
+  }
+
+  &__disclaimer {
+    display: block;
+    margin-top: 48rpx;
+    font-size: 20rpx;
+    line-height: 1.8;
+    text-align: center;
+    color: $text-quaternary;
+  }
+}

@@ -254,7 +254,7 @@ function birthText(d: any) {
 // 农历/生肖/本命五行，由后端换算下发
 function lunarText(l: any) {
   if (!l) return '-';
-  return [l.date, l.shengXiao ? `属${l.shengXiao}` : '', l.element ? `${l.dayGan}${l.element}命` : '']
+  return [l.date, l.shengXiao ? `属${l.shengXiao}` : '', l.element ? `${l.dayGan}${l.element}` : '']
     .filter(Boolean)
     .join(' · ');
 }

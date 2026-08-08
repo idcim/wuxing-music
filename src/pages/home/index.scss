@@ -190,6 +190,41 @@
     letter-spacing: 2rpx;
   }
 
+  // ── 今夜之音（情绪转化方向 + 讲法 + 时空意象）──
+  &__tone {
+    border: 2rpx solid;
+    border-radius: 32rpx;
+    padding: 32rpx;
+    margin-bottom: 48rpx;
+  }
+
+  &__tone-head {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+    margin-bottom: 16rpx;
+  }
+
+  &__tone-transform {
+    font-size: 24rpx;
+    letter-spacing: 4rpx;
+  }
+
+  &__tone-text {
+    display: block;
+    font-size: 28rpx;
+    line-height: 1.9;
+    color: $text-secondary;
+  }
+
+  &__tone-scene {
+    display: block;
+    margin-top: 16rpx;
+    font-size: 22rpx;
+    line-height: 1.7;
+    color: $text-quaternary;
+  }
+
   // ── 区块标题 ──
   &__section-head {
     display: flex;

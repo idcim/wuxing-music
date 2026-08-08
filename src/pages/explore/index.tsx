@@ -45,6 +45,11 @@ export default function Explore() {
   }));
 
   const goMember = () => Taro.redirectTo({ url: '/pages/member/index' });
+  const goTones = () =>
+    Taro.navigateTo({ url: `/pages/tones/index?id=${encodeURIComponent(selected)}` });
+
+  // 「疏展、春天、成长、郁结舒开」→ 四个标签
+  const keywords = (we.meta?.keywords || '').split('、').map((s) => s.trim()).filter(Boolean);
 
   const onTrack = (id: number) => {
     const track = we.tracks.find((t) => t.id === id)!;
@@ -127,6 +132,27 @@ export default function Explore() {
                 </Text>
                 <Text className="explore__el-desc">{we.desc}</Text>
               </View>
+            </View>
+
+            {/* 讲法 + 关键词 + 知识页入口。chips 只切元素、信息卡只有一句 desc 时，
+                这套五音体系在探律页基本看不出来。文案见 docs/WUXING-REFERENCE.md */}
+            {!!we.sleepTip && <Text className="explore__el-quote serif">{we.sleepTip}</Text>}
+            {!!keywords.length && (
+              <View className="explore__el-keys">
+                {keywords.map((k) => (
+                  <Text
+                    key={k}
+                    className="explore__el-key"
+                    style={{ background: A.a10(we.primary), color: we.accent }}
+                  >
+                    {k}
+                  </Text>
+                ))}
+              </View>
+            )}
+            <View className="explore__el-more" onClick={goTones}>
+              <Text className="explore__el-more-text" style={{ color: we.accent }}>五音对照</Text>
+              <Icon name="chevronRight" size={24} color={we.accent} strokeWidth={1.5} />
             </View>
           </View>
 

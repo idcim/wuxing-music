@@ -102,6 +102,15 @@
     letter-spacing: 2rpx;
   }
 
+  // 调式 + 音乐气质，比 sub 再弱一档，不跟曲名抢
+  &__mood {
+    display: block;
+    margin-top: 10rpx;
+    font-size: 22rpx;
+    letter-spacing: 2rpx;
+    color: $text-quaternary;
+  }
+
   // ── 进度 ──
   &__progress {
     margin-bottom: 56rpx;

@@ -84,7 +84,7 @@ wuxing-music/
 ├── src/                        # 小程序 / H5 前端（Taro 4 + React 18）
 │   ├── app.config.ts           # 全局配置（页面注册 / 后台音频模式）
 │   ├── app.tsx / app.scss      # 入口 / 全局样式（含 keyframes）
-│   ├── pages/                  # 16 页（均为「页内 TabBar + redirectTo」而非原生 tabBar）
+│   ├── pages/                  # 17 页（均为「页内 TabBar + redirectTo」而非原生 tabBar）
 │   │   ├── splash/             #   启动页
 │   │   ├── onboard/            #   引导页
 │   │   ├── login/              #   登录
@@ -93,6 +93,7 @@ wuxing-music/
 │   │   ├── home/               #   首页（归处 / 本命曲目）
 │   │   ├── explore/            #   探律（五行卡入口）
 │   │   ├── element/            #   单元素详情（下钻曲目列表）
+│   │   ├── tones/              #   五音对照（★ 知识页：角徵宫商羽横轴 + 五组文化维度 + 口诀）
 │   │   ├── member/             #   会员（套餐 / 购买 / 买卡送人）
 │   │   ├── profile/            #   我的
 │   │   ├── userinfo/           #   资料编辑（昵称 / 头像）
@@ -331,7 +332,8 @@ export interface User {
 - 五行完整配置见 `src/constants/wuxing.ts`（含 `bg` 渐变、每元素曲目、`meta` 文化维度）。
 - 测评题库见 `src/constants/quiz.ts`。
 - ⚠️ **`wuxing.ts` 与 `backend/app/seed.py::ELEMENTS` 是同一份数据的两个副本**（后端镜像构建上下文是 `./backend`，读不到前端源码），改一处必须同步另一处；两者的内容基准都是 [`docs/WUXING-REFERENCE.md`](docs/WUXING-REFERENCE.md)。`quiz.ts` 与 `seed.py::QUIZ` 同理。
-- ⚠️ **元素页/探律页/结果页直接 `import { WUXING }`，但读到的可能是后端数据**——`stores/content.ts` 的 `hydrate()` 拉完 `/api/mp/elements` 会**回写 `WUXING[id] = e`**。所以改后台的五行文案对**已发布的旧小程序包也生效**；而 `quiz.ts` 这类纯常量则必须重传包才更新（欠账见 [`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)）。
+- ⚠️ **元素页/探律页/结果页直接 `import { WUXING }`，但读到的可能是后端数据**——`stores/content.ts` 的 `hydrate()` 拉完 `/api/mp/elements` 会**回写 `WUXING[id] = e`**。所以改后台的五行文案（含曲目 tag）对**已发布的旧小程序包也生效**；而 `quiz.ts` 这类纯常量、以及任何页面结构改动则必须重传包才更新（欠账见 [`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)）。
+- ⚠️ **「正在播放」语境一律按曲目所属元素取色，不要用用户体质**：`player` / `MiniPlayer` / `Playlist` 走 `stores/content.ts` 的 `getElementOfTrack(track, 用户体质)`（`track.elementId` → 扫曲库反查 → 兜底体质）。v1.8.0 前这三处都用 `WUXING[用户体质]`，火型用户听水的曲子会显示「徵音」+ 橙色背景。反过来，`TabBar` / `SleepTimer` / `CdkeyModal` 是**身份 chrome**，就该跟用户体质走，别一起改掉。
 
 ------
 
@@ -346,6 +348,25 @@ const top = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
 ```
 
 ⚠️ **题干只问情绪状态与感受偏好，不问身体症状**。v1.7.0 之前第 3 题是「您身体哪方面最需要调理？肝胆 · 眼睛 · 筋骨紧张」——那是问诊式题干，平台会判为养生医疗。现四题分别取材于 [`docs/WUXING-REFERENCE.md`](docs/WUXING-REFERENCE.md) 的**情绪失衡表现 / 情绪转化方向 / 音乐气质 / 适合画面**四行。加题改题照这个口径来。
+
+### 1.5 五音理念的展现位（v1.8.0）
+
+数据做完不等于产品做完 —— v1.7.0 把 33 项维度落了库，但只在「元素详情」这个二级页露出，
+主路径上等于不存在。现在的分布是：
+
+| 位置 | 展现内容 |
+| ---- | -------- |
+| `pages/home/` 「今夜之音」 | `meta.transform` + `sleepTip` + `meta.timeFeel · meta.imagery`（落地页第一屏） |
+| `pages/explore/` 信息卡 | `sleepTip` 引文 + `meta.keywords` chips + 「五音对照 ›」入口 |
+| `pages/player/` | `meta.mode · meta.musicMood`（按曲目所属元素） |
+| `pages/element/` | 8 项文化网格 |
+| `pages/tones/` ★ | 全部维度，分声音/天地/身心/心境/象征五组 + 口诀 + 免责 |
+| `pages/result/` | `meta.transform` + `sleepTip` + 免责 |
+
+`pages/tones/` 的分组由文件顶部的 `SECTIONS` 常量表驱动（`[中文名, keyof ElementMeta]`），
+**后台把某项清空，那一行自动消失**；加维度只改这张表，别写 JSX 分支。
+其中「身心对照」组固定带一行「以下为传统文化中的对应关系，非医学诊断或疗效说明」，
+是 [`docs/WUXING-REFERENCE.md`](docs/WUXING-REFERENCE.md) 第一节第 2 条的硬约束，不要删。
 
 ### 2. 音频播放 `services/audio/`（分端）
 
@@ -800,7 +821,7 @@ ZEROER-GIFT-7DAY      → 7日体验卡
 
 ------
 
-**最后更新**：飞书《五音对照知识》落地为 `docs/WUXING-REFERENCE.md`；五行新增 `meta` 文化维度（JSON 列）；五行文案与测评题按合规口径重写。
-**当前版本**：v1.7.0（见根 `version.json`）。
+**最后更新**：把五音理念铺到主路径（首页「今夜之音」/ 探律讲法与关键词 / 播放器调式）；新增「五音对照」页；播放器按曲目所属元素取色；曲目标签合规迁移。
+**当前版本**：v1.8.0（见根 `version.json`）。
 **当前阶段**：小程序 + H5（微信内）前端、后端管理/公开接口、管理后台均已完成，三容器已上服务器且推 `master` 即自动部署；微信支付/公众号授权/短信/OSS 待真实配置上线验证。
 ⚠️ **小程序包不随自动部署**，欠账（合法域名、待真机验证项、未接的微信原生能力、审核合规）单独记在 [`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)。

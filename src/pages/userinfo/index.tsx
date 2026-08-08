@@ -288,7 +288,7 @@ export default function UserInfo() {
               {[
                 user.lunar.date,
                 user.lunar.shengXiao ? `属${user.lunar.shengXiao}` : '',
-                user.lunar.element ? `${user.lunar.dayGan}${user.lunar.element}命` : ''
+                user.lunar.element ? `${user.lunar.dayGan}${user.lunar.element}` : ''
               ].filter(Boolean).join(' · ')}
             </Text>
           </View>

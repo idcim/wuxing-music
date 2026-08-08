@@ -53,6 +53,7 @@ export default function Profile() {
 
   const retakeQuiz = () => Taro.navigateTo({ url: '/pages/quiz/index' });
   const goAbout = () => Taro.navigateTo({ url: '/pages/about/index' });
+  const goTones = () => Taro.navigateTo({ url: '/pages/tones/index' });
   const goSettings = () => Taro.navigateTo({ url: '/pages/settings/index' });
   const goLogin = () => Taro.navigateTo({ url: '/pages/login/index' });
   const goHistory = () => Taro.navigateTo({ url: '/pages/history/index' });
@@ -115,6 +116,7 @@ export default function Profile() {
   const featureMenu: MenuItem[] = [
     { icon: 'keyRound', text: '兑换码 / CDKEY', onClick: () => setCdkeyOpen(true), highlight: true },
     { icon: 'sparkles', text: element ? '重新测评体质' : '立即测评体质', onClick: retakeQuiz },
+    { icon: 'music2', text: '五音对照', onClick: goTones },
     { icon: 'messageCircle', text: '关于我们', onClick: goAbout },
     { icon: 'settings', text: '设置', onClick: goSettings }
   ];

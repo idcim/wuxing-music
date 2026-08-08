@@ -832,6 +832,8 @@ def _track_dict(t: Track, counts: dict | None = None) -> dict:
         plays = _format_plays(_parse_plays(t.plays) + counts.get(t.id, 0))
     return {
         "id": t.id,
+        # 播放器要按「正在听的这首曲」所属元素取音名与配色，不能拿用户体质顶替
+        "elementId": t.element_id,
         "title": t.title,
         "duration": t.duration,
         "durationSec": t.duration_sec,
