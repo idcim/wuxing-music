@@ -153,7 +153,7 @@ export default function Tones() {
           {el.note}
         </Text>
         <Text className="tones__hero-line" style={{ color: el.accent }}>
-          {[`${el.id}· ${el.en}`, el.meta?.notation, el.meta?.mode]
+          {[`${el.id} · ${el.en}`, el.meta?.notation, el.meta?.mode]
             .filter(Boolean)
             .join(' · ')}
         </Text>
