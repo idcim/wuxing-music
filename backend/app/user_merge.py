@@ -83,9 +83,9 @@ _OWNED = [
 ]
 
 # keep 为空时才从 drop 搬过来的标量字段。刻意不含 openid：
-# 它有唯一约束，两条行各有各的值，搬过去必然撞键；unionid / oa_openid 才是要补的。
+# 它有唯一约束，两条行各有各的值，搬过去必然撞键；unionid / oa_openid / web_openid 才是要补的。
 _FILL_IF_EMPTY = [
-    "unionid", "oa_openid", "phone", "password_hash",
+    "unionid", "oa_openid", "web_openid", "phone", "password_hash",
     "birthday", "birth_hour", "element", "element_scores", "quiz_completed_at",
     "agent_id", "agent_bound_at", "avatar",
 ]
@@ -136,10 +136,11 @@ def merge_users(
         keep.membership_source = drop.membership_source
         detail["membership"] = "drop"
 
-    # 4) 立碑：清掉 drop 的 unionid / oa_openid，避免它再被任何匹配路径命中；
+    # 4) 立碑：清掉 drop 的 unionid / oa_openid / web_openid，避免它再被任何匹配路径命中；
     #    openid 保留（唯一约束占着，也便于追溯这条行原本是谁）
     drop.unionid = ""
     drop.oa_openid = ""
+    drop.web_openid = ""
     drop.merged_into = keep.id
 
     db.add(UserMergeLog(
@@ -158,10 +159,11 @@ def resolve_login(
     unionid: str,
     openid: str = "",
     oa_openid: str = "",
+    web_openid: str = "",
 ) -> User | None:
     """按一次微信授权拿到的标识解析用户，顺带把撞上的重复账号并掉。
 
-    匹配顺序仍是 unionid > openid / oa_openid。区别在于：**两边都命中且不是同一行时
+    匹配顺序仍是 unionid > openid / oa_openid / web_openid。区别在于：**两边都命中且不是同一行时
     就地合并**——这正是绑定开放平台后老用户第一次跨端登录的那一刻，
     也是唯一能把两条行认成一个人的时机。错过它，另一条行就永远搁浅了。
     """
@@ -175,6 +177,8 @@ def resolve_login(
         by_open = db.query(User).filter(User.openid == openid).first()
     if by_open is None and oa_openid:
         by_open = db.query(User).filter(User.oa_openid == oa_openid).first()
+    if by_open is None and web_openid:
+        by_open = db.query(User).filter(User.web_openid == web_openid).first()
     by_open = resolve_user(db, by_open)
 
     merged = False
@@ -198,6 +202,9 @@ def resolve_login(
         changed = True
     if oa_openid and not user.oa_openid:
         user.oa_openid = oa_openid
+        changed = True
+    if web_openid and not user.web_openid:
+        user.web_openid = web_openid
         changed = True
 
     if merged or changed:

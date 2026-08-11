@@ -187,7 +187,7 @@ wuxing-music/
 
 **登录约定（小程序）**：`wxLogin()` 取 `wx.login()` 的临时 `code` + 稳定游客 openid 一起发给 `/api/mp/login`；后端配置了 AppSecret 时用 `code` 调 `jscode2session` 换真实 openid，否则回退前端直传的稳定 openid（保证游客态身份不漂移）。**切勿把每次都变的 `code` 当 openid 用**。
 
-**登录约定（H5，v1.1）**：按平台分支（`utils/platform.ts` 的 `isH5`/`isInWeChat`）。手机登录（`loginByPhone`/`loginByPassword`）平台无关。微信登录 `wechatLoginH5()` 走公众号网页授权：无 `code` → 取 `/api/mp/h5/oauth-url` 跳转授权；带 `code` 回跳 → `/api/mp/h5/login` 换 `oa_openid`（`app.tsx` 在微信内静默触发并清理 URL）。**安全约束**：`/api/mp/login`（小程序）与 `/api/mp/h5/login`（H5）均——已配置密钥时**必须用真实 `code` 换 openid、忽略前端直传标识**，仅未配置时才用游客标识走 dev 兜底（防绕过授权/顶号）；手机号合成 openid `phone:<手机号>` 不可经 openid 直信路径登录（详见 [`docs/ROADMAP.md`](docs/ROADMAP.md) 安全加固清单）。
+**登录约定（H5，v1.1）**：按平台分支（`utils/platform.ts` 的 `isH5`/`isInWeChat`）。手机登录（`loginByPhone`/`loginByPassword`）平台无关。微信登录 `wechatLoginH5()` 走公众号网页授权：无 `code` → 取 `/api/mp/h5/oauth-url` 跳转授权；带 `code` 回跳 → `/api/mp/h5/login` 换 `oa_openid`（`app.tsx` 在微信内静默触发并清理 URL）。**安全约束**：`/api/mp/login`（小程序）、`/api/mp/h5/login`（公众号）与 `/api/mp/h5/qrlogin`（浏览器扫码）均——已配置密钥时**必须用真实 `code` 换 openid、忽略前端直传标识**，仅未配置时才用游客标识走 dev 兜底（防绕过授权/顶号）；手机号合成 openid `phone:<手机号>` 不可经 openid 直信路径登录（详见 [`docs/ROADMAP.md`](docs/ROADMAP.md) 安全加固清单）。
 
 **`DEBUG` 开关（后端，`backend/app/config.py`）** ⚠️：所有 dev fail-open 兜底（短信回传明文 `devCode`、未配商户时免付直开会员、登录游客兜底、种子公开测试 CDKEY）**统一由 `DEBUG` gate**——`DEBUG=false`（生产）时未配真实密钥一律**拒绝**而非放行；且 `JWT_SECRET` 仍是默认值时**后端拒绝启动**（`main.py` lifespan 守卫）。新增任何「未配置就放行」的兜底逻辑，必须挂在 `settings.debug` 下。
 ## 品牌名与副标题（v1.10.0 起，唯一来源是后台）
@@ -534,6 +534,8 @@ POST /api/mp/login/password     # 手机号 + 密码登录
 POST /api/mp/set-password       # 设置/改密码（需登录）
 GET  /api/mp/h5/oauth-url       # 公众号网页授权跳转地址（未配→configured:false）
 POST /api/mp/h5/login           # 公众号 code 换 openid 登录（未配→guestId dev 兜底）
+GET  /api/mp/h5/qrlogin-url     # ★ 微信扫码登录跳转地址（开放平台网站应用；未配→configured:false）
+POST /api/mp/h5/qrlogin         # ★ 扫码 code 换 web_openid 登录（微信外浏览器）
 GET  /api/mp/h5/jssdk-config    # wx.config 签名（JSAPI 支付 / 分享）
 GET  /api/mp/profile            # 我的资料
 PATCH|POST /api/mp/profile      # 改昵称/头像/生日/时辰（同时支持 POST 规避代理对 PATCH 的 405）
@@ -600,7 +602,8 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 
 ## 后端数据模型（`backend/app/models.py`，SQLAlchemy）
 
-> 早期文档写的是手工 MySQL DDL；**实际由 SQLAlchemy 模型声明，启动自动建表 + 种子数据**（`main.py::_auto_migrate` 会为已存在的表自动补加新列）。以下为 13 张表要点（`order` 是 MySQL 保留字，订单表名 `app_order`）：
+> 早期文档写的是手工 MySQL DDL；**实际由 SQLAlchemy 模型声明，启动自动建表 + 种子数据**（`main.py::_auto_migrate` 会为已存在的表自动补加新列）。
+> ⚠️ **`_auto_migrate` 只补列、不建索引**。所以模型上写了 `index=True` 的列，在**存量库**里其实没有索引（`oa_openid` / `web_openid` / `phone` / `agent_id` 等凡是后加的都一样），查询会走全表扫描。表不大时无所谓，真需要时得手工建（可参照 `_fix_commission_index()` 那种幂等写法）。别看模型上有 `index=True` 就以为线上有。以下为 13 张表要点（`order` 是 MySQL 保留字，订单表名 `app_order`）：
 
 | 表 | 说明 | 关键字段 |
 | -- | ---- | -------- |
@@ -609,7 +612,7 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 | `element` | 五行配置（id=木火土金水） | primary/accent/glow/bg、note/organ/season、sleep_tip、**meta**（JSON，33 项文化对照维度；后台一个 JSON 文本框编辑，前后端各校验一次格式，`/api/mp/elements` 解析失败降级 `{}`） |
 | `track` | 曲目 | element_id(FK)、hz、audio_url、cover_url、is_premium、preview_sec、is_online |
 | `plan` | 套餐 | id(free/month/year/trial)、price、duration_days、features(JSON) |
-| `user` | 用户 | openid/unionid/**oa_openid**/**merged_into**（非空=已并入他行，登录与鉴权跟指针走）/phone/**password_hash**、element、**birthday/birth_hour**、**agent_id/agent_bound_at**（代理归因，永久绑定）、membership_type/name/expire_at/source |
+| `user` | 用户 | openid/unionid/**oa_openid**/**web_openid**（开放平台网站应用，扫码登录）/**merged_into**（非空=已并入他行，登录与鉴权跟指针走）/phone/**password_hash**、element、**birthday/birth_hour**、**agent_id/agent_bound_at**（代理归因，永久绑定）、membership_type/name/expire_at/source |
 | `cdkey` | 兑换码 | code、batch_id、plan_type、status(unused/used/disabled/expired) |
 | `cdkey_redeem_log` | 兑换日志 | user_id、cdkey_id、ip、device |
 | `app_order` | 订单 | order_no、status(pending/paid/refunding/refunded…)、**is_gift/gift_code**、**refund_*** |
@@ -660,7 +663,7 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 **怎么从外部确认部署生效**（不用登服务器）：`GET /api/health` 是公开免鉴权的，返回
 
 ```json
-{"code":0,"data":{"status":"ok","version":"1.10.0","api":"1.3.0",
+{"code":0,"data":{"status":"ok","version":"1.11.0","api":"1.3.0",
                   "commit":"a7d46ea","builtAt":"…","startedAt":"…"},"msg":"ok"}
 ```
 
@@ -671,7 +674,7 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 
 ### 版本
 
-根 `version.json` 是**机读的唯一版本源**（`current.app` / `current.api` + 各端 `channels` + `changelog`），前端常量 `src/constants/version.ts` 与之对齐，APP 更新接口契约见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。**当前 v1.10.0**。发版时同步改**五处**：`version.json`、`package.json`、`src/constants/version.ts`、**`backend/app/version.py`**、`docs/ROADMAP.md`（v1.2.0 曾漏改 `version.ts` 的 `API_VERSION`）。
+根 `version.json` 是**机读的唯一版本源**（`current.app` / `current.api` + 各端 `channels` + `changelog`），前端常量 `src/constants/version.ts` 与之对齐，APP 更新接口契约见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。**当前 v1.11.0**。发版时同步改**五处**：`version.json`、`package.json`、`src/constants/version.ts`、**`backend/app/version.py`**、`docs/ROADMAP.md`（v1.2.0 曾漏改 `version.ts` 的 `API_VERSION`）。
 
 > 后端为什么另存一份而不读 `version.json`：后端镜像的构建上下文是 `./backend`（见 `docker-compose.yml`），根目录的 `version.json` **进不到容器里**。这份重复是为了让 `/api/health` 能报版本，代价是发版多改一处。
 
@@ -767,7 +770,8 @@ iOS 端订阅类商品**必须走 Apple IAP**（苹果抽 30%，禁止引导外�
 7. 真机调试音频问题多，模拟器不可信；iOS 弱网首次加载慢，需 loading 态。
 8. 小程序 `style` 不支持全部 CSS：`backdrop-filter` / `radial-gradient` 需在 `.scss` 里验证；跨端另见上表。
 9. **H5 微信 JS-SDK 签名**：`wx.config` 签名 URL 必须去掉 `#hash`（Taro H5 是 hash 路由，`services/wechat/index.h5.ts` 已 `split('#')[0]`）。iOS 微信对 SPA 用「首次进入页面的 URL」签名，若 SPA 路由跳转后支付签名失效，需用进入时缓存的 entry URL 重签。
-10. **H5 登录/支付仅微信内可用**：走公众号网页授权 + JSAPI；外部浏览器（Safari/Chrome）暂不支持（未来加 H5 MWEB / 扫码，见 ROADMAP）。H5 联调需在公众号后台配「网页授权域名」「JS 安全域名」，商户后台绑定公众号 appid。
+10. **H5 支付仅微信内可用**（登录已不是，v1.11.0 起浏览器可扫码登录）：支付走公众号 JSAPI，外部浏览器需要 MWEB，**尚未接** —— 浏览器里扫码登录后能听曲/兑换，但点购买会失败。
+    ⚠️ **微信 OAuth 的 `redirect_uri` 不能带 hash**：微信把 `?code=..&state=..` 拼在末尾，而 Taro H5 是 hash 路由，code 会落进 fragment，`location.search` 读不到、登录静默失败且毫无线索。扫码那条已改为只传 `origin + pathname`、回跳由 `app.tsx` 全局接管；**公众号那条 `wechatLoginH5` 仍用含 hash 的 `u.href`，配真实 AppSecret 时先验这一条**。H5 联调需在公众号后台配「网页授权域名」「JS 安全域名」，商户后台绑定公众号 appid。
 11. **公众号 openid ≠ 小程序 openid**：跨端同一用户靠开放平台 UnionID 打通；`user.oa_openid` 专供 H5 JSAPI 支付 payer。
 12. **行内样式禁止直接写 `rpx`**：`rpx` 只有写在 `.scss` 里才会被 postcss-pxtransform 换算；写在 `.tsx` 的 `style={{}}` 里不过 postcss，H5 下浏览器判定为非法值并**丢弃整条声明**——元素塌成 0×0（图标全部消失）、`border` / `box-shadow` 直接失效。一律用 `src/utils/unit.ts` 的 `rpx(n)`（weapp 编译成 `${n}rpx`，H5 换算成 rem）。不要用 `Taro.pxTransform`：它内部 `~~` 取整，会截断 splash 星点这类小数尺寸。
 13. **H5 全局底色要改两处，缺一仍是白底**：① H5 没有 `page` 元素（页面容器是 `div.taro_page`），postcss-html-transform 只把 `view/text/button` 等小程序标签映射成 `taro-*-core`，**不会**把 `page` 映射成 `body`——全局样式必须写 `page, body { ... }`，否则底色/文字色整个失效。② 更关键：Taro H5 路由**运行时**往 `<head>` 注入 `.taro_router > .taro_page { background-color: #fff }`，这层盖在 `body` 之上，只补 `body` 看不出任何变化，没写自身背景的页（首页/探律/会员/我的/result/element/player）照旧白底。注入的 style 排在 `<link>` 之后、同权重会赢，必须**提权**覆盖：`body .taro_router > .taro_page { background-color: $bg-deep }`（保持不透明，否则左右滑动切页时前后两页内容互相透出）。`app.config.ts` 的 `window.backgroundColor` 在 H5 只作用于导航栏，**不管** `.taro_page`。小程序端这两条里的 `body` 均编译成 `.h5-body`，无匹配元素，无副作用。
@@ -862,7 +866,7 @@ ZEROER-GIFT-7DAY      → 7日体验卡
 
 ------
 
-**最后更新**：品牌名与副标题改由后台站点设置统一下发（全端去硬编码）；支付设置补齐 H5 段；设置中心新增「开放平台」配置。
-**当前版本**：v1.10.0（见根 `version.json`）。
+**最后更新**：H5 在微信外浏览器支持微信扫码登录（开放平台「网站应用」），`user` 表新增 `web_openid`。
+**当前版本**：v1.11.0（见根 `version.json`）。
 **当前阶段**：小程序 + H5（微信内）前端、后端管理/公开接口、管理后台均已完成，三容器已上服务器且推 `master` 即自动部署；微信支付/公众号授权/短信/OSS 待真实配置上线验证。
 ⚠️ **小程序包不随自动部署**，欠账（合法域名、待真机验证项、未接的微信原生能力、审核合规）单独记在 [`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)。

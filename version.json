@@ -1,17 +1,17 @@
 {
   "current": {
-    "app": "1.10.0",
+    "app": "1.11.0",
     "api": "1.3.0"
   },
   "channels": {
     "weapp": {
-      "version": "1.10.0",
+      "version": "1.11.0",
       "published": "unconfirmed",
       "note": "version 为源码版本；线上已发布的包版本待人工确认（不随服务器自动部署，需 build:weapp + 开发者工具上传）。发布后请把实际版本填进 published。欠账清单见 docs/WEAPP-TODO.md"
     },
     "h5": {
-      "version": "1.10.0",
-      "note": "H5（微信内）端，随 master 自动部署"
+      "version": "1.11.0",
+      "note": "H5 端，随 master 自动部署。微信内走公众号授权，微信外浏览器走开放平台扫码登录"
     },
     "android": {
       "version": "",
@@ -29,6 +29,21 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.11.0",
+      "date": "2026-08-11",
+      "notes": [
+        "H5 在微信外浏览器（Safari / Chrome）支持微信扫码登录，走开放平台「网站应用」的 qrconnect",
+        "此前浏览器里那个「微信登录」按钮是断的——它走的是公众号 snsapi_base，在微信外只会提示「请在微信客户端打开」",
+        "新增 GET /api/mp/h5/qrlogin-url 与 POST /api/mp/h5/qrlogin；user 表新增 web_openid（第三种 openid，与小程序/公众号互不相通）",
+        "身份匹配 unionid > web_openid，复用 v1.9.0 的跨端合并：扫码先建的行会在下次小程序登录时并回老账号",
+        "state 带一次性 nonce 防登录 CSRF（攻击者把自己的 code 塞给受害者，让其登录成攻击者账号）",
+        "⚠️ redirect_uri 不能带 hash：微信把 ?code= 拼在末尾，Taro H5 是 hash 路由的话 code 会落进 fragment，location.search 读不到。故回跳落地是站点根路由，由 app.tsx 全局接管",
+        "开放平台配置的 AppID/AppSecret 语义明确为「网站应用」，并从「不参与登录逻辑」改为扫码登录的凭据；未配置时浏览器端不渲染扫码入口",
+        "⚠️ 前置条件：开放平台开发者资质认证 + 创建「网站应用」并通过审核 + 配置授权回调域（填 H5 站点域名）",
+        "⚠️ 微信外浏览器仍无法支付（MWEB 未接），扫码登录后可听曲、兑换 CDKEY，但买不了会员"
+      ]
+    },
     {
       "version": "1.10.0",
       "date": "2026-08-11",

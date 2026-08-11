@@ -124,6 +124,9 @@ class User(Base):
     openid: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     unionid: Mapped[str] = mapped_column(String(64), default="", index=True)
     oa_openid: Mapped[str] = mapped_column(String(64), default="", index=True)  # 公众号 openid（H5 网页授权/JSAPI 支付 payer）
+    # 开放平台「网站应用」openid（微信外浏览器的扫码登录）。这是第三种 openid——
+    # 小程序、公众号、网站应用各有各的 openid，互不相通，只有 unionid 能串起来。
+    web_openid: Mapped[str] = mapped_column(String(64), default="", index=True)
     # 非空表示这条行已被合并进 merged_into 指向的行（接入微信开放平台后，
     # 同一个人在小程序与公众号各留了一条账号，靠 unionid 认出来并入一条）。
     # 行不删除：订单等历史仍指着它，删了不好追溯；登录与鉴权时跟着指针走。

@@ -5,7 +5,7 @@ import { useContentStore } from '@/stores/content';
 import { usePlayerStore } from '@/stores/player';
 import { useSiteStore } from '@/stores/site';
 import { isH5, isInWeChat } from '@/utils/platform';
-import { getToken } from '@/services/auth';
+import { getToken, hasQrLoginCallback } from '@/services/auth';
 import { captureAgentCode } from '@/services/agent';
 import './app.scss';
 
@@ -32,6 +32,26 @@ function App({ children }: PropsWithChildren) {
 //   （wechatLoginH5 内部自行处理「带 code 换取 / 无 code 跳授权」）。
 // - 其它端 / 已登录 → 常规缓存恢复。小程序端绝不触发 H5 逻辑。
 async function bootstrapAuth(): Promise<void> {
+  // 微信外浏览器的扫码授权回跳。为什么在这儿而不是登录页：qrconnect 的 redirect_uri
+  // 不能带 hash（微信把 ?code=.. 拼在末尾，带 hash 就落进 fragment 里读不到），
+  // 所以回跳落地是站点根路由而非发起授权的登录页，只能全局接管。
+  if (isH5 && !isInWeChat && hasQrLoginCallback()) {
+    try {
+      const { user } = await useUserStore.getState().loginByWechatQr();
+      if (user) {
+        cleanOAuthParams();
+        Taro.reLaunch({ url: '/pages/home/index' });
+        return;
+      }
+    } catch (e: any) {
+      // code 一次性，失败后必须抹掉，否则刷新永远是同一个错
+      cleanOAuthParams();
+      Taro.showToast({ title: e?.message || '扫码登录失败，请重试', icon: 'none' });
+    }
+    useUserStore.getState().initFromCache();
+    return;
+  }
+
   if (isH5 && isInWeChat && !getToken()) {
     try {
       const { user, devGuest } = await useUserStore.getState().loginByWechatH5();

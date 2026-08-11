@@ -540,6 +540,110 @@ def h5_login(body: H5LoginIn, db: Session = Depends(get_db)):
     return ok({"token": token, "user": _user_dict(user)})
 
 
+# ── 微信扫码登录（开放平台「网站应用」/ 微信外浏览器）──
+#
+# 用的是**开放平台网站应用**的 appid/secret（后台「设置中心 → 开放平台」），
+# 既不是小程序的也不是公众号的。三者的 openid 互不相通，只有 unionid 能串起来——
+# 而网站应用天然挂在开放平台账号下，授权返回里就带 unionid，所以扫码登录进来的人
+# 只要在别的端登录过，就能被 resolve_login 认出来并合并。
+#
+# 前置条件（运营侧，缺一不可）：开放平台开发者资质认证 → 创建「网站应用」并通过审核
+# → 在该应用里配置「授权回调域」（填域名，不带协议与路径）。详见 docs/OPEN-PLATFORM.md。
+def _open_cfg(db: Session) -> dict:
+    row = db.query(Setting).filter(Setting.key == "open_config").first()
+    return json.loads(row.value) if row and row.value else {}
+
+
+@router.get("/h5/qrlogin-url")
+def h5_qrlogin_url(redirect: str, nonce: str = "", db: Session = Depends(get_db)):
+    """返回微信扫码登录（qrconnect）跳转地址。未配网站应用则 configured=False。
+
+    scope 必须是 snsapi_login——这是网站应用专用的 scope，公众号那套 snsapi_base
+    在微信外浏览器打开只会提示「请在微信客户端打开」。
+
+    state 拼成 `wxqr.<nonce>`：微信会原样回传，前端拿它比对本地存的一次性随机串，
+    挡住「攻击者把自己的授权 code 塞给受害者、让受害者登录成攻击者账号」这类
+    登录 CSRF。nonce 只在前端生成与校验，服务端不存——它防的是链接被伪造，
+    不是防重放（code 本身微信就只允许用一次）。
+    """
+    from urllib.parse import quote
+
+    cfg = _open_cfg(db)
+    app_id = cfg.get("app_id")
+    if not app_id:
+        return ok({"url": "", "configured": False})
+    # 只放行安全字符，避免把任意内容拼进跳转 URL
+    safe_nonce = re.sub(r"[^A-Za-z0-9]", "", nonce or "")[:32]
+    state = f"wxqr.{safe_nonce}" if safe_nonce else "wxqr"
+    url = (
+        "https://open.weixin.qq.com/connect/qrconnect"
+        f"?appid={app_id}&redirect_uri={quote(redirect, safe='')}"
+        f"&response_type=code&scope=snsapi_login&state={state}#wechat_redirect"
+    )
+    return ok({"url": url, "configured": True})
+
+
+class QrLoginIn(BaseModel):
+    code: str = ""       # 扫码授权回跳带的 code
+    guestId: str = ""    # 未配网站应用时的 dev 兜底稳定标识
+
+
+@router.post("/h5/qrlogin")
+def h5_qrlogin(body: QrLoginIn, db: Session = Depends(get_db)):
+    """微信扫码登录：用 code 换网站应用 openid(+unionid)。
+    身份匹配：unionid > web_openid > 新建。"""
+    cfg = _open_cfg(db)
+    app_id = cfg.get("app_id")
+    app_secret = cfg.get("app_secret")
+    configured = bool(app_id and app_secret)
+
+    web_openid = ""
+    unionid = ""
+    if configured:
+        # 与公众号同一条铁律：已配密钥时必须用真实 code 换取，绝不接受前端直传标识
+        if not body.code:
+            raise HTTPException(status_code=400, detail="缺少授权 code")
+        # 换取接口与公众号网页授权是同一个（sns/oauth2/access_token），只是换成网站应用的凭据
+        sess = _oauth2_access_token(app_id, app_secret, body.code)
+        web_openid = sess.get("openid", "")
+        unionid = sess.get("unionid", "")
+        if not web_openid:
+            raise HTTPException(status_code=400, detail="微信授权失败，请重试")
+    else:
+        if not settings.debug:
+            raise HTTPException(status_code=503, detail="扫码登录未配置")
+        web_openid = (body.guestId or "").strip()
+        if not web_openid:
+            raise HTTPException(status_code=400, detail="缺少登录凭证")
+
+    user = resolve_login(db, unionid, web_openid=web_openid)
+
+    if not user:
+        user = User(
+            openid=web_openid,      # 新建时 openid 用网站应用 openid 填充（满足 NOT NULL/unique）
+            web_openid=web_openid,
+            unionid=unionid,
+            nickname=_default_nickname(),
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    else:
+        changed = False
+        if not user.web_openid:
+            user.web_openid = web_openid
+            changed = True
+        if unionid and not user.unionid:
+            user.unionid = unionid
+            changed = True
+        if changed:
+            db.commit()
+            db.refresh(user)
+
+    token = create_user_token(user.id)
+    return ok({"token": token, "user": _user_dict(user)})
+
+
 # 公众号 access_token / jsapi_ticket 缓存（与小程序 _access_token_cache 独立）
 _oa_token_cache = {"token": "", "exp": 0.0}
 _oa_ticket_cache = {"ticket": "", "exp": 0.0}

@@ -4,7 +4,7 @@ import Taro, { useDidShow } from '@tarojs/taro';
 import Icon from '@/components/Icon';
 import { useUserStore } from '@/stores/user';
 import { useSiteStore } from '@/stores/site';
-import { sendSmsCode } from '@/services/auth';
+import { sendSmsCode, isQrLoginConfigured } from '@/services/auth';
 import { isWeapp, isInWeChat } from '@/utils/platform';
 import './index.scss';
 
@@ -22,6 +22,7 @@ export default function Login() {
   const loginByPhone = useUserStore((s) => s.loginByPhone);
   const loginByPassword = useUserStore((s) => s.loginByPassword);
   const loginByWechatH5 = useUserStore((s) => s.loginByWechatH5);
+  const loginByWechatQr = useUserStore((s) => s.loginByWechatQr);
 
   // 微信内以微信登录为主入口；外部浏览器完不成公众号授权，仍以手机号登录为主
   const [mode, setMode] = useState<LoginMode>(isInWeChat ? 'wechat' : 'phone');
@@ -31,6 +32,9 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [countdown, setCountdown] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  // 微信外浏览器：后端配了开放平台网站应用才显示扫码入口。
+  // 微信内不用问，公众号那条路一直都在。
+  const [qrReady, setQrReady] = useState(isInWeChat);
 
   // 已登录用户直接跳走
   useDidShow(() => {
@@ -38,6 +42,11 @@ export default function Login() {
       Taro.reLaunch({ url: '/pages/home/index' });
     }
   });
+
+  useEffect(() => {
+    if (isInWeChat) return;
+    isQrLoginConfigured().then(setQrReady);
+  }, []);
 
   // 发送验证码倒计时
   useEffect(() => {
@@ -111,18 +120,22 @@ export default function Login() {
   };
 
   // ── H5：微信登录 ──
+  // 微信内走公众号网页授权；微信外浏览器走开放平台网站应用的扫码登录。
+  // 公众号那套 snsapi_base 在浏览器里打开只会显示「请在微信客户端打开」，不能共用。
   const onWechatLogin = async () => {
     if (submitting) return;
     setSubmitting(true);
     try {
-      const { user, devGuest } = await loginByWechatH5();
+      const { user, devGuest } = isInWeChat ? await loginByWechatH5() : await loginByWechatQr();
       // user 为 null：正在跳转微信授权页，页面即将卸载，无需处理
       if (!user) return;
       // 开发游客兜底（公众号未配置）：醒目弹窗，避免误以为是真实微信登录
       if (devGuest) {
         await Taro.showModal({
           title: '开发环境提示',
-          content: '公众号未配置，当前为「游客登录」，并非真实微信登录。配置公众号 AppID/Secret 并关闭后端 DEBUG 后，此处将走真实微信授权。',
+          content: isInWeChat
+            ? '公众号未配置，当前为「游客登录」，并非真实微信登录。配置公众号 AppID/Secret 并关闭后端 DEBUG 后，此处将走真实微信授权。'
+            : '开放平台「网站应用」未配置，当前为「游客登录」，并非真实微信登录。在后台「设置中心 → 开放平台」配好 AppID/AppSecret 并关闭后端 DEBUG 后，此处将走真实扫码授权。',
           showCancel: false,
           confirmText: '知道了'
         });
@@ -284,11 +297,15 @@ export default function Login() {
           <Text className="login__btn-text">{submitting ? '登录中…' : '登录 / 注册'}</Text>
         </View>
 
-        {/* 微信登录 */}
-        <View className="login__wechat" onClick={onWechatLogin}>
-          <Icon name="messageCircle" size={36} color="#84cc16" strokeWidth={2} />
-          <Text className="login__wechat-text">微信登录</Text>
-        </View>
+        {/* 微信登录：微信内是网页授权，浏览器里是扫码 */}
+        {qrReady && (
+          <View className="login__wechat" onClick={onWechatLogin}>
+            <Icon name="messageCircle" size={36} color="#84cc16" strokeWidth={2} />
+            <Text className="login__wechat-text">
+              {isInWeChat ? '微信登录' : '微信扫码登录'}
+            </Text>
+          </View>
+        )}
 
         <Text className="login__terms">登录即同意服务条款与隐私政策</Text>
       </View>

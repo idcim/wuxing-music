@@ -9,6 +9,7 @@ import {
   loginByPhone as apiLoginByPhone,
   loginByPassword as apiLoginByPassword,
   wechatLoginH5 as apiWechatLoginH5,
+  wechatQrLoginH5 as apiWechatQrLoginH5,
   type WechatH5LoginResult
 } from '@/services/auth';
 import { bindPendingAgent } from '@/services/agent';
@@ -28,6 +29,7 @@ interface UserStore {
   loginByPhone: (phone: string, code: string) => Promise<User>;
   loginByPassword: (phone: string, password: string) => Promise<User>;
   loginByWechatH5: () => Promise<WechatH5LoginResult>;
+  loginByWechatQr: () => Promise<WechatH5LoginResult>;
   initFromCache: () => Promise<void>;
   logout: () => void;
 }
@@ -127,6 +129,13 @@ export const useUserStore = create<UserStore>((set, get) => ({
   // H5：微信网页授权登录（user 为 null 表示正跳转授权页；devGuest 表示开发游客兜底）
   loginByWechatH5: async () => {
     const res = await apiWechatLoginH5();
+    if (res.user) get().setUser(res.user);
+    return res;
+  },
+
+  // H5（微信外浏览器）：微信扫码登录，走开放平台网站应用。语义同上
+  loginByWechatQr: async () => {
+    const res = await apiWechatQrLoginH5();
     if (res.user) get().setUser(res.user);
     return res;
   },
