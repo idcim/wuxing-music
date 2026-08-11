@@ -18,7 +18,9 @@ def site_info(db: Session = Depends(get_db)):
     row = db.query(Setting).filter(Setting.key == SITE_KEY).first()
     cfg = json.loads(row.value) if row and row.value else {}
     return ok({
-        "site_name": cfg.get("site_name", "五行律音"),
+        # 前端的品牌名与副标题都以这两项为准（未配置时兜底，与 SiteSettingIn 的默认值一致）
+        "site_name": cfg.get("site_name") or "五行律音",
+        "site_slogan": cfg.get("site_slogan") or "按体质定制的助眠音律",
         "logo_url": cfg.get("logo_url", ""),
         "icp_no": cfg.get("icp_no", ""),
         "contact_email": cfg.get("contact_email", ""),

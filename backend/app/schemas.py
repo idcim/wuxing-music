@@ -107,12 +107,18 @@ class QuizQuestionOut(QuizQuestionIn):
 
 
 # ── 支付设置 ──
+# 一个商户号 + 两个 appid：小程序端用 wx_app_id + 小程序 openid，
+# H5（微信内）用 h5_app_id + user.oa_openid 走公众号 JSAPI。两个 appid 都必须
+# 在商户平台「APPID 授权管理」里与该商户号绑定，否则统一下单报 appid 不匹配。
 class PaySettingIn(BaseModel):
-    wx_app_id: str = ""
+    wx_app_id: str = ""           # 小程序 AppID
     wx_mch_id: str = ""
     wx_api_key: str = ""          # APIv3 密钥（脱敏）
     notify_url: str = ""
-    enabled: bool = False
+    enabled: bool = False         # 总开关：关掉两端都不能下单
+    # ── H5（微信内 · 公众号 JSAPI）──
+    h5_enabled: bool = True       # 单独关停 H5 售卖用；默认开，行为与加此字段之前一致
+    h5_app_id: str = ""           # 留空则回退公众号配置（oa_config.app_id）
     # 微信支付 API 证书（商户私钥/证书 PEM 文本 + 证书序列号）
     wx_cert_serial: str = ""
     wx_cert_pem: str = ""         # apiclient_cert.pem（脱敏）
@@ -120,8 +126,11 @@ class PaySettingIn(BaseModel):
 
 
 # ── 站点设置 ──
+# 前端所有品牌名/副标题（导航标题、启动页、分享文案、海报、锁屏专辑名）都取这里，
+# 不再各自硬编码。改名只需在后台改一处。
 class SiteSettingIn(BaseModel):
     site_name: str = "五行律音"
+    site_slogan: str = "按体质定制的助眠音律"   # 副标题：分享描述 / 海报品牌行
     logo_url: str = ""
     icp_no: str = ""             # 备案号
     contact_email: str = ""
@@ -156,6 +165,20 @@ class OaSettingIn(BaseModel):
     app_secret: str = ""        # 公众号 AppSecret（脱敏，网页授权/access_token 用）
     original_id: str = ""       # 原始 ID（gh_xxx）
     oa_name: str = ""           # 公众号名称
+
+
+# ── 微信开放平台配置 ──
+# ⚠️ 目前**不参与任何登录逻辑**：unionid 是把小程序/公众号绑到开放平台后，
+# 微信自己在 jscode2session / oauth2/access_token 里下发的，拿不到也用不上这里的
+# appid/secret（详见 docs/OPEN-PLATFORM.md 第三节）。这份配置有两个用处：
+#   1. 把运营侧的绑定状态记进系统，避免"到底绑没绑"只存在于某个人脑子里；
+#   2. 将来做 App 端微信登录时，移动应用的 appid/secret 就落在这里。
+class OpenSettingIn(BaseModel):
+    app_id: str = ""            # 开放平台 AppID（移动应用/网站应用）
+    app_secret: str = ""        # AppSecret（脱敏）
+    principal: str = ""         # 认证主体名称，用于核对与小程序/公众号是否同主体
+    bound_weapp: bool = False   # 已在开放平台绑定小程序
+    bound_oa: bool = False      # 已在开放平台绑定公众号
 
 
 # ── 短信配置 ──

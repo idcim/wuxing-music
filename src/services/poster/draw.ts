@@ -209,7 +209,7 @@ export function drawPoster(
   // 主标题
   ctx.fillStyle = '#e8eef7';
   ctx.font = `42px ${SERIF}`;
-  ctx.fillText(fitText(ctx, data.title || '五行律音', innerW), cx, y + 23);
+  ctx.fillText(fitText(ctx, data.title, innerW), cx, y + 23);
   y += 46 + 14;
 
   // 副标题
@@ -275,5 +275,5 @@ export function drawPoster(
   // ── 底部品牌条 ──
   ctx.fillStyle = 'rgba(226,232,240,0.5)';
   ctx.font = `20px ${SERIF}`;
-  ctx.fillText('五行律音 · 安神助眠音律', cx, brandY);
+  ctx.fillText(fitText(ctx, data.brand || '', innerW), cx, brandY);
 }

@@ -2,7 +2,7 @@
   <div class="login">
     <div class="login__card">
       <div class="login__brand">
-        <div class="login__title">五行律音</div>
+        <div class="login__title">{{ site.name }}</div>
         <div class="login__sub">管理后台</div>
       </div>
       <el-form :model="form" @submit.prevent="onSubmit">
@@ -58,10 +58,12 @@ import { useRouter } from 'vue-router';
 import { User, Lock, Key } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { useAuthStore } from '@/stores/auth';
+import { useSiteStore } from '@/stores/site';
 import { getCaptcha } from '@/api';
 
 const router = useRouter();
 const auth = useAuthStore();
+const site = useSiteStore();
 const loading = ref(false);
 const captchaImg = ref('');
 const captchaId = ref('');

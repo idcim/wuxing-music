@@ -4,6 +4,7 @@ import Taro, { useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/
 import { ELEMENT_LIST, WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
 import { usePlayerStore } from '@/stores/player';
+import { siteName, brandLine } from '@/stores/site';
 import { openShareMenu, setH5Share } from '@/utils/share';
 import Icon from '@/components/Icon';
 import { A } from '@/utils/color';
@@ -33,14 +34,14 @@ export default function Explore() {
   useDidShow(() => {
     openShareMenu();
     // H5 的「···」转发文案要靠 JS-SDK 设，useShareAppMessage 在 H5 是空操作
-    setH5Share(`${we.id}音 · ${we.desc}，来五行律音听听`, '循五行五音，为你匹配今晚适合的声音', '/pages/explore/index');
+    setH5Share(`${we.id}音 · ${we.desc}，来${siteName()}听听`, '循五行五音，为你匹配今晚适合的声音', '/pages/explore/index');
   });
   useShareAppMessage(() => ({
-    title: `${we.id}音 · ${we.desc}，来五行律音听听`,
+    title: `${we.id}音 · ${we.desc}，来${siteName()}听听`,
     path: '/pages/home/index'
   }));
   useShareTimeline(() => ({
-    title: '五行律音 · 按体质定制的助眠音律',
+    title: brandLine(),
     query: ''
   }));
 

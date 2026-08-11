@@ -1,4 +1,5 @@
 import type { AudioService, AudioCallbacks, AudioMeta } from './types';
+import { siteName } from '@/stores/site';
 
 // H5 实现：HTMLAudioElement
 //
@@ -77,7 +78,7 @@ function setMediaSession(meta: AudioMeta): void {
   try {
     nav.mediaSession.metadata = new MD({
       title: meta.title,
-      artist: meta.singer || '五行律音',
+      artist: meta.singer || siteName(),
       album: meta.epname || '',
       artwork: meta.coverImgUrl ? [{ src: meta.coverImgUrl }] : []
     });

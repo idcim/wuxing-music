@@ -10,6 +10,9 @@ export interface PosterData {
   subtitle: string;
   cdkey?: string;      // 礼物兑换码（买卡送人时才有）
   qrUrl?: string;      // 二维码图片地址；空则画占位框
+  // 底部品牌条「站点名 · 副标题」。由调用方从 stores/site 取好传进来——
+  // draw.ts 要保持零平台依赖，不能自己 import store（store 链上有 Taro）。
+  brand?: string;
 }
 
 /**

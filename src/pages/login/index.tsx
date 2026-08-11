@@ -3,6 +3,7 @@ import { View, Text, Input } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import Icon from '@/components/Icon';
 import { useUserStore } from '@/stores/user';
+import { useSiteStore } from '@/stores/site';
 import { sendSmsCode } from '@/services/auth';
 import { isWeapp, isInWeChat } from '@/utils/platform';
 import './index.scss';
@@ -15,6 +16,7 @@ const PHONE_RE = /^1\d{10}$/;
 const PLACEHOLDER_STYLE = 'color:#475569';
 
 export default function Login() {
+  const siteName = useSiteStore((s) => s.site.site_name);
   const loggingIn = useUserStore((s) => s.loggingIn);
   const login = useUserStore((s) => s.login);
   const loginByPhone = useUserStore((s) => s.loginByPhone);
@@ -138,7 +140,7 @@ export default function Login() {
         <View className="login__moon-halo" />
         <Icon name="moon" size={88} color="#cbd5e1" strokeWidth={1} />
       </View>
-      <Text className="login__title serif">五行律音</Text>
+      <Text className="login__title serif">{siteName}</Text>
       <Text className="login__slogan cormorant italic">SOUND HEALS · MUSIC RESTORES</Text>
     </View>
   );

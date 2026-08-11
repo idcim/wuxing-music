@@ -106,7 +106,7 @@ wuxing-music/
 │   ├── components/             # 12 个：CdkeyModal / Icon / ListState / MiniPlayer / Playlist
 │   │   │                       #        PosterShare / SeekBar / SleepTimer / TabBar / TrackCard
 │   │   │                       #        UpgradePrompt / UserEditSheet
-│   ├── stores/                 # zustand：user / player / content
+│   ├── stores/                 # zustand：user / player / content / site（★ 品牌名唯一来源）
 │   ├── services/               # 业务与平台能力封装（禁止组件里直接 wx.xxx）
 │   │   ├── api.ts              #   request()：{code,data,msg} 信封 + Bearer
 │   │   ├── auth.ts             #   微信登录 / 静默登录 / profile
@@ -158,7 +158,7 @@ wuxing-music/
 │                               #           Elements / Tracks / Cdkeys / Quiz / Admins / Roles
 │                               #           Agents / Commissions / Withdrawals（★ 代理分成）
 │                               #           SettingsCenter → Site / Storage / Settings(支付)
-│                               #                            MpPanel / OaPanel / SmsPanel / AgentPanel）
+│                               #                            MpPanel / OaPanel / OpenPanel / SmsPanel / AgentPanel）
 ├── prototype/
 │   └── wuxing-music-app.jsx    # 原型参考（Web React 版）
 ├── config/index.ts             # ★ Taro 编译配置（h5.publicPath / devServer 代理 / postcss）
@@ -190,6 +190,33 @@ wuxing-music/
 **登录约定（H5，v1.1）**：按平台分支（`utils/platform.ts` 的 `isH5`/`isInWeChat`）。手机登录（`loginByPhone`/`loginByPassword`）平台无关。微信登录 `wechatLoginH5()` 走公众号网页授权：无 `code` → 取 `/api/mp/h5/oauth-url` 跳转授权；带 `code` 回跳 → `/api/mp/h5/login` 换 `oa_openid`（`app.tsx` 在微信内静默触发并清理 URL）。**安全约束**：`/api/mp/login`（小程序）与 `/api/mp/h5/login`（H5）均——已配置密钥时**必须用真实 `code` 换 openid、忽略前端直传标识**，仅未配置时才用游客标识走 dev 兜底（防绕过授权/顶号）；手机号合成 openid `phone:<手机号>` 不可经 openid 直信路径登录（详见 [`docs/ROADMAP.md`](docs/ROADMAP.md) 安全加固清单）。
 
 **`DEBUG` 开关（后端，`backend/app/config.py`）** ⚠️：所有 dev fail-open 兜底（短信回传明文 `devCode`、未配商户时免付直开会员、登录游客兜底、种子公开测试 CDKEY）**统一由 `DEBUG` gate**——`DEBUG=false`（生产）时未配真实密钥一律**拒绝**而非放行；且 `JWT_SECRET` 仍是默认值时**后端拒绝启动**（`main.py` lifespan 守卫）。新增任何「未配置就放行」的兜底逻辑，必须挂在 `settings.debug` 下。
+## 品牌名与副标题（v1.10.0 起，唯一来源是后台）
+
+**页面里禁止再写「五行律音」。** 品牌名 `site_name` 与副标题 `site_slogan` 存后台
+「设置中心 → 站点信息」，经**公开免登录**接口 `GET /api/site/info` 下发，
+前端收在 `src/stores/site.ts`：冷启动先读本地缓存（`STORAGE_KEYS.SITE`），
+`app.tsx` 的 `useLaunch` 里 `hydrate()` 拉后端值覆盖并回写缓存。
+后台自己（侧边栏 / 登录页 / 页签）走 `admin/src/stores/site.ts`，读的是同一个公开接口
+——登录页在拿到 token 之前就要显示品牌名，用管理端接口会 401。
+
+- **组件内**用 `useSiteStore((s) => s.site.site_name)`（能跟随 hydrate 重渲染）；
+  **非 React 上下文**用同步导出 `siteName()` / `siteSlogan()` / `brandLine()`。
+  `onShareAppMessage` 必须同步返回，`services/audio`（锁屏元数据）与
+  `services/poster/draw`（画布）也不在组件里，拿不到 hook。
+- ⚠️ **`services/poster/draw.ts` 不许 import store**：它是零平台依赖的纯函数
+  （要能单独 esbuild 打包在浏览器里预览版式），而 store 链上有 Taro。
+  品牌行经 `PosterData.brand` 由调用方传入。
+- ⚠️ **默认值不能写成默认参数**（`title = siteName()`）：默认参数在模块求值时就定死了，
+  那时 hydrate 还没跑完。要在渲染/调用时取。
+- **刻意留下的两处硬编码**：`app.config.ts` 的 `navigationBarTitleText` 与
+  `src/index.html` 的 `<title>` 是构建期常量，改不动，留作兜底。前者其实**不渲染**
+  ——17 个页面全是 `navigationStyle: 'custom'`，原生标题栏根本不出现，
+  `setNavigationBarTitle` 在这种页面上同样无效；所以只有 H5 需要在运行时写 `document.title`。
+- 后端 `mp.py::_site_name()` 同源：用户微信账单里的商品名跟着后台改名走，不必发版。
+- ⚠️ **小程序要先重传一次包**：已发布的旧包里品牌名是写死的字符串，没有这段取值逻辑，
+  「后台改名即时生效」是 v1.10.0 之后才成立的。重传一次之后再改名就不必动包了
+  （同 `WUXING` 那条路子）。H5 / 后台 / 微信账单商品名不受此限，随 `master` 自动部署即生效。
+
 限流见 `backend/app/ratelimit.py`（进程内滑动窗口）：短信发送按 IP/小时 + 号码/日、密码登录与 CDKEY 兑换按失败次数。**多实例部署需换 Redis**（源码已注明）。
 
 ------
@@ -407,6 +434,10 @@ const top = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
 
 **支付**（`services/pay.ts` ↔ `mp.py`）：
 - `POST /api/mp/pay/create-order` 建订单（pending），下单体带 `channel: 'weapp'|'h5'`。**未配置商户时后端直接开通**（`dev_opened`，便于联调）；已配置则调微信 JSAPI 统一下单返回 `payParams`，前端**按端拉起**（小程序 `Taro.requestPayment`；H5 走 `services/wechat` 的 `chooseWXPay`），成功后由 `POST /api/mp/pay/callback` 异步开通，前端短轮询 `GET /api/mp/membership` 取最新会员态。H5 用**公众号 appid + `user.oa_openid`** 作 payer（后端 `_resolve_pay_payer` 按 channel 选）。
+  后台「支付设置」分三段（商户共用 / 小程序 / H5）：`h5_enabled` **默认 true**（存量库没这个键，
+  按 `cfg.get("h5_enabled", True)` 读，别改成 `cfg.get("h5_enabled")` 否则老库的 H5 支付会静默关停）；
+  `h5_app_id` 留空则回退 `oa_config.app_id`。**两个 appid 都得在商户平台「APPID 授权管理」里绑定商户号**。
+  微信外浏览器（MWEB）仍不支持。
 - 会员发放一律**按套餐天数在剩余期上累加续期**。
 - iOS App 端订阅须走 Apple IAP（小程序端不受影响，详见「支付特别说明」）。
 
@@ -544,7 +575,7 @@ GET/POST /elements  DELETE /elements/{id}
 GET  /tracks POST /tracks  PUT/DELETE /tracks/{id}
 GET  /cdkeys POST /cdkeys/generate  POST /cdkeys/{id}/disable
 GET/POST /quiz  PUT/DELETE /quiz/{id}
-GET/PUT /settings/pay | /settings/site | /settings/storage | /settings/mp | /settings/oa | /settings/sms
+GET/PUT /settings/pay | /settings/site | /settings/storage | /settings/mp | /settings/oa | /settings/open | /settings/sms
 POST /settings/storage/migrate      # 存储迁移
 POST /upload                        # 后台文件/封面/证书上传
 GET/PUT /settings/agent             # 代理分成设置（★ 常驻，是模块唯一开启入口，不受开关门禁）
@@ -583,7 +614,7 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 | `cdkey_redeem_log` | 兑换日志 | user_id、cdkey_id、ip、device |
 | `app_order` | 订单 | order_no、status(pending/paid/refunding/refunded…)、**is_gift/gift_code**、**refund_*** |
 | `quiz_question` | 测评题 | q、options(JSON) |
-| `setting` | KV 配置 | key/value（`pay_config`/`site_config`/`storage_config`/`mp_config`/`oa_config`(公众号)/`sms_config`(短信)） |
+| `setting` | KV 配置 | key/value（`pay_config`/`site_config`/`storage_config`/`mp_config`/`oa_config`(公众号)/`open_config`(开放平台)/`sms_config`(短信)） |
 | `play_history` | 聆听历史 | user_id、track_id、played_at |
 | `sms_code` | 短信验证码（手机登录） | phone、code、scene、expire_at、used、attempts（失败≥5 作废） |
 | `agent` | ★ 代理（实体店/网络推手） | code(推广码)、type(store/promoter)、user_id(代理中心认人)、commission_rate(直推比例)/commission_rate2(**作为上级的加成比例，基数是订单额、平台额外出**；**null=跟随全局，0≠未设置**)、**parent_id(上级，永久不可改)**、status |
@@ -594,7 +625,7 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 
 ## 管理后台 `admin/`（Vue3 + Element Plus）
 
-页面（`admin/src/views/`）：登录、仪表盘、歌曲（分页/筛选/音频封面上传）、五行、套餐、兑换码（批量生成/导出/禁用）、测评、订单（详情+退单）、用户（详情+开通会员）、**设置中心 `SettingsCenter`**（站点 / 小程序 / **公众号** / **短信** / 文件存储 / 支付，含 LOGO/证书上传）、**系统管理（管理员账号 + 角色权限矩阵）**。默认管理员 `admin` / `admin123`（由 `backend/.env` 覆盖），首次启动即为超级管理员。
+页面（`admin/src/views/`）：登录、仪表盘、歌曲（分页/筛选/音频封面上传）、五行、套餐、兑换码（批量生成/导出/禁用）、测评、订单（详情+退单）、用户（详情+开通会员）、**设置中心 `SettingsCenter`**（站点 / 小程序 / **公众号** / **开放平台** / **短信** / 文件存储 / 支付，含 LOGO/证书上传）、**系统管理（管理员账号 + 角色权限矩阵）**。默认管理员 `admin` / `admin123`（由 `backend/.env` 覆盖），首次启动即为超级管理员。
 
 侧边栏导航定义在 `admin/src/menu.ts`，**路由守卫与 MainLayout 共用同一份**（含各项所需权限点），避免菜单与鉴权走偏；新增后台模块时改这一处即可。
 
@@ -629,7 +660,7 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 **怎么从外部确认部署生效**（不用登服务器）：`GET /api/health` 是公开免鉴权的，返回
 
 ```json
-{"code":0,"data":{"status":"ok","version":"1.6.0","api":"1.3.0",
+{"code":0,"data":{"status":"ok","version":"1.10.0","api":"1.3.0",
                   "commit":"a7d46ea","builtAt":"…","startedAt":"…"},"msg":"ok"}
 ```
 
@@ -640,7 +671,7 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 
 ### 版本
 
-根 `version.json` 是**机读的唯一版本源**（`current.app` / `current.api` + 各端 `channels` + `changelog`），前端常量 `src/constants/version.ts` 与之对齐，APP 更新接口契约见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。**当前 v1.6.0**。发版时同步改**五处**：`version.json`、`package.json`、`src/constants/version.ts`、**`backend/app/version.py`**、`docs/ROADMAP.md`（v1.2.0 曾漏改 `version.ts` 的 `API_VERSION`）。
+根 `version.json` 是**机读的唯一版本源**（`current.app` / `current.api` + 各端 `channels` + `changelog`），前端常量 `src/constants/version.ts` 与之对齐，APP 更新接口契约见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。**当前 v1.10.0**。发版时同步改**五处**：`version.json`、`package.json`、`src/constants/version.ts`、**`backend/app/version.py`**、`docs/ROADMAP.md`（v1.2.0 曾漏改 `version.ts` 的 `API_VERSION`）。
 
 > 后端为什么另存一份而不读 `version.json`：后端镜像的构建上下文是 `./backend`（见 `docker-compose.yml`），根目录的 `version.json` **进不到容器里**。这份重复是为了让 `/api/health` 能报版本，代价是发版多改一处。
 
@@ -780,6 +811,7 @@ iOS 端订阅类商品**必须走 Apple IAP**（苹果抽 30%，禁止引导外�
 - **五行配置统一从 `src/constants/wuxing.ts` 引用，颜色/间距走 `variables.scss` token，禁止魔法数字。**
 - **新增网络调用前先看 `src/services/*.ts` 是否已封装，并同时维护 `USE_MOCK` 两条分支。**
 - **组件 `.tsx` 里禁止出现 `wx.xxx`**，平台能力一律经 `services/` 抽象（为 App 化留路）。
+- **禁止硬编码品牌名「五行律音」**，一律经 `stores/site.ts`（见「品牌名与副标题」）。
 
 ### 提交规范（Conventional Commits）
 
@@ -830,7 +862,7 @@ ZEROER-GIFT-7DAY      → 7日体验卡
 
 ------
 
-**最后更新**：为接入微信开放平台做准备——登录时按 unionid 合并跨端账号，后台加「重复账号」排查。
-**当前版本**：v1.9.0（见根 `version.json`）。
+**最后更新**：品牌名与副标题改由后台站点设置统一下发（全端去硬编码）；支付设置补齐 H5 段；设置中心新增「开放平台」配置。
+**当前版本**：v1.10.0（见根 `version.json`）。
 **当前阶段**：小程序 + H5（微信内）前端、后端管理/公开接口、管理后台均已完成，三容器已上服务器且推 `master` 即自动部署；微信支付/公众号授权/短信/OSS 待真实配置上线验证。
 ⚠️ **小程序包不随自动部署**，欠账（合法域名、待真机验证项、未接的微信原生能力、审核合规）单独记在 [`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)。

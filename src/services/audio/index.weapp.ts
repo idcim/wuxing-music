@@ -1,5 +1,6 @@
 import Taro from '@tarojs/taro';
 import type { AudioService, AudioCallbacks, AudioMeta } from './types';
+import { siteName } from '@/stores/site';
 
 // BackgroundAudioManager 为全局单例，支持锁屏/后台继续播放。
 // 注意：title 必填，否则 src 赋值会报错。
@@ -42,8 +43,8 @@ const service: AudioService = {
 
     // title 必须先于 src 设置
     m.title = meta.title;
-    m.epname = meta.epname || '五行律音';
-    m.singer = meta.singer || '五行律音';
+    m.epname = meta.epname || siteName();
+    m.singer = meta.singer || siteName();
     if (meta.coverImgUrl) m.coverImgUrl = meta.coverImgUrl;
     m.src = url; // 赋值即开始加载并自动播放
   },

@@ -9,6 +9,7 @@ import {
   requestWithdraw
 } from '@/services/agent';
 import { useUserStore } from '@/stores/user';
+import { siteSlogan } from '@/stores/site';
 import Icon from '@/components/Icon';
 import PosterShare from '@/components/PosterShare';
 import ListState, { type LoadState } from '@/components/ListState';
@@ -322,8 +323,7 @@ export default function AgentCenter() {
         open={posterOpen}
         onClose={() => setPosterOpen(false)}
         element={element}
-        title="五行律音"
-        subtitle="按体质定制的助眠音律 · 扫码开启"
+        subtitle={`${siteSlogan()} · 扫码开启`}
         scene={agent ? `a=${agent.code}` : ''}
       />
     </View>

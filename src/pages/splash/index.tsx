@@ -2,6 +2,7 @@ import { View, Text } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import Icon from '@/components/Icon';
 import { useUserStore } from '@/stores/user';
+import { useSiteStore } from '@/stores/site';
 import { rpx } from '@/utils/unit';
 import './index.scss';
 
@@ -17,6 +18,8 @@ const STARS = Array.from({ length: 50 }).map(() => ({
 
 export default function Splash() {
   const stars = STARS;
+  // 品牌名取后台站点设置（冷启动先用本地缓存，hydrate 完自动重渲染）
+  const name = useSiteStore((s) => s.site.site_name);
 
   useDidShow(() => {
     const { element } = useUserStore.getState();
@@ -50,7 +53,7 @@ export default function Splash() {
         WUXING SOUND
       </Text>
       <Text className="splash__title fade-up" style={{ animationDelay: '0.4s' }}>
-        五行律音
+        {name}
       </Text>
       <Text className="splash__slogan cormorant italic fade-up" style={{ animationDelay: '0.6s' }}>
         SOUND HEALS · MUSIC RESTORES

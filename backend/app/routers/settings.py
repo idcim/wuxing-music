@@ -11,6 +11,7 @@ from app.schemas import (
     AgentSettingIn,
     MpSettingIn,
     OaSettingIn,
+    OpenSettingIn,
     PaySettingIn,
     SiteSettingIn,
     SmsSettingIn,
@@ -26,6 +27,7 @@ SITE_KEY = "site_config"
 STORAGE_KEY = "storage_config"
 MP_KEY = "mp_config"
 OA_KEY = "oa_config"
+OPEN_KEY = "open_config"
 SMS_KEY = "sms_config"
 AGENT_KEY = agent_service.AGENT_KEY
 
@@ -34,6 +36,7 @@ PAY_SECRETS = {"wx_api_key", "wx_key_pem", "wx_cert_pem"}
 STORAGE_SECRETS = {"oss_access_key_secret"}
 MP_SECRETS = {"app_secret"}
 OA_SECRETS = {"app_secret"}
+OPEN_SECRETS = {"app_secret"}
 SMS_SECRETS = {"access_key_secret"}
 
 
@@ -202,6 +205,25 @@ def update_oa(
     current = _get_setting(db, OA_KEY)
     incoming = _merge_secrets(body.model_dump(), current, OA_SECRETS)
     _save_setting(db, OA_KEY, incoming)
+    return ok({"saved": True})
+
+
+# ── 微信开放平台配置 ──
+# 只落库、不参与登录逻辑（unionid 由微信在绑定后自动下发，见 docs/OPEN-PLATFORM.md）。
+@router.get("/open")
+def get_open(db: Session = Depends(get_db), _: Admin = Depends(require_perm("settings:view"))):
+    return ok(_mask(_get_setting(db, OPEN_KEY), OPEN_SECRETS))
+
+
+@router.put("/open")
+def update_open(
+    body: OpenSettingIn,
+    db: Session = Depends(get_db),
+    _: Admin = Depends(require_perm("settings:edit")),
+):
+    current = _get_setting(db, OPEN_KEY)
+    incoming = _merge_secrets(body.model_dump(), current, OPEN_SECRETS)
+    _save_setting(db, OPEN_KEY, incoming)
     return ok({"saved": True})
 
 

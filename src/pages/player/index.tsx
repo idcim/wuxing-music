@@ -6,6 +6,7 @@ import { openShareMenu, setH5Share } from '@/utils/share';
 import { usePlayerStore } from '@/stores/player';
 import { useUserStore } from '@/stores/user';
 import { useContentStore } from '@/stores/content';
+import { brandLine } from '@/stores/site';
 import { fmtTime } from '@/utils/format';
 import { resolveUrl } from '@/utils/url';
 import Icon from '@/components/Icon';
@@ -64,7 +65,7 @@ export default function Player() {
     setH5Share(
       currentTrack
         ? `我在听《${currentTrack.title}》· ${el.note}音助眠`
-        : '五行律音 · 按体质定制的助眠音律',
+        : brandLine(),
       '循五行五音，为你匹配今晚适合的声音',
       '/pages/home/index'
     );
@@ -72,11 +73,11 @@ export default function Player() {
   useShareAppMessage(() => ({
     title: currentTrack
       ? `我在听《${currentTrack.title}》· ${el.note}音助眠`
-      : '五行律音 · 按体质定制的助眠音律',
+      : brandLine(),
     path: '/pages/home/index'
   }));
   useShareTimeline(() => ({
-    title: '五行律音 · 按体质定制的助眠音律',
+    title: brandLine(),
     query: ''
   }));
 

@@ -5,6 +5,7 @@ import { PLANS } from '@/constants/plans';
 import { ELEMENT_LIST } from '@/constants/wuxing';
 import { purchasePlan, purchaseGift } from '@/services/pay';
 import { useUserStore } from '@/stores/user';
+import { siteName } from '@/stores/site';
 import { fetchProfile } from '@/services/auth';
 import { openShareMenu, setH5Share } from '@/utils/share';
 import Icon from '@/components/Icon';
@@ -33,14 +34,14 @@ export default function Member() {
   useDidShow(() => {
     openShareMenu();
     // H5 的「···」转发文案要靠 JS-SDK 设，useShareAppMessage 在 H5 是空操作
-    setH5Share('五行律音会员 · 解锁全部助眠音律', '循五行五音，为你匹配今晚适合的声音', '/pages/member/index');
+    setH5Share(`${siteName()}会员 · 解锁全部助眠音律`, '循五行五音，为你匹配今晚适合的声音', '/pages/member/index');
   });
   useShareAppMessage(() => ({
-    title: '五行律音会员 · 解锁全部助眠音律',
+    title: `${siteName()}会员 · 解锁全部助眠音律`,
     path: '/pages/member/index'
   }));
   useShareTimeline(() => ({
-    title: '五行律音会员 · 解锁全部助眠音律',
+    title: `${siteName()}会员 · 解锁全部助眠音律`,
     query: ''
   }));
 

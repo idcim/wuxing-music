@@ -4,6 +4,7 @@ import { goBack } from '@/utils/nav';
 import { WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
 import { usePlayerStore } from '@/stores/player';
+import { brandLine } from '@/stores/site';
 import { openShareMenu, setH5Share } from '@/utils/share';
 import TrackCard from '@/components/TrackCard';
 import MiniPlayer from '@/components/MiniPlayer';
@@ -45,7 +46,7 @@ export default function ElementDetail() {
     path: '/pages/home/index'
   }));
   useShareTimeline(() => ({
-    title: '五行律音 · 按体质定制的助眠音律',
+    title: brandLine(),
     query: ''
   }));
 

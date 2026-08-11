@@ -1,7 +1,7 @@
 <template>
   <el-container class="layout">
     <el-aside width="220px" class="layout__aside">
-      <div class="layout__logo">五行律音</div>
+      <div class="layout__logo">{{ site.name }}</div>
       <el-menu :default-active="route.path" router class="layout__menu" background-color="#0a0e1a"
         text-color="#94a3b8" active-text-color="#fff">
         <el-menu-item v-for="item in mainNav" :key="item.path" :index="item.path">
@@ -49,11 +49,14 @@
 import { computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { useSiteStore } from '@/stores/site';
 import { NAV_MAIN, NAV_AGENT, NAV_SYSTEM } from '@/menu';
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+// 侧边栏品牌名跟着「设置中心 → 站点信息」的项目名称走
+const site = useSiteStore();
 
 // 无权限、或所属可选模块未开启的，都不进菜单
 //（拦截以后端 require_perm / require_enabled 为准，这里只是体验）

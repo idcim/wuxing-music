@@ -5,6 +5,7 @@ import { getQrcode } from '@/services/share';
 import { renderPoster, POSTER_CANVAS_ID } from '@/services/poster';
 import { POSTER_H, POSTER_W } from '@/services/poster/types';
 import { isWeapp } from '@/utils/platform';
+import { siteName, siteSlogan, brandLine } from '@/stores/site';
 import Icon from '@/components/Icon';
 import type { ElementId } from '@/types';
 import './index.scss';
@@ -24,8 +25,12 @@ interface Props {
  * 都在 services/poster 里分端实现，本文件不碰任何画布 API。
  */
 export default function PosterShare({
-  open, onClose, element, title = '五行律音', subtitle = '按体质定制的助眠音律', cdkey, scene
+  open, onClose, element, title, subtitle, cdkey, scene
 }: Props) {
+  // 默认标题/副标题取后台站点设置。写成默认参数不行——那是模块求值时定的，
+  // 站点信息还没 hydrate 完；放到渲染里取才能跟上后台改名。
+  const posterTitle = title || siteName();
+  const posterSubtitle = subtitle || siteSlogan();
   const [poster, setPoster] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -46,7 +51,8 @@ export default function PosterShare({
         await new Promise((r) => setTimeout(r, 80));
         if (cancelled) return;
         const img = await renderPoster({
-          element: element || null, title, subtitle, cdkey, qrUrl
+          element: element || null, title: posterTitle, subtitle: posterSubtitle, cdkey, qrUrl,
+          brand: brandLine()
         });
         if (!cancelled) setPoster(img);
       } catch (e: any) {
@@ -71,7 +77,7 @@ export default function PosterShare({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, scene, cdkey, title, subtitle, element]);
+  }, [open, scene, cdkey, posterTitle, posterSubtitle, element]);
 
   const savePoster = () => {
     if (!poster) return;
@@ -140,7 +146,7 @@ export default function PosterShare({
         </View>
         <Text className="poster__tip">
           {isWeapp
-            ? '保存后转发给好友，一起听五行律音'
+            ? `保存后转发给好友，一起听${siteName()}`
             : '长按图片保存到相册，再转发给好友'}
         </Text>
       </View>

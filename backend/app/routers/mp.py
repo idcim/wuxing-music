@@ -969,6 +969,14 @@ def _pay_cfg(db: Session) -> dict:
     return json.loads(row.value) if row and row.value else {}
 
 
+def _site_name(db: Session) -> str:
+    """品牌名，取后台站点设置。用户微信账单里显示的商品名走这里，
+    改名后新订单立即跟上，不必发版。"""
+    row = db.query(Setting).filter(Setting.key == "site_config").first()
+    cfg = json.loads(row.value) if row and row.value else {}
+    return cfg.get("site_name") or "五行律音"
+
+
 def _gen_order_no() -> str:
     return datetime.utcnow().strftime("%Y%m%d%H%M%S") + uuid.uuid4().hex[:10]
 
@@ -987,15 +995,24 @@ def _grant_membership(db: Session, user: User, plan: Plan, source: str = "purcha
 
 def _resolve_pay_payer(db: Session, user: User, channel: str, order: Order):
     """按下单渠道确定 JSAPI payer openid 与 appid。
-    h5：用公众号 oa_openid + oa_config.app_id（未微信登录则订单置失败并 400）。
+    h5：用公众号 oa_openid + 支付设置里的 h5_app_id（留空回退 oa_config.app_id）；
+        未微信登录或 H5 支付已关停则订单置失败并 400。
     weapp/缺省：用小程序 openid + 默认 appid（app_id=None，wxpay 内部用 wx_app_id）。
     返回 (payer_openid, pay_app_id)。"""
     if (channel or "weapp") == "h5":
+        cfg = _pay_cfg(db)
+        # 未显式配过的存量库里没有这个键，缺省视为开启（与加此开关之前的行为一致）
+        if not cfg.get("h5_enabled", True):
+            order.status = "failed"
+            db.commit()
+            raise HTTPException(status_code=400, detail="H5 支付未开启")
         if not user.oa_openid:
             order.status = "failed"
             db.commit()
             raise HTTPException(status_code=400, detail="请先微信登录")
-        return user.oa_openid, (_oa_cfg(db).get("app_id") or None)
+        # 支付设置里单独配的 H5 AppID 优先；留空才回退公众号配置那一份
+        app_id = cfg.get("h5_app_id") or _oa_cfg(db).get("app_id") or None
+        return user.oa_openid, app_id
     return user.openid, None
 
 
@@ -1058,7 +1075,7 @@ def mp_create_order(
             openid=payer_openid,
             order_no=order.order_no,
             amount_fen=int(round(plan.price * 100)),
-            description=f"五行律音 · {plan.name}",
+            description=f"{_site_name(db)} · {plan.name}",
             app_id=pay_app_id,
         )
     except wxpay.WxPayError as e:
@@ -1216,7 +1233,7 @@ def mp_gift_create_order(
             openid=payer_openid,
             order_no=order.order_no,
             amount_fen=int(round(plan.price * 100)),
-            description=f"五行律音礼物卡 · {plan.name}",
+            description=f"{_site_name(db)}礼物卡 · {plan.name}",
             app_id=pay_app_id,
         )
     except wxpay.WxPayError as e:

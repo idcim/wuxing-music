@@ -3,12 +3,16 @@ import { View, Text, Image } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { goBack } from '@/utils/nav';
 import { getSiteInfo, type SiteInfo } from '@/services/site';
+import { useSiteStore } from '@/stores/site';
 import { WUXING_DISCLAIMER, WUXING_MNEMONIC } from '@/constants/wuxing';
 import { resolveUrl } from '@/utils/url';
 import './index.scss';
 
 export default function About() {
   const [info, setInfo] = useState<SiteInfo | null>(null);
+  // 本页自己也拉一次站点信息（要 about_us / 联系方式），
+  // 但首屏那一下先用 store 里已缓存的品牌名，别闪一个写死的名字
+  const fallbackName = useSiteStore((s) => s.site.site_name);
 
   useEffect(() => {
     getSiteInfo().then(setInfo);
@@ -30,7 +34,7 @@ export default function About() {
         ) : (
           <Text className="about__logo-text serif">律</Text>
         )}
-        <Text className="about__name serif">{info?.site_name || '五行律音'}</Text>
+        <Text className="about__name serif">{info?.site_name || fallbackName}</Text>
       </View>
 
       {!!info?.about_us && (

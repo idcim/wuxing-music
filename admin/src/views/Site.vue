@@ -5,6 +5,11 @@
       <el-form :model="form" label-width="110px">
         <el-form-item label="项目名称">
           <el-input v-model="form.site_name" placeholder="五行律音" />
+          <div class="hint">小程序 / H5 / 本后台的标题、分享文案、海报品牌行、微信账单里的商品名都取这里。</div>
+        </el-form-item>
+        <el-form-item label="副标题">
+          <el-input v-model="form.site_slogan" placeholder="按体质定制的助眠音律" />
+          <div class="hint">用于分享描述、海报底部品牌条、锁屏专辑名。留空则回退默认文案。</div>
         </el-form-item>
         <el-form-item label="LOGO">
           <el-upload
@@ -50,11 +55,13 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { Plus } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { getSiteSetting, updateSiteSetting, UPLOAD_URL } from '@/api';
+import { useSiteStore } from '@/stores/site';
 
+const site = useSiteStore();
 const loading = ref(false);
 const saving = ref(false);
 const form = reactive({
-  site_name: '', logo_url: '', icp_no: '', contact_email: '',
+  site_name: '', site_slogan: '', logo_url: '', icp_no: '', contact_email: '',
   contact_phone: '', about_us: '', service_terms: ''
 });
 
@@ -68,6 +75,7 @@ async function load() {
     const d = await getSiteSetting();
     Object.assign(form, {
       site_name: d.site_name ?? '五行律音',
+      site_slogan: d.site_slogan ?? '按体质定制的助眠音律',
       logo_url: d.logo_url ?? '',
       icp_no: d.icp_no ?? '',
       contact_email: d.contact_email ?? '',
@@ -96,6 +104,8 @@ async function onSave() {
   saving.value = true;
   try {
     await updateSiteSetting({ ...form });
+    // 侧边栏/页签立刻跟上改名，不用刷新页面
+    await site.load();
     ElMessage.success('已保存');
   } finally {
     saving.value = false;

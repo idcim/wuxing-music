@@ -5,6 +5,7 @@ import { openShareMenu, setH5Share } from '@/utils/share';
 import { WUXING, ELEMENT_LIST } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
 import { usePlayerStore } from '@/stores/player';
+import { siteName, brandLine } from '@/stores/site';
 import Icon from '@/components/Icon';
 import { A } from '@/utils/color';
 import { navTopStyle } from '@/utils/nav';
@@ -38,14 +39,14 @@ export default function Home() {
   useDidShow(() => {
     openShareMenu();
     // H5 的「···」转发文案要靠 JS-SDK 设，useShareAppMessage 在 H5 是空操作
-    setH5Share(`我的本命是${el.id}型·${el.note}音，来五行律音找你的助眠音律`, '循五行五音，为你匹配今晚适合的声音', '/pages/home/index');
+    setH5Share(`我的本命是${el.id}型·${el.note}音，来${siteName()}找你的助眠音律`, '循五行五音，为你匹配今晚适合的声音', '/pages/home/index');
   });
   useShareAppMessage(() => ({
-    title: `我的本命是${el.id}型·${el.note}音，来五行律音找你的助眠音律`,
+    title: `我的本命是${el.id}型·${el.note}音，来${siteName()}找你的助眠音律`,
     path: '/pages/home/index'
   }));
   useShareTimeline(() => ({
-    title: '五行律音 · 按体质定制的助眠音律',
+    title: brandLine(),
     query: ''
   }));
 

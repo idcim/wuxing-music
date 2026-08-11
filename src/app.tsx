@@ -3,6 +3,7 @@ import Taro, { useLaunch } from '@tarojs/taro';
 import { useUserStore } from '@/stores/user';
 import { useContentStore } from '@/stores/content';
 import { usePlayerStore } from '@/stores/player';
+import { useSiteStore } from '@/stores/site';
 import { isH5, isInWeChat } from '@/utils/platform';
 import { getToken } from '@/services/auth';
 import { captureAgentCode } from '@/services/agent';
@@ -16,6 +17,8 @@ function App({ children }: PropsWithChildren) {
     bootstrapAuth();
     // 从后端拉取五行/曲目（mock 下用本地常量）
     useContentStore.getState().hydrate();
+    // 站点品牌信息（名称/副标题/LOGO）：全端标题与分享文案都取它，顺带刷 H5 页签
+    useSiteStore.getState().hydrate();
     // 恢复睡眠定时（刷新/冷启动后按截止时间戳校正）
     usePlayerStore.getState().checkTimer();
     watchForeground();

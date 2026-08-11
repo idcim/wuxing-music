@@ -3,6 +3,7 @@ import { View, Text, Input } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { redeemCdkey } from '@/services/cdkey';
 import { useUserStore } from '@/stores/user';
+import { siteName } from '@/stores/site';
 import Icon from '@/components/Icon';
 import PosterShare from '@/components/PosterShare';
 import type { CdkeyStatus } from '@/types';
@@ -206,7 +207,7 @@ export default function CdkeyModal({ open, onClose }: Props) {
         open={posterOpen}
         onClose={() => setPosterOpen(false)}
         element={element}
-        title={planName || '五行律音会员'}
+        title={planName || `${siteName()}会员`}
         subtitle="我已开通会员，邀你一起听助眠音律"
         scene={`inv=${useUserStore.getState().user?.id || ''}`}
       />

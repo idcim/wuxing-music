@@ -63,6 +63,8 @@ export const updatePaySetting = (data: any) => req.put('/api/admin/settings/pay'
 // ── 站点设置 ──
 export const getSiteSetting = () => req.get('/api/admin/settings/site');
 export const updateSiteSetting = (data: any) => req.put('/api/admin/settings/site', data);
+// 公开的站点信息（免鉴权）。登录页在拿到 token 之前就要显示品牌名，只能走这个。
+export const getSiteInfo = () => req.get('/api/site/info');
 
 // ── 存储设置 ──
 export const getStorageSetting = () => req.get('/api/admin/settings/storage');
@@ -77,6 +79,10 @@ export const updateMpSetting = (data: any) => req.put('/api/admin/settings/mp', 
 // ── 公众号配置（H5 网页授权/JSSDK/JSAPI 支付 appid）──
 export const getOaSetting = () => req.get('/api/admin/settings/oa');
 export const updateOaSetting = (data: any) => req.put('/api/admin/settings/oa', data);
+
+// ── 微信开放平台配置（只落库，暂不参与登录逻辑）──
+export const getOpenSetting = () => req.get('/api/admin/settings/open');
+export const updateOpenSetting = (data: any) => req.put('/api/admin/settings/open', data);
 
 // ── 短信配置 ──
 export const getSmsSetting = () => req.get('/api/admin/settings/sms');
