@@ -1,4 +1,4 @@
-@import '../../styles/variables.scss';
+@use '../../styles/variables.scss' as *;
 
 // 命中区是这个 View 本身：88rpx（约 44px）高，整条都能按。
 // 不能靠 ::before 撑——伪元素在小程序端不参与父节点的触摸命中，

@@ -1,9 +1,11 @@
-@import '../../styles/variables.scss';
+@use '../../styles/variables.scss' as *;
 
 .el-detail {
   min-height: 100vh;
   min-height: 100dvh;
-  padding: 0 $pad-outer 200rpx;
+  padding: 0 $pad-outer $mini-player-clearance;
+  padding-bottom: calc(#{$mini-player-clearance} + constant(safe-area-inset-bottom));
+  padding-bottom: calc(#{$mini-player-clearance} + env(safe-area-inset-bottom));
 
   &__nav {
     padding: 88rpx 0 24rpx;

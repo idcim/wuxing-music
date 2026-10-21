@@ -1,4 +1,4 @@
-@import './styles/variables.scss';
+@use './styles/variables.scss' as *;
 
 // H5 没有 page 元素（页面容器是 div.taro_page），Taro 的 postcss-html-transform
 // 也不会把 page 映射成 body，只写 page 会让全局底色/文字色在 H5 端整个失效（白底黑字）。

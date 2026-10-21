@@ -1,4 +1,4 @@
-@import '../../styles/variables.scss';
+@use '../../styles/variables.scss' as *;
 
 .tabbar {
   position: fixed;
@@ -23,6 +23,36 @@
     justify-content: center;
     gap: 6rpx;
     padding: 14rpx 0;
+  }
+
+  &__player {
+    flex: 1;
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &__player-button {
+    width: 112rpx;
+    height: 112rpx;
+    margin-top: -32rpx;
+    border: 4rpx solid $bg-deep;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &__player-spinner {
+    width: 36rpx;
+    height: 36rpx;
+    border: 4rpx solid rgba(10, 14, 26, 0.3);
+    border-top-color: #0a0e1a;
+    border-radius: 50%;
+    animation: rotate-slow 0.8s linear infinite;
   }
 
   &__indicator {

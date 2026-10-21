@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro, { useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/taro';
 import { PLANS } from '@/constants/plans';
 import { ELEMENT_LIST } from '@/constants/wuxing';
-import { purchasePlan, purchaseGift } from '@/services/pay';
+import { purchasePlan, purchaseGift, getPurchaseStatus } from '@/services/pay';
 import { useUserStore } from '@/stores/user';
 import { siteName } from '@/stores/site';
 import { fetchProfile } from '@/services/auth';
@@ -26,6 +26,8 @@ export default function Member() {
   const [posterTitle, setPosterTitle] = useState('');
   const [posterSub, setPosterSub] = useState('我已开通会员，邀你一起听助眠音律');
   const [giftCode, setGiftCode] = useState('');
+  const [purchaseEnabled, setPurchaseEnabled] = useState(true);
+  const purchaseStatusRequestId = useRef(0);
   const isPremium = useUserStore((s) => s.isPremium);
   const currentType = useUserStore((s) => s.user?.membership.type);
   const element = useUserStore((s) => s.element);
@@ -33,6 +35,12 @@ export default function Member() {
 
   useDidShow(() => {
     openShareMenu();
+    const requestId = ++purchaseStatusRequestId.current;
+    getPurchaseStatus()
+      .then((enabled) => {
+        if (requestId === purchaseStatusRequestId.current) setPurchaseEnabled(enabled);
+      })
+      .catch(() => {});
     // H5 的「···」转发文案要靠 JS-SDK 设，useShareAppMessage 在 H5 是空操作
     setH5Share(`${siteName()}会员 · 解锁全部助眠音律`, '循五行五音，为你匹配今晚适合的声音', '/pages/member/index');
   });
@@ -101,6 +109,10 @@ export default function Member() {
   const buy = async (planId: PlanId) => {
     if (planId === 'free' || buying) return;
     if (currentType === planId && isPremium) return; // 已是当前方案，别重复下单
+    if (!purchaseEnabled) {
+      Taro.showToast({ title: '暂未开放', icon: 'none' });
+      return;
+    }
     if (!requireLogin()) return;
     setBuying(planId);
     const res = await purchasePlan(planId);
@@ -122,6 +134,10 @@ export default function Member() {
   // 买卡送朋友：支付后拿到礼物码，用海报展示分享
   const giftBuy = async (planId: PlanId) => {
     if (planId === 'free' || gifting) return;
+    if (!purchaseEnabled) {
+      Taro.showToast({ title: '暂未开放', icon: 'none' });
+      return;
+    }
     if (!requireLogin()) return;
     setGifting(planId);
     const res = await purchaseGift(planId);

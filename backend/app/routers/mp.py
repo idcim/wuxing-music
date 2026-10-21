@@ -570,7 +570,10 @@ def h5_qrlogin_url(redirect: str, nonce: str = "", db: Session = Depends(get_db)
 
     cfg = _open_cfg(db)
     app_id = cfg.get("app_id")
-    if not app_id:
+    # ⚠️ 必须连 app_secret 一起判断，与 /h5/qrlogin 的 configured 口径保持一致。
+    # 只看 app_id 的话，运营只填了 AppID 没填密钥时前端会渲染出扫码入口，
+    # 用户点进去扫完码，换 token 那步却因未配密钥回 503——一个看得见但用不了的按钮。
+    if not app_id or not cfg.get("app_secret"):
         return ok({"url": "", "configured": False})
     # 只放行安全字符，避免把任意内容拼进跳转 URL
     safe_nonce = re.sub(r"[^A-Za-z0-9]", "", nonce or "")[:32]
@@ -1125,6 +1128,11 @@ class CreateOrderIn(BaseModel):
     channel: str = "weapp"   # weapp（小程序）| h5（公众号网页 JSAPI）
 
 
+@router.get("/pay/purchase-status")
+def mp_purchase_status(db: Session = Depends(get_db)):
+    return ok({"enabled": _pay_cfg(db).get("purchase_enabled", True)})
+
+
 @router.post("/pay/create-order")
 def mp_create_order(
     body: CreateOrderIn,
@@ -1136,6 +1144,8 @@ def mp_create_order(
         raise HTTPException(status_code=404, detail="套餐不存在")
 
     cfg = _pay_cfg(db)
+    if not cfg.get("purchase_enabled", True):
+        raise HTTPException(status_code=400, detail="暂未开放")
     pay_enabled = bool(cfg.get("enabled")) and bool(cfg.get("wx_mch_id")) and bool(cfg.get("wx_key_pem"))
 
     # 创建订单（pending）
@@ -1296,6 +1306,8 @@ def mp_gift_create_order(
         raise HTTPException(status_code=404, detail="套餐不存在")
 
     cfg = _pay_cfg(db)
+    if not cfg.get("purchase_enabled", True):
+        raise HTTPException(status_code=400, detail="暂未开放")
     pay_enabled = bool(cfg.get("enabled")) and bool(cfg.get("wx_mch_id")) and bool(cfg.get("wx_key_pem"))
 
     order = Order(

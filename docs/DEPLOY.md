@@ -20,7 +20,7 @@ monorepo：**小程序 / H5 前端（Taro）** + **后端 API（FastAPI）** + *
 H5 相关域名散落三处，逐一配好：
 
 ### 1) 前端（**改了要重新 build**）
-- **`src/constants/env.ts` → `API_BASE`**：**H5 已改为同源相对地址**（`process.env.TARO_ENV === 'h5' ? '' : 绝对地址`），由 H5 容器内 nginx 反代 `/api` 到后端，**H5 无需改、也无需 CORS**。那个绝对地址**仅小程序端用**——上线换成线上后端域名后 `build:weapp`；`USE_MOCK` 保持 `false`。
+- **根目录 `.env.local`**（模板见 `.env.example`，本地文件不入库）：`TARO_APP_ID` 在构建时写入 `dist/project.config.json`；`TARO_APP_API_BASE` 是小程序端 API 根地址，填线上后端域名后重新 `build:weapp`。**H5 始终使用同源相对地址**，由容器内 nginx 反代 `/api` 到后端，无需配置该变量，也无需 CORS；`USE_MOCK` 保持 `false`。
 - **`config/index.ts` → `h5.publicPath`**：H5 静态资源基路径，默认 `/`，子路径部署才改。（`h5.devServer.proxy` 已配好本地 `dev:h5` 的 `/api` 代理，默认指 `127.0.0.1:8000`，按需改。）
 
 ### 2) 后端 / 后台（改 `.env` 或后台设置，**无需重新构建前端**）
@@ -104,7 +104,7 @@ H5 已作为 `wuxing-h5` 服务并入 `docker-compose.yml`——`docker compose 
 ## 生产上线检查单
 
 - [ ] `backend/.env`：`DEBUG=false`、随机 `JWT_SECRET`、强 `ADMIN_PASSWORD`、真实 `DATABASE_URL`、`CORS_ORIGINS`（后台域名；H5 已同源无需）
-- [ ] `src/constants/env.ts`：小程序端 `API_BASE` 指向线上后端（H5 已同源无需改）、`USE_MOCK=false`
+- [ ] 根目录 `.env.local`：`TARO_APP_ID` 为发布小程序的 AppID，`TARO_APP_API_BASE` 指向线上后端（H5 已同源无需配置）；`src/constants/env.ts` 的 `USE_MOCK=false`
 - [ ] 后台配置：公众号 AppID/Secret、微信商户号 v3（证书 / APIv3 密钥 / 回调 `/api/mp/pay/callback`）、短信服务商密钥
 - [ ] 微信平台：公众号网页授权域名 + JS 安全域名、商户 JSAPI 支付目录、小程序合法域名
 - [ ] 备案：H5 与后端域名已备案

@@ -12,3 +12,6 @@ deploy_versions/
 .codegraph/
 .omc/
 SLEEP.md
+/.env
+/.env.local
+/.env.*.local

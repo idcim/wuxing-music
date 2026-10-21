@@ -115,7 +115,8 @@ class PaySettingIn(BaseModel):
     wx_mch_id: str = ""
     wx_api_key: str = ""          # APIv3 密钥（脱敏）
     notify_url: str = ""
-    enabled: bool = False         # 总开关：关掉两端都不能下单
+    enabled: bool = False         # 微信支付通道开关
+    purchase_enabled: bool = True  # 会员售卖开关；存量配置缺省开启，关闭后拒绝创建会员/礼物订单
     # ── H5（微信内 · 公众号 JSAPI）──
     h5_enabled: bool = True       # 单独关停 H5 售卖用；默认开，行为与加此字段之前一致
     h5_app_id: str = ""           # 留空则回退公众号配置（oa_config.app_id）

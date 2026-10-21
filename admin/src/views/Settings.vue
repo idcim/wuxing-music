@@ -3,6 +3,12 @@
     <el-card style="max-width: 680px">
       <template #header>微信支付参数</template>
       <el-form :model="form" label-width="130px" v-loading="loading">
+        <el-divider content-position="left">会员售卖</el-divider>
+        <el-form-item label="开启会员购买">
+          <el-switch v-model="form.purchase_enabled" />
+          <div class="hint">关闭后，前端点击「立即开通」会提示「暂未开放」，会员与礼物卡订单均停止创建；兑换码不受影响。</div>
+        </el-form-item>
+
         <el-divider content-position="left">商户（两端共用）</el-divider>
         <el-form-item label="启用支付">
           <el-switch v-model="form.enabled" />
@@ -68,7 +74,8 @@ const saving = ref(false);
 const set = reactive({ wx_api_key: false, wx_cert_pem: false, wx_key_pem: false });
 const oaAppId = ref('');
 const form = reactive({
-  enabled: false, wx_app_id: '', wx_mch_id: '', wx_api_key: '', notify_url: '',
+  enabled: false, purchase_enabled: true,
+  wx_app_id: '', wx_mch_id: '', wx_api_key: '', notify_url: '',
   h5_enabled: true, h5_app_id: '',
   wx_cert_serial: '', wx_cert_pem: '', wx_key_pem: ''
 });
@@ -83,6 +90,7 @@ async function load() {
   try {
     const data = await getPaySetting();
     form.enabled = data.enabled ?? false;
+    form.purchase_enabled = data.purchase_enabled ?? true;
     form.wx_app_id = data.wx_app_id ?? '';
     form.wx_mch_id = data.wx_mch_id ?? '';
     form.notify_url = data.notify_url ?? '';

@@ -29,7 +29,7 @@
 | `backend/` | 后端 API（管理端 + 小程序/H5 公开端） | **FastAPI + SQLAlchemy + 外部 MySQL**（开发可 SQLite），Docker | 全套接口 + 微信支付/礼物码/统计 + RBAC + 限流已实现，待真实商户配置上线 |
 | `admin/` | 管理后台 | **Vue3 + Vite + Element Plus + Pinia** | 18 个视图完成（含管理员/角色权限、设置中心） |
 
-- **数据源开关**：`src/constants/env.ts` 的 `USE_MOCK`。当前 `false`；`API_BASE` 按端分支——**H5 为空串（同源反代，免 CORS）**，小程序用绝对地址 `https://app-api.azure-glow.cn`。置 `true` 可在无后端时本地跑通登录/曲目/兑换/支付/音频全链路。
+- **数据源开关**：`src/constants/env.ts` 的 `USE_MOCK`。当前 `false`；`API_BASE` 按端分支——**H5 为空串（同源反代，免 CORS）**，小程序读取根目录 `.env.local` 的 `TARO_APP_API_BASE`（模板见 `.env.example`，本地文件不入库）。小程序 AppID 通过同一文件的 `TARO_APP_ID` 注入 `dist/project.config.json`。置 `true` 可在无后端时本地跑通登录/曲目/兑换/支付/音频全链路。
 - **已完成**：前端全部页面与播放体验、后端管理 CRUD、小程序公开接口对接、微信支付（JSAPI 统一下单 + 回调验签，逻辑已就绪）、CDKEY 兑换、买卡送人礼物码、订单/退款、聆听历史与周统计、海报小程序码、站点/存储/支付/小程序配置与文件上传（本地）。
 - **已完成（H5 端，v1.1）**：H5（微信内）手机登录（短信验证码 + 手机号密码）、微信登录（公众号网页授权 OAuth2）、微信支付（公众号 JSAPI）；短信/公众号抽象层（未配则 dev 兜底）；版本管理基建（`version.json` + `docs/ROADMAP.md` + `src/constants/version.ts`）。详见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
 - **已完成（后台与运维）**：管理员账号 + 角色权限（RBAC，权限点见 `backend/app/permissions.py`）；设置中心（站点/小程序/公众号/短信/存储/支付）；安全加固（`DEBUG` gate 收敛 dev fail-open、JWT 默认密钥守卫、短信/登录/兑换限流）；H5 容器化 + 1Panel 计划任务自动部署（健康检查 + 失败回滚）。
@@ -183,7 +183,7 @@ wuxing-music/
 - 默认携带 `Authorization: Bearer <token>`（token 存 `storage`，键 `wx_token`）；公开接口传 `{ auth: false }`。
 - HTTP 非 2xx → 抛 `ApiError(statusCode)`。
 
-**`USE_MOCK` 开关**（`src/constants/env.ts`）：每个 service（auth / cdkey / pay / content …）内部 `if (USE_MOCK) { …本地假数据… }`，因此后端未就绪时前端可独立跑通。切真实接口只需把 `USE_MOCK` 置 `false` 并填对 `API_BASE`。修改任何 service 时**务必同时维护 mock 与真实两条分支**。
+**`USE_MOCK` 开关**（`src/constants/env.ts`）：每个 service（auth / cdkey / pay / content …）内部 `if (USE_MOCK) { …本地假数据… }`，因此后端未就绪时前端可独立跑通。切真实接口只需把 `USE_MOCK` 置 `false`，并在根目录 `.env.local` 填对 `TARO_APP_API_BASE`。修改任何 service 时**务必同时维护 mock 与真实两条分支**。
 
 **登录约定（小程序）**：`wxLogin()` 取 `wx.login()` 的临时 `code` + 稳定游客 openid 一起发给 `/api/mp/login`；后端配置了 AppSecret 时用 `code` 调 `jscode2session` 换真实 openid，否则回退前端直传的稳定 openid（保证游客态身份不漂移）。**切勿把每次都变的 `code` 当 openid 用**。
 
@@ -235,7 +235,7 @@ wuxing-music/
 
 ### 配色系统
 
-Design token 定义在 **`src/styles/variables.scss`（Sass 变量，非 Less）**，各页/组件 `@import` 复用。
+Design token 定义在 **`src/styles/variables.scss`（Sass 变量，非 Less）**，各页/组件通过 `@use ... as *` 复用，不再使用已弃用的 `@import`。Taro 4.2 限定的 Vite 4 只能调用 Sass legacy JS API，`config/sass.ts` 仅屏蔽这一项上游警告，不屏蔽其他弃用警告。
 
 #### 全局基色
 
@@ -362,7 +362,7 @@ export interface User {
 - 测评题库见 `src/constants/quiz.ts`。
 - ⚠️ **`wuxing.ts` 与 `backend/app/seed.py::ELEMENTS` 是同一份数据的两个副本**（后端镜像构建上下文是 `./backend`，读不到前端源码），改一处必须同步另一处；两者的内容基准都是 [`docs/WUXING-REFERENCE.md`](docs/WUXING-REFERENCE.md)。`quiz.ts` 与 `seed.py::QUIZ` 同理。
 - ⚠️ **元素页/探律页/结果页直接 `import { WUXING }`，但读到的可能是后端数据**——`stores/content.ts` 的 `hydrate()` 拉完 `/api/mp/elements` 会**回写 `WUXING[id] = e`**。所以改后台的五行文案（含曲目 tag）对**已发布的旧小程序包也生效**；而 `quiz.ts` 这类纯常量、以及任何页面结构改动则必须重传包才更新（欠账见 [`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)）。
-- ⚠️ **「正在播放」语境一律按曲目所属元素取色，不要用用户体质**：`player` / `MiniPlayer` / `Playlist` 走 `stores/content.ts` 的 `getElementOfTrack(track, 用户体质)`（`track.elementId` → 扫曲库反查 → 兜底体质）。v1.8.0 前这三处都用 `WUXING[用户体质]`，火型用户听水的曲子会显示「徵音」+ 橙色背景。反过来，`TabBar` / `SleepTimer` / `CdkeyModal` 是**身份 chrome**，就该跟用户体质走，别一起改掉。
+- ⚠️ **「正在播放」语境一律按曲目所属元素取色，不要用用户体质**：`player` / `MiniPlayer` / `Playlist` / `TabBar` 中央播放按钮走 `stores/content.ts` 的 `getElementOfTrack(track, 用户体质)`（`track.elementId` → 扫曲库反查 → 兜底体质）。v1.8.0 前这三处都用 `WUXING[用户体质]`，火型用户听水的曲子会显示「徵音」+ 橙色背景。反过来，`TabBar` 的四个导航项 / `SleepTimer` / `CdkeyModal` 是**身份 chrome**，就该跟用户体质走，别一起改掉。
 
 ------
 
@@ -433,6 +433,7 @@ const top = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
 | year  | 年藏 | ¥128 | 365天 | 专属冥想课、1v1咨询           |
 
 **支付**（`services/pay.ts` ↔ `mp.py`）：
+- 后台「支付设置 → 会员售卖」的 `purchase_enabled` 是独立于商户支付 `enabled` 的开关，存量配置默认 `true`。关闭时 `GET /api/mp/pay/purchase-status` 返回 `enabled:false`，会员页点击「立即开通」或「买卡送朋友」提示「暂未开放」；后端两个 create-order 接口同样在落单前返回 400，CDKEY 兑换与已支付订单回调不受影响。
 - `POST /api/mp/pay/create-order` 建订单（pending），下单体带 `channel: 'weapp'|'h5'`。**未配置商户时后端直接开通**（`dev_opened`，便于联调）；已配置则调微信 JSAPI 统一下单返回 `payParams`，前端**按端拉起**（小程序 `Taro.requestPayment`；H5 走 `services/wechat` 的 `chooseWXPay`），成功后由 `POST /api/mp/pay/callback` 异步开通，前端短轮询 `GET /api/mp/membership` 取最新会员态。H5 用**公众号 appid + `user.oa_openid`** 作 payer（后端 `_resolve_pay_payer` 按 channel 选）。
   后台「支付设置」分三段（商户共用 / 小程序 / H5）：`h5_enabled` **默认 true**（存量库没这个键，
   按 `cfg.get("h5_enabled", True)` 读，别改成 `cfg.get("h5_enabled")` 否则老库的 H5 支付会静默关停）；
@@ -546,6 +547,7 @@ POST /api/mp/quiz               # 提交测评（element + scores）
 GET  /api/mp/elements           # 五行 + 曲目（公开免登录）
 GET  /api/mp/plans              # 套餐（公开）
 POST /api/mp/cdkey/redeem       # 兑换码
+GET  /api/mp/pay/purchase-status # 会员售卖开关（公开，仅返回 enabled）
 POST /api/mp/pay/create-order   # 会员下单（未配商户则直开）
 POST /api/mp/pay/callback       # 微信支付回调（验签/幂等/金额校验）
 POST /api/mp/gift/create-order  # 买卡送人下单
@@ -648,7 +650,7 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 | MySQL | 外部（`1panel-network`） | 3306 | 不随 compose 起落，单独维护 |
 | 小程序 | `dist/`（`build:weapp`） | — | 微信开发者工具上传，不走服务器 |
 
-- **H5 的 `API_BASE` 为空字符串（同源）**：`src/constants/env.ts` 按 `process.env.TARO_ENV` 分支，H5 走容器内 nginx 反代，因此 **H5 不需要 CORS、换域名也不必改前端**；那个绝对地址只服务小程序端。
+- **H5 的 `API_BASE` 为空字符串（同源）**：`src/constants/env.ts` 按 `process.env.TARO_ENV` 分支，H5 走容器内 nginx 反代，因此 **H5 不需要 CORS、换域名也不必改前端**；小程序的绝对地址由 `.env.local` 的 `TARO_APP_API_BASE` 提供，不写入仓库。
 - H5 构建镜像必须用 **glibc 基底**（`node:22-slim`），alpine 下 Taro/Vite 的原生绑定装不上。
 
 ### 自动部署（`scripts/auto-deploy.sh`）
@@ -763,7 +765,7 @@ iOS 端订阅类商品**必须走 Apple IAP**（苹果抽 30%，禁止引导外�
 
 1. **自定义 tabBar 不可用**：Taro4 + Vite 下 `custom: true` 原生 tabBar 不编译（官方 bug #18415）。本项目改用**页内 `TabBar` 组件 + `Taro.redirectTo`** 切换，`app.config.ts` 不声明 `tabBar`。
 2. **图标别用 `<Image>`**：真机偶发 `appServiceSDKScriptError`；用 `View` + `background-image`（URL 编码 SVG）渲染（见 `Icon` 组件）。
-3. **本地连后端**：开发者工具「本地设置」勾「不校验合法域名」；真机把 `API_BASE` 改成局域网 IP，并在微信后台配 request/downloadFile 合法域名。
+3. **本地连后端**：开发者工具「本地设置」勾「不校验合法域名」；真机把 `.env.local` 的 `TARO_APP_API_BASE` 改成局域网地址，并在微信后台配 request/downloadFile 合法域名。
 4. **增量构建缓存损坏**（报 `taro.useState/useMemo is not a function` 等）：清缓存全量重建 `rm -rf dist node_modules/.vite .swc && npm run dev:weapp`。
 5. **游客模式 `wx.login` 受限**（`webapi_getwxaasyncsecinfo:fail`）：已自动兜底稳定游客 openid；真实 AppID 登录即正常。
 6. `wx.createInnerAudioContext` 无法后台播放——一律用 `BackgroundAudioManager`。

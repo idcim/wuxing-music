@@ -85,6 +85,8 @@ def update_pay(
 ):
     current = _get_setting(db, PAY_KEY)
     incoming = _merge_secrets(body.model_dump(), current, PAY_SECRETS)
+    if "purchase_enabled" not in body.model_fields_set:
+        incoming["purchase_enabled"] = current.get("purchase_enabled", True)
     _save_setting(db, PAY_KEY, incoming)
     return ok({"saved": True})
 

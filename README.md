@@ -29,14 +29,25 @@ wuxing-music/
 
 技术栈：Taro 4.2 + React 18 + TypeScript + Sass + Zustand。
 
+先复制环境变量模板，并在 `.env.local` 中填写小程序 AppID 和 API 根地址。该文件已被 Git 忽略，修改后需重启 Taro 构建。
+
+```bash
+cp .env.example .env.local
+```
+
+```ini
+TARO_APP_ID=你的小程序AppID
+TARO_APP_API_BASE=https://你的后端域名
+```
+
 ```bash
 npm install
-npm run dev:weapp        # 微信小程序（产物在 dist/，用微信开发者工具打开）
+npm run dev:weapp        # 微信小程序（用微信开发者工具打开 dist/）
 npm run dev:h5           # H5 预览
 npm run type-check       # 类型检查
 ```
 
-**Mock 模式**：后端就绪前，`src/constants/env.ts` 的 `USE_MOCK=true` 让登录 / 支付 / 兑换 / 音频全链路本地跑通。后端上线后置 `false` 并填 `API_BASE` 即切真实接口。
+**Mock 模式**：后端就绪前，`src/constants/env.ts` 的 `USE_MOCK=true` 让登录 / 支付 / 兑换 / 音频全链路本地跑通。后端上线后置 `false`，并在 `.env.local` 填好 `TARO_APP_API_BASE` 即切真实接口。H5 始终使用同源 `/api`，不需要配置该变量。
 
 ### 已实现
 
@@ -121,7 +132,7 @@ cd admin && npm install && npm run dev   # http://localhost:5173（/api 代理�
   `rm -rf dist node_modules/.vite .swc && npm run dev:weapp`。
 - **`webapi_getwxaasyncsecinfo:fail`**：开发者工具游客模式下 `wx.login` 受限，已自动兜底游客身份；用真实 AppID 登录即正常。
 - **图标不显示 / `appServiceSDKScriptError`**：图标用 `View + background-image(URL编码SVG)` 渲染（`<Image>` 不稳）。
-- **本地连后端**：开发者工具「本地设置」勾选「不校验合法域名」；真机需把 `API_BASE` 改成局域网 IP。
+- **本地连后端**：开发者工具「本地设置」勾选「不校验合法域名」；真机需在 `.env.local` 把 `TARO_APP_API_BASE` 改成局域网地址。
 
 ## 备案与合规
 

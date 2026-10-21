@@ -104,6 +104,12 @@ function payFailure(err: any): { ok: false; reason: 'cancel' | 'fail' | 'auth'; 
   return { ok: false, reason: 'fail', message: msg };
 }
 
+export async function getPurchaseStatus(): Promise<boolean> {
+  if (USE_MOCK) return true;
+  const res = await request<{ enabled: boolean }>('/api/mp/pay/purchase-status', { auth: false });
+  return res.enabled;
+}
+
 // 创建订单并拉起微信支付。成功后返回新会员信息（由调用方刷新 store）。
 export async function purchasePlan(planId: PlanId): Promise<PayOutcome> {
   // 小程序 / H5（微信内）端内支付；其它端（未来 rn / iOS App 走 IAP）返回 platform。
