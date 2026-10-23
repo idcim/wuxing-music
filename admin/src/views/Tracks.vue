@@ -76,6 +76,10 @@
             </el-upload>
             <el-input v-model="form.audio_url" placeholder="或填 CDN 地址" />
           </div>
+          <div class="hint">
+            WAV 请用 16-bit PCM；24-bit 母版在 PC 微信无法解码（手机正常）。
+            存量 24-bit 文件可在服务器跑 <code>docker exec wuxing-backend python -m app.tools.transcode_audio</code> 批量降位深。
+          </div>
           <el-progress
             v-if="audioUploading"
             :percentage="audioPct"

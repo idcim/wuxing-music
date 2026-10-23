@@ -151,11 +151,13 @@
       `<Input>` 陷阱（陷阱 14），小程序端 `<Input>` 行为不同，需确认昵称/手机号/密码三个形态切换正常。
 - [ ] **`code → openid`**。配上真实 AppSecret 后要确认走的是 `jscode2session` 换来的真 openid，
       而不是游客兜底（`CLAUDE.md` 陷阱 5）。**验证点：换台设备登录，用户身份不应漂移。**
-- [ ] **PC 微信播放**（用户报障后新增）。`services/audio/index.weapp.ts` 对 `platform` 为 `windows`/`mac`
-      的环境改用 `InnerAudioContext`（背景音频管理器在 PC 微信有不出声的兼容反馈）。
-      需在 PC 微信里实测：点播放出声、暂停/继续/切歌/进度拖动正常；若仍失败，
-      界面现在会显示微信返回的 `errCode/errMsg`，按错误码再查。
-      注意 PC 端 `InnerAudioContext` 不能后台续播（PC 上无此场景，属预期）。
+- [ ] **PC 微信播放**（用户报障后新增）。两处修复：① `services/audio/index.weapp.ts` 对
+      `platform` 为 `windows`/`mac` 的环境改用 `InnerAudioContext`；② 根因是线上音频为
+      **24-bit WAV，PC 微信解不了**（`Unable to decode audio data`）——需在服务器跑
+      `docker exec wuxing-backend python -m app.tools.transcode_audio` 把曲库降成 16-bit PCM。
+      实测项：点播放出声、暂停/继续/切歌/进度拖动正常；若仍失败，界面会显示
+      `errCode/errMsg`，按错误码再查。注意 PC 端 `InnerAudioContext` 不能后台续播
+      （PC 上无此场景，属预期）。
 
 ---
 

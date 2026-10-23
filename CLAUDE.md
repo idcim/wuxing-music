@@ -408,6 +408,7 @@ const top = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
 - 非会员 **30 秒试听**：`previewSec` 到点由 `stores/player.ts::onTimeUpdate` **release 音源**（不是 pause——暂停后底层仍会把整包缓冲完），并经 `components/UpgradePrompt` 弹升级引导。
 - ⚠️ **`isLoading` 绝不能有「进得去出不来」的路径**：播放器页 `toggle()` 首行是 `if (isLoading) return`，一旦 `isLoading` 卡在 true，播放键就永久失效、一直转圈，用户只能刷新。两条已修的坑：① 加载看门狗超时必须**同时**置 `isLoading:false`，只写 `loadError` 等于把按钮焊死；② `audioService.release()` 拆音源前先 `bound = {}`，否则元素收尾时吐的 `stalled`/`waiting` 会把 `isLoading` 重新置真，而没了音源 `canplay` 永不到达。新增任何 `set({isLoading:true})` 都要问一句「谁保证它会被清掉」。
 - ⚠️ **「会员专属」不等于不能播**：付费曲目对非会员**照样点得动**，只是听到 `previewSec` 就断。列表页一律 `onPlay={() => onTrack(t.id)}`，**不要**再写成 `locked ? goMember() : onTrack(...)` —— v1.8.1 之前三个列表页都是那么写的，结果把曲目设成会员专属就等于彻底锁死，`player.ts` 里的断流逻辑和 `UpgradePrompt` 成了永远走不到的死代码。`TrackCard` 的 `locked` 只控制右侧的「试听 30s」徽标，**不控制能否播放**（也别再画锁头图标，那会让人以为点不动）。
+- ⚠️ **24-bit WAV 在 PC 微信无法解码**（报 `Unable to decode audio data`，手机端正常）——线上播放文件必须 16-bit PCM。存量 24-bit 母版用 `backend/app/tools/transcode_audio.py` 批量降位深（容器内 `python -m app.tools.transcode_audio`，纯 Python 无新依赖、幂等、覆盖原地址不动数据库）；新上传在后台曲目页有提示。转换器在 `app/wav_compat.py`（24→16 砍每采样最低字节，有损但对聆听无感；母版由运营自留）。
 - iOS 弱网首次加载慢，需 loading 态；`audioUrl` 当前多为占位，真机需在微信后台配 `downloadFile` 合法域名，mock 下回退 `MOCK_AUDIO_URL`。
 
 ### 3. 睡眠定时器 `components/SleepTimer/`
