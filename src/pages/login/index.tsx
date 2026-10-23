@@ -14,6 +14,8 @@ type LoginMode = 'wechat' | 'phone';
 const PHONE_RE = /^1\d{10}$/;
 // placeholder 颜色（小程序端只认 placeholderStyle，不吃 ::placeholder）
 const PLACEHOLDER_STYLE = 'color:#475569';
+// 登录成功不直接回首页：先去个人信息页补全资料，改好（或点完成）再进首页
+const AFTER_LOGIN = '/pages/userinfo/index?from=login';
 
 export default function Login() {
   const siteName = useSiteStore((s) => s.site.site_name);
@@ -60,7 +62,7 @@ export default function Login() {
     if (loggingIn) return;
     try {
       await login();
-      Taro.reLaunch({ url: '/pages/home/index' });
+      Taro.reLaunch({ url: AFTER_LOGIN });
     } catch {
       Taro.showToast({ title: '登录失败，请重试', icon: 'none' });
     }
@@ -111,7 +113,7 @@ export default function Login() {
     try {
       if (tab === 'code') await loginByPhone(phone, code.trim());
       else await loginByPassword(phone, password);
-      Taro.reLaunch({ url: '/pages/home/index' });
+      Taro.reLaunch({ url: AFTER_LOGIN });
     } catch (e: any) {
       Taro.showToast({ title: e?.message || '登录失败，请重试', icon: 'none' });
     } finally {
@@ -140,7 +142,7 @@ export default function Login() {
           confirmText: '知道了'
         });
       }
-      Taro.reLaunch({ url: '/pages/home/index' });
+      Taro.reLaunch({ url: AFTER_LOGIN });
     } catch (e: any) {
       Taro.showToast({ title: e?.message || '微信登录失败', icon: 'none' });
       setSubmitting(false);

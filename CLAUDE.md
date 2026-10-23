@@ -189,6 +189,8 @@ wuxing-music/
 
 **登录约定（H5，v1.1）**：按平台分支（`utils/platform.ts` 的 `isH5`/`isInWeChat`）。手机登录（`loginByPhone`/`loginByPassword`）平台无关。微信登录 `wechatLoginH5()` 走公众号网页授权：无 `code` → 取 `/api/mp/h5/oauth-url` 跳转授权；带 `code` 回跳 → `/api/mp/h5/login` 换 `oa_openid`（`app.tsx` 在微信内静默触发并清理 URL）。**安全约束**：`/api/mp/login`（小程序）、`/api/mp/h5/login`（公众号）与 `/api/mp/h5/qrlogin`（浏览器扫码）均——已配置密钥时**必须用真实 `code` 换 openid、忽略前端直传标识**，仅未配置时才用游客标识走 dev 兜底（防绕过授权/顶号）；手机号合成 openid `phone:<手机号>` 不可经 openid 直信路径登录（详见 [`docs/ROADMAP.md`](docs/ROADMAP.md) 安全加固清单）。
 
+**登录后的落地页（v1.12.0）**：所有登录路径成功后统一 `reLaunch` 到 `/pages/userinfo/index?from=login` 引导补全资料（登录页 `AFTER_LOGIN` 常量），个人信息页在该模式下标题变为「完善个人信息」、返回键与「完成，进入首页」都 `reLaunch` 回首页；已登录用户直接进登录页仍回首页，不受影响。后端 `jscode2session` 对网络类失败重试两次（服务器出网抖动的实测教训），微信侧返回业务异常（如 code 失效）不重试。
+
 **`DEBUG` 开关（后端，`backend/app/config.py`）** ⚠️：所有 dev fail-open 兜底（短信回传明文 `devCode`、未配商户时免付直开会员、登录游客兜底、种子公开测试 CDKEY）**统一由 `DEBUG` gate**——`DEBUG=false`（生产）时未配真实密钥一律**拒绝**而非放行；且 `JWT_SECRET` 仍是默认值时**后端拒绝启动**（`main.py` lifespan 守卫）。新增任何「未配置就放行」的兜底逻辑，必须挂在 `settings.debug` 下。
 ## 品牌名与副标题（v1.10.0 起，唯一来源是后台）
 

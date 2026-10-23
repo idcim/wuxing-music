@@ -151,4 +151,27 @@
       color: $text-tertiary;
     }
   }
+
+  // ── 登录后的资料补全引导（from=login）──
+  &__guide {
+    display: block;
+    margin-top: 8rpx;
+    font-size: 26rpx;
+    color: $text-tertiary;
+    line-height: 1.6;
+  }
+
+  &__done {
+    margin-top: 40rpx;
+    padding: 26rpx 0;
+    border-radius: $radius-pill;
+    background: linear-gradient(135deg, #f8fafc, #cbd5e1);
+    text-align: center;
+  }
+
+  &__done-text {
+    font-size: 30rpx;
+    color: #0a0e1a;
+    letter-spacing: 2rpx;
+  }
 }

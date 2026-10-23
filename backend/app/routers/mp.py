@@ -154,27 +154,37 @@ def _mp_cfg(db: Session) -> dict:
 
 def _jscode2session(db: Session, code: str) -> dict:
     """用 code + 小程序 AppID/Secret 调微信换取 openid/unionid。
-    返回 {"openid":..., "unionid":...}；未配置或失败返回 {}。"""
+    返回 {"openid":..., "unionid":...}；未配置或失败返回 {}。
+    网络类失败（DNS 抖动、超时）重试两次——服务器出网间歇不稳时，
+    一次 DNS 失败不该直接把用户登录打死。"""
     cfg = _mp_cfg(db)
     app_id = cfg.get("app_id")
     app_secret = cfg.get("app_secret")
     if not (app_id and app_secret and code):
         return {}
-    try:
-        import httpx
-        resp = httpx.get(
-            "https://api.weixin.qq.com/sns/jscode2session",
-            params={
-                "appid": app_id,
-                "secret": app_secret,
-                "js_code": code,
-                "grant_type": "authorization_code",
-            },
-            timeout=10,
-        )
-        data = resp.json()
-    except Exception as e:  # noqa: BLE001
-        logger.warning("jscode2session 调用失败：%s", e)
+    import time
+
+    import httpx
+    data = None
+    for attempt in range(3):
+        try:
+            resp = httpx.get(
+                "https://api.weixin.qq.com/sns/jscode2session",
+                params={
+                    "appid": app_id,
+                    "secret": app_secret,
+                    "js_code": code,
+                    "grant_type": "authorization_code",
+                },
+                timeout=10,
+            )
+            data = resp.json()
+            break
+        except Exception as e:  # noqa: BLE001
+            logger.warning("jscode2session 第 %s 次调用失败：%s", attempt + 1, e)
+            if attempt < 2:
+                time.sleep(1)
+    if data is None:
         return {}
     if data.get("openid"):
         return {"openid": data["openid"], "unionid": data.get("unionid", "")}

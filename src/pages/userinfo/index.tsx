@@ -1,5 +1,5 @@
 import { View, Text, Image, Button, Picker } from '@tarojs/components';
-import Taro, { useDidShow } from '@tarojs/taro';
+import Taro, { useDidShow, useRouter } from '@tarojs/taro';
 import { useState } from 'react';
 import { WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
@@ -42,6 +42,9 @@ function todayStr(): string {
 }
 
 export default function UserInfo() {
+  const router = useRouter();
+  // 登录成功后会带 from=login 进来：引导补全资料，返回键与「完成」都回首页
+  const fromLogin = router.params.from === 'login';
   const user = useUserStore((s) => s.user);
   const element = useUserStore((s) => s.element);
   const setPhone = useUserStore((s) => s.setPhone);
@@ -126,10 +129,12 @@ export default function UserInfo() {
     </>
   );
 
+  const goHome = () => Taro.reLaunch({ url: '/pages/home/index' });
+
   const nav = (
     <View className="userinfo__nav">
-      <Text className="userinfo__back" onClick={() => goBack()}>‹</Text>
-      <Text className="userinfo__nav-title">个人信息</Text>
+      <Text className="userinfo__back" onClick={() => (fromLogin ? goHome() : goBack())}>‹</Text>
+      <Text className="userinfo__nav-title">{fromLogin ? '完善个人信息' : '个人信息'}</Text>
       <View className="userinfo__nav-spacer" />
     </View>
   );
@@ -171,6 +176,12 @@ export default function UserInfo() {
   return (
     <View className="userinfo">
       {nav}
+
+      {fromLogin && (
+        <Text className="userinfo__guide fade-up">
+          登录成功。补全生日与出生时辰，才能让五行音律推荐更贴合你。
+        </Text>
+      )}
 
       <View className="userinfo__list fade-up">
         {/* 头像：小程序用微信原生头像授权，H5 走相册/拍照 */}
@@ -299,6 +310,12 @@ export default function UserInfo() {
           <Text className="userinfo__value">{user.membership.name}</Text>
         </View>
       </View>
+
+      {fromLogin && (
+        <View className="userinfo__done fade-up" style={{ animationDelay: '0.1s' }} onClick={goHome}>
+          <Text className="userinfo__done-text">完成，进入首页</Text>
+        </View>
+      )}
 
       {sheet}
     </View>
