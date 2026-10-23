@@ -80,6 +80,64 @@ def list_duplicate_users(
     return ok(find_duplicates(db))
 
 
+@router.get("/users/migration-report")
+def migration_report(
+    db: Session = Depends(get_db),
+    _: Admin = Depends(require_perm("users:view")),
+):
+    """旧平台账号迁移确认报告。同样要声明在 /users/{user_id} 之前。
+
+    换过小程序 AppID（或刚绑开放平台）时，老用户的 openid 是旧 AppID 签发的，
+    在新端登录会拿到新 openid。能不能认回老数据取决于老行有没有 unionid：
+    - 有 unionid：本人下次在任一端登录时自动合并（resolve_login），无需处理；
+    - 无 unionid 有手机号：本人登录新端后另建账号，按手机号在「重复账号」人工合并；
+    - 无 unionid 无手机号：没有任何可认回的标识，是「清理测试账号」的候选。
+    另外注意：openid 是旧 AppID 签发的用户，合并前在新端**无法完成支付**
+    （微信校验下单 appid 与 openid 的归属，报「appid和openid不匹配」）。
+    """
+    alive = User.merged_into.is_(None) & User.deleted_at.is_(None)
+    rows = db.query(User).filter(alive).order_by(User.id).all()
+    now = datetime.utcnow()
+
+    orphans = [u for u in rows if not u.unionid]
+    orphan_ids = [u.id for u in orphans]
+    with_orders = 0
+    if orphan_ids:
+        with_orders = (
+            db.query(Order.user_id)
+            .filter(Order.user_id.in_(orphan_ids))
+            .distinct()
+            .count()
+        )
+
+    def _brief(u: User) -> dict:
+        return {
+            "id": u.id,
+            "nickname": u.nickname,
+            "phone": u.phone,
+            "membership": u.membership_name,
+            "expireAt": u.membership_expire_at.isoformat() if u.membership_expire_at else None,
+            "createdAt": u.created_at.isoformat() if u.created_at else None,
+        }
+
+    def _is_premium(u: User) -> bool:
+        return bool(u.membership_expire_at and u.membership_expire_at > now)
+
+    # 样例：有效会员排最前（优先处理），其余按注册时间倒序，最多 50 条
+    samples = sorted(orphans, key=lambda u: (not _is_premium(u), -(u.id or 0)))[:50]
+
+    return ok({
+        "total": len(rows),
+        "autoMerge": len(rows) - len(orphans),
+        "orphan": len(orphans),
+        "orphanWithPhone": sum(1 for u in orphans if u.phone),
+        "orphanNoPhone": sum(1 for u in orphans if not u.phone),
+        "orphanPremium": sum(1 for u in orphans if _is_premium(u)),
+        "orphanWithOrders": with_orders,
+        "samples": [_brief(u) for u in samples],
+    })
+
+
 class MergeIn(BaseModel):
     into: int          # 保留哪条（另一条并入它）
 

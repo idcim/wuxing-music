@@ -4,6 +4,7 @@
       <el-input v-model="keyword" placeholder="按昵称搜索" clearable style="width: 200px" @keyup.enter="reload" />
       <el-button :icon="Search" @click="reload">搜索</el-button>
       <el-button :icon="CopyDocument" @click="openDup">重复账号</el-button>
+      <el-button plain @click="openMigration">迁移确认</el-button>
       <el-button v-if="canDelete" type="warning" plain @click="onCleanupTest">清理测试账号</el-button>
       <span class="hint">
         同一人在小程序与公众号各有一条账号时，接入微信开放平台后会按 unionid 自动并成一条；
@@ -226,6 +227,50 @@
         </div>
       </div>
     </el-drawer>
+
+    <!-- 旧平台账号迁移确认 -->
+    <el-dialog v-model="migDialog" title="旧平台账号迁移确认" width="720px">
+      <template v-if="mig">
+        <el-alert type="info" :closable="false" show-icon style="margin-bottom: 12px">
+          换过小程序 AppID / 绑开放平台之前生成的老账号，其 openid 是旧 AppID 签发的。
+          能不能在新端认回老数据，取决于老账号有没有 unionid。
+          注意：无 unionid 的老账号在合并前<b>无法在新端完成支付</b>（微信校验下单 AppID 与 openid 归属）。
+        </el-alert>
+        <el-descriptions :column="2" border size="small" style="margin-bottom: 12px">
+          <el-descriptions-item label="存活用户总数">{{ mig.total }}</el-descriptions-item>
+          <el-descriptions-item label="有 unionid（登录自动合并，无需处理）">{{ mig.autoMerge }}</el-descriptions-item>
+          <el-descriptions-item label="无 unionid（孤儿风险）">{{ mig.orphan }}</el-descriptions-item>
+          <el-descriptions-item label="其中绑过手机号（可人工合并找回）">{{ mig.orphanWithPhone }}</el-descriptions-item>
+          <el-descriptions-item label="其中无手机号（无法认回，可清理）">{{ mig.orphanNoPhone }}</el-descriptions-item>
+          <el-descriptions-item label="其中会员仍有效（优先处理）">{{ mig.orphanPremium }}</el-descriptions-item>
+          <el-descriptions-item label="其中有订单记录">{{ mig.orphanWithOrders }}</el-descriptions-item>
+          <el-descriptions-item label="处理路径">手机号组 → 重复账号里人工合并</el-descriptions-item>
+        </el-descriptions>
+        <template v-if="mig.samples?.length">
+          <div class="hint" style="margin-bottom: 8px">
+            无 unionid 账号样例（会员有效的排最前，最多 50 条）：
+          </div>
+          <el-table :data="mig.samples" border size="small" max-height="320">
+            <el-table-column prop="id" label="ID" width="70" />
+            <el-table-column prop="nickname" label="昵称" min-width="120" />
+            <el-table-column prop="phone" label="手机号" width="130">
+              <template #default="{ row }">{{ row.phone || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="会员" width="150">
+              <template #default="{ row }">
+                {{ row.membership }}
+                <span class="dup-exp">{{ row.expireAt ? fmt(row.expireAt) : '' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="createdAt" label="注册" width="170">
+              <template #default="{ row }">{{ fmt(row.createdAt) }}</template>
+            </el-table-column>
+          </el-table>
+        </template>
+        <el-empty v-else description="所有存活账号都有 unionid，登录时会自动合并，无需人工迁移" />
+      </template>
+      <div v-else v-loading="true" style="height: 200px" />
+    </el-dialog>
   </div>
 </template>
 
@@ -235,7 +280,7 @@ import { Search, CopyDocument } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   listUsers, grantMembership, listPlans, getUser, setUserAsAgent,
-  listDuplicateUsers, mergeUsers, deleteUser, cleanupTestUsers
+  listDuplicateUsers, mergeUsers, deleteUser, cleanupTestUsers, getMigrationReport
 } from '@/api';
 import { useAuthStore } from '@/stores/auth';
 
@@ -279,6 +324,16 @@ async function loadDup() {
 function openDup() {
   dupDrawer.value = true;
   loadDup();
+}
+
+// ── 旧平台账号迁移确认 ──
+const migDialog = ref(false);
+const mig = ref<any>(null);
+
+async function openMigration() {
+  migDialog.value = true;
+  mig.value = null;
+  mig.value = await getMigrationReport();
 }
 
 // row 是被并入的一方，同组另一条为保留方

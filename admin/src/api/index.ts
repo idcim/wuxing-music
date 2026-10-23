@@ -19,6 +19,8 @@ export const setUserAsAgent = (id: number, data: any) => req.post(`/api/admin/us
 // 疑似重复账号（同 unionid / 同手机号）。同 unionid 的正常会在登录时自动合并，
 // 还留在这里说明有异常；同手机号的一律不自动合并，需人工确认。
 export const listDuplicateUsers = () => req.get('/api/admin/users/duplicates');
+// 旧平台账号迁移确认：unionid 覆盖率与孤儿账号统计
+export const getMigrationReport = () => req.get('/api/admin/users/migration-report');
 // 把 id 并入 into。不可逆：订单/聆听历史/兑换记录都会改指向
 export const mergeUsers = (id: number, into: number) =>
   req.post(`/api/admin/users/${id}/merge`, { into });
