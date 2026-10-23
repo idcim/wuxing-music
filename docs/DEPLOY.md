@@ -101,6 +101,20 @@ H5 已作为 `wuxing-h5` 服务并入 `docker-compose.yml`——`docker compose 
 
 ---
 
+## 构建期网络故障排查
+
+国内服务器直连 Docker Hub / PyPI / npmjs 都可能抖动。典型症状与对策：
+
+- `pip install` 中途 `No matching distribution found for xxx`（别的包装得好好的）：
+  PyPI 抖动。三个 Dockerfile 已默认走清华 PyPI 镜像（`PIP_INDEX_URL` build-arg），
+  重跑部署脚本即可；海外机构建传 `--build-arg PIP_INDEX_URL=https://pypi.org/simple`。
+- `npm ci` 慢或失败：admin / H5 镜像已默认走 npmmirror（`NPM_REGISTRY` build-arg），
+  海外机同样用 `--build-arg NPM_REGISTRY=https://registry.npmjs.org` 覆盖。
+- `FROM nginx:alpine` 拉几百秒：Docker Hub 慢。给服务器 Docker 配镜像加速器
+  （`/etc/docker/daemon.json` 的 `registry-mirrors`，改完 `systemctl reload docker`），
+  此项在服务器上配置，不在本仓库。
+- 部署脚本失败会自动回滚到旧版，服务不中断；反复失败看 `/var/log/wuxing-deploy.log`。
+
 ## 生产上线检查单
 
 - [ ] `backend/.env`：`DEBUG=false`、随机 `JWT_SECRET`、强 `ADMIN_PASSWORD`、真实 `DATABASE_URL`、`CORS_ORIGINS`（后台域名；H5 已同源无需）

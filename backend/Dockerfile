@@ -15,7 +15,11 @@ RUN apt-get update \
 
 # 先装依赖，利用构建缓存
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+# 国内服务器直连 pypi.org 不稳定（装到一半 No matching distribution 就是抖动），
+# 默认走清华镜像；海外机构建时传 --build-arg PIP_INDEX_URL=https://pypi.org/simple 覆盖
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ENV PIP_INDEX_URL=${PIP_INDEX_URL}
+RUN pip install --retries 5 --timeout 60 -r requirements.txt
 
 # 拷贝应用代码
 COPY app ./app
