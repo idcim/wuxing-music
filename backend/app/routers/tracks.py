@@ -108,9 +108,9 @@ def delete_track(
 
 @router.post("/normalize-audio")
 def normalize_audio(_: Admin = Depends(require_perm("tracks:edit"))):
-    """全量扫描曲库 WAV，后台线程逐个降位深。重复调用幂等。"""
-    audio_norm.enqueue(None)
-    return ok(audio_norm.status())
+    """全量扫描曲库 WAV，后台线程逐个降位深。返回 job 编号供前端过滤本轮结果。"""
+    job = audio_norm.enqueue(None)
+    return ok({**audio_norm.status(), "job": job})
 
 
 @router.get("/normalize-audio")

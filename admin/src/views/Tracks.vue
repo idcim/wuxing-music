@@ -328,20 +328,21 @@ async function onDelete(row: any) {
 const normRunning = ref(false);
 const normText = ref('');
 let normTimer: ReturnType<typeof setInterval> | null = null;
-let normStartDone = 0;
+let normJob = 0;
 
 async function pollNorm() {
   try {
     const s = await normalizeAudioStatus();
     if (s.running) {
-      normText.value = `修复中（已完成 ${Math.max(0, s.done - normStartDone)}，队列剩 ${s.pending}）`;
+      const mine = s.results.filter((r: any) => r.job === normJob);
+      normText.value = `修复中（本轮已处理 ${mine.length}，队列剩 ${s.pending}）`;
       return;
     }
     if (normTimer) clearInterval(normTimer);
     normTimer = null;
     normRunning.value = false;
-    // results 新的在前，取本轮新增的那段
-    const fresh = s.results.slice(0, Math.max(0, s.done - normStartDone));
+    // 按 job 编号取本轮结果（不能用条数偏移——多轮任务/自动检查会互相污染计数）
+    const fresh = s.results.filter((r: any) => r.job === normJob);
     const conv = fresh.filter((r: any) => r.result === 'converted').length;
     const errs = fresh.filter((r: any) => String(r.result).startsWith('error'));
     const skip = fresh.length - conv - errs.length;
@@ -364,7 +365,7 @@ async function onNormalize() {
     { type: 'info', confirmButtonText: '开始修复' }
   );
   const s = await normalizeAudio();
-  normStartDone = s.done;
+  normJob = s.job;
   normRunning.value = true;
   normText.value = '';
   if (normTimer) clearInterval(normTimer);
@@ -379,7 +380,7 @@ onMounted(async () => {
   try {
     const s = await normalizeAudioStatus();
     if (s.running) {
-      normStartDone = Math.max(0, s.done - s.pending);
+      normJob = s.job;
       normRunning.value = true;
       normTimer = setInterval(pollNorm, 3000);
     }

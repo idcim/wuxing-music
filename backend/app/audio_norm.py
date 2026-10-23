@@ -34,6 +34,8 @@ _results: list[dict] = []       # 最近 100 条处理结果
 _done = 0
 _current = ""
 _finished_at: str | None = None
+_job_seq = 0                    # 全量扫描的任务编号（每次点击 +1）
+_current_job = 0
 
 _MAX_RESULTS = 100
 
@@ -248,16 +250,25 @@ def process_track(cfg: dict, track: Track, dry: bool = False) -> str:
 
 
 # ── 后台 worker ──
-def enqueue(track_id: int | None) -> None:
-    """排队处理：track_id 为 None 表示全量扫描。已在队列里的不重复排。"""
-    global _worker
+def enqueue(track_id: int | None) -> int:
+    """排队处理：track_id 为 None 表示全量扫描（每次全量开启一个新 job 编号）。
+    已在队列里的不重复排。返回当前 job 编号。"""
+    global _worker, _job_seq, _current_job
     with _lock:
+        if track_id is None:
+            _job_seq += 1
+            _current_job = _job_seq
+            logger.info("音频归一：任务 #%s 入队（全量扫描）", _current_job)
         if track_id is not None and track_id in _queue:
-            return
+            return _current_job
         _queue.append(track_id)
-        if _worker is None or not _worker.is_alive():
+        # ⚠️ 判断条件只能是 _worker is None：worker 在锁内退出时才把自己置 None。
+        # 用 is_alive() 判断会有一个「线程已判定队列空、正要退出」的窗口，
+        # 这时入队的任务会被 stranded（实测后台全量扫描 0 条就是它）。
+        if _worker is None:
             _worker = threading.Thread(target=_run, daemon=True, name="audio-norm")
             _worker.start()
+    return _current_job
 
 
 def _record(track: Track | None, result: str) -> None:
@@ -265,21 +276,26 @@ def _record(track: Track | None, result: str) -> None:
     with _lock:
         _done += 1
         _results.append({
+            "job": _current_job,
             "trackId": track.id if track else None,
             "title": track.title if track else "",
             "result": result,
             "at": datetime.utcnow().isoformat(),
         })
         del _results[:-_MAX_RESULTS]
+    logger.info("音频归一：track=%s「%s」→ %s", track.id if track else "-", track.title if track else "-", result)
 
 
 def _run() -> None:
-    global _current, _finished_at
+    global _current, _finished_at, _worker
     while True:
         with _lock:
             if not _queue:
                 _current = ""
                 _finished_at = datetime.utcnow().isoformat()
+                # 锁内置 None 再退出：enqueue 只在 _worker 为 None 时起新线程，
+                # 退出窗口期的入队不会被丢下
+                _worker = None
                 return
             item = _queue.pop(0)
         db = SessionLocal()
@@ -289,6 +305,7 @@ def _run() -> None:
                 ids = [
                     t.id for t in db.query(Track.id).filter(Track.audio_url.like("%.wav")).all()
                 ]
+                logger.info("音频归一：任务 #%s 展开为 %s 条 WAV 曲目", _current_job, len(ids))
                 with _lock:
                     # 展开到队首，保持「先全量后单条」的触发顺序
                     fresh = [i for i in ids if i not in _queue]
@@ -308,12 +325,13 @@ def _run() -> None:
 
 def status() -> dict:
     with _lock:
-        running = _worker is not None and _worker.is_alive()
         return {
-            "running": running,
+            # _worker 在锁内置 None 后才算退出，单看 is_alive 有退出窗口
+            "running": _worker is not None,
             "pending": len(_queue),
             "done": _done,
             "current": _current,
+            "job": _current_job,
             "finishedAt": _finished_at,
             "results": list(reversed(_results[-50:])),
         }
