@@ -116,7 +116,19 @@ log "代码已更新到 $(git rev-parse --short HEAD)。重建并重启容器…
 export GIT_COMMIT="$(git rev-parse --short HEAD)"
 export BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-if $COMPOSE up -d --build >>"$LOG_FILE" 2>&1 && health_ok; then
+# 构建与启动分开：构建期网络抖动（PyPI/npm/Docker Hub 都可能间歇超时）用重试扛，
+# 层缓存让重试只续跑失败的层，不会从头再来。
+BUILD_OK=0
+for attempt in 1 2 3; do
+  if $COMPOSE build >>"$LOG_FILE" 2>&1; then
+    BUILD_OK=1
+    break
+  fi
+  log "⚠️ 构建第 $attempt 次失败，20s 后重试…"
+  sleep 20
+done
+
+if [ "$BUILD_OK" = "1" ] && $COMPOSE up -d >>"$LOG_FILE" 2>&1 && health_ok; then
   log "✅ 部署成功，健康检查通过（$(git rev-parse --short HEAD)）。"
   notify "部署成功 → $(git rev-parse --short HEAD)"
   [ "$PRUNE_IMAGES" = "1" ] && docker image prune -f >/dev/null 2>&1 || true
