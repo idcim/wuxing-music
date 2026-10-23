@@ -118,3 +118,94 @@ def convert_24_to_16(src: str, dst: str) -> None:
             out[1::2] = mv[2::3]
             fout.write(bytes(out))
     # tail 里不足一个采样的残余直接丢弃（源文件 data 块不是 3 的倍数本就异常）
+
+
+class Wav24To16Streamer:
+    """流式 24→16 转换器：feed() 任意大小的源字节，返回转换后的字节。
+
+    与 convert_24_to_16 的差异：不需要源/产物同时落盘——下载流可以边收边转边
+    分片上传，磁盘零占用（服务器硬盘放不下两份数百 MB 的母版时这是唯一办法）。
+
+    WAV 头里的 data 块长度是已知的，所以转换后总长度（n//3*2）在头部就能算出来，
+    可以先发改写好的头部再流式转主体。data 块之后的尾部块（LIST 元数据等）丢弃，
+    对播放无影响。
+    """
+
+    def __init__(self) -> None:
+        self._buf = bytearray()
+        self._tail = b""
+        self._header_emitted = False
+        self._body_left = -1      # data 块剩余未转字节数
+        self.data_size = 0        # 原始 data 字节数
+        self.out_data_size = 0    # 转换后 data 字节数
+
+    def _try_build_header(self) -> bytes | None:
+        buf = self._buf
+        if len(buf) < 12:
+            return None
+        if bytes(buf[:4]) != b"RIFF" or bytes(buf[8:12]) != b"WAVE":
+            raise ValueError("不是 WAV 文件")
+        pos = 12
+        chunks: list[tuple[bytes, bytes]] = []
+        while True:
+            if pos + 8 > len(buf):
+                return None  # 头还没到齐，等更多字节
+            cid = bytes(buf[pos : pos + 4])
+            csize = struct.unpack_from("<I", buf, pos + 4)[0]
+            if cid == b"data":
+                self.data_size = csize
+                self.out_data_size = (csize // 3) * 2
+                self._body_left = csize
+                data_start = pos + 8
+                break
+            if pos + 8 + csize > len(buf):
+                return None  # fmt 等块不完整，等更多字节
+            payload = bytearray(buf[pos + 8 : pos + 8 + csize])
+            if cid == b"fmt ":
+                fmt, channels, rate, _br, _ba, bits = struct.unpack_from("<HHIIHH", payload, 0)
+                if fmt != 1 or bits != 24:
+                    raise ValueError(f"不是 24bit PCM（format={fmt} bits={bits}），拒绝转换")
+                struct.pack_into("<H", payload, 14, 16)
+                struct.pack_into("<I", payload, 8, rate * channels * 2)
+                struct.pack_into("<H", payload, 12, channels * 2)
+            chunks.append((cid, bytes(payload)))
+            pos += 8 + csize + (csize & 1)
+
+        body = bytearray()
+        for cid, payload in chunks:
+            body += cid + struct.pack("<I", len(payload)) + payload
+            if len(payload) & 1:
+                body += b"\x00"
+        body += b"data" + struct.pack("<I", self.out_data_size)
+        out = b"RIFF" + struct.pack("<I", 4 + len(body) + self.out_data_size) + b"WAVE" + bytes(body)
+        del self._buf[:data_start]
+        return out
+
+    def feed(self, data: bytes) -> bytes:
+        self._buf += data
+        out = bytearray()
+        if not self._header_emitted:
+            hdr = self._try_build_header()
+            if hdr is None:
+                return b""
+            self._header_emitted = True
+            out += hdr
+        # 只转换仍属 data 块的字节；块后的填充/尾部块丢弃
+        take = min(len(self._buf), self._body_left)
+        body = self._tail + bytes(self._buf[:take])
+        self._body_left -= take
+        self._buf.clear()
+        n = (len(body) // 3) * 3
+        self._tail = body[n:]
+        mv = memoryview(body[:n])
+        conv = bytearray((n // 3) * 2)
+        conv[0::2] = mv[1::3]
+        conv[1::2] = mv[2::3]
+        return bytes(out + conv)
+
+    def finish(self) -> bytes:
+        if not self._header_emitted:
+            raise ValueError("WAV 头不完整")
+        if self._body_left > 0:
+            raise ValueError(f"data 块不完整（差 {self._body_left} 字节），下载可能被截断")
+        return b""  # tail 不足一个采样，丢弃

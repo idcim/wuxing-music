@@ -20,7 +20,7 @@ import httpx
 from app import storage
 from app.database import SessionLocal
 from app.models import Track
-from app.wav_compat import convert_24_to_16, needs_pcm16_downmix, read_wav_info
+from app.wav_compat import Wav24To16Streamer, needs_pcm16_downmix, read_wav_info
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -89,9 +89,108 @@ def _download(url: str, dst: str, limit: int | None = None, retries: int = 4) ->
             time.sleep(2 * (attempt + 1))
 
 
+def _stream_with_resume(url: str, retries: int = 4):
+    """流式下载（生成器）。中断后按已产出字节发 Range 续传；
+    流式转换状态下无法从头重来，对方不认 Range 时直接报错。"""
+    import time
+
+    produced = 0
+    for attempt in range(retries):
+        try:
+            headers = {"Range": f"bytes={produced}-"} if produced else {}
+            with httpx.stream(
+                "GET", url, timeout=httpx.Timeout(60, read=300),
+                follow_redirects=True, headers=headers,
+            ) as resp:
+                resp.raise_for_status()
+                if produced and resp.status_code == 200:
+                    raise RuntimeError("对端不支持 Range，流式转换中途无法重下")
+                for chunk in resp.iter_bytes(256 * 1024):
+                    produced += len(chunk)
+                    yield chunk
+            return
+        except (httpx.HTTPError, OSError) as e:
+            logger.warning("流式下载中断（已产出 %s 字节）：%s；第 %s 次重试", produced, e, attempt + 1)
+            if attempt == retries - 1:
+                raise RuntimeError(f"下载失败（重试 {retries} 次后放弃）：{e}") from e
+            time.sleep(2 * (attempt + 1))
+
+
+def _convert_local_stream(local_path: str) -> None:
+    """本地文件流式转换：磁盘上只有「原文件 + 产物」两份，产物落在同目录
+    （os.replace 不能跨挂载点），完成后原子替换。"""
+    out = local_path + ".new16"
+    conv = Wav24To16Streamer()
+    try:
+        with open(local_path, "rb") as fin, open(out, "wb") as fout:
+            while True:
+                chunk = fin.read(CHUNK)
+                if not chunk:
+                    break
+                fout.write(conv.feed(chunk))
+            fout.write(conv.finish())
+        os.replace(out, local_path)
+    finally:
+        try:
+            os.remove(out)
+        except OSError:
+            pass
+
+
+def _convert_oss_stream(cfg: dict, oss_key: str, url: str) -> None:
+    """OSS 对象流式转换：下载 → 转换 → 分片上传全程不落盘（磁盘零占用）。
+    分片缓存在内存里凑够 5MB 才传一片；上传完成前原对象不受影响，
+    任一步失败会 abort 掉这次分片上传，原对象原样保留。"""
+    import time
+
+    import oss2
+
+    bucket = storage._oss_bucket(cfg)
+    conv = Wav24To16Streamer()
+    part_buf = bytearray()
+    parts: list = []
+    part_no = 1
+    upload_id = None
+    PART = 5 * 1024 * 1024  # OSS 要求除末片外每片 ≥100KB，取 5MB
+
+    def upload_piece(piece: bytes) -> None:
+        nonlocal part_no
+        for attempt in range(3):
+            try:
+                r = bucket.upload_part(oss_key, upload_id, part_no, piece)
+                parts.append(oss2.models.PartInfo(part_no, r.etag))
+                part_no += 1
+                return
+            except Exception as e:  # noqa: BLE001
+                logger.warning("分片 %s 上传失败：%s；第 %s 次重试", part_no, e, attempt + 1)
+                if attempt == 2:
+                    raise
+                time.sleep(2 * (attempt + 1))
+
+    try:
+        upload_id = bucket.init_multipart_upload(oss_key).upload_id
+        for chunk in _stream_with_resume(url):
+            part_buf += conv.feed(chunk)
+            while len(part_buf) >= PART:
+                piece = bytes(part_buf[:PART])
+                del part_buf[:PART]
+                upload_piece(piece)
+        part_buf += conv.finish()
+        if part_buf:
+            upload_piece(bytes(part_buf))
+        bucket.complete_multipart_upload(oss_key, upload_id, parts)
+    except Exception:
+        if upload_id:
+            try:
+                bucket.abort_multipart_upload(oss_key, upload_id)
+            except Exception:  # noqa: BLE001
+                pass
+        raise
+
+
 def process_track(cfg: dict, track: Track, dry: bool = False) -> str:
     """处理单条曲目。返回 skip16 / skip-foreign / converted / dry-run / error:<原因>。
-    头部探测只下载前 64KB；确认需要转换才拉全量。"""
+    头部探测只下载前 64KB；确认需要转换才转换，全程流式、逐条处理完即清理。"""
     url = track.audio_url or ""
     provider = cfg.get("provider", "local")
 
@@ -112,7 +211,7 @@ def process_track(cfg: dict, track: Track, dry: bool = False) -> str:
 
     tmpdir = tempfile.mkdtemp(prefix="wav16-")
     try:
-        # 1) 头部探测
+        # 头部探测（只拉前 64KB）
         head = os.path.join(tmpdir, "head.wav")
         if local_path:
             info = read_wav_info(local_path)
@@ -128,42 +227,15 @@ def process_track(cfg: dict, track: Track, dry: bool = False) -> str:
         if dry:
             return f"dry-run（{info['bits']}bit {info['sample_rate']}Hz {info['channels']}ch）"
 
-        # 2) 全量转换
-        src = local_path or os.path.join(tmpdir, "src.wav")
-        if not local_path:
-            _download(url, src)
-        # 本地覆盖要用同目录临时文件：os.replace 不能跨盘/跨挂载点
-        # （容器里 /tmp 与 /app/uploads 可能不在同一文件系统）
-        out = (local_path + ".new16") if local_path else os.path.join(tmpdir, "out.wav")
-        convert_24_to_16(src, out)
-
-        # 3) 覆盖写回原地址：本地同目录原子替换；OSS 分片上传完成才替换对象
         if local_path:
-            os.replace(out, local_path)
+            _convert_local_stream(local_path)
         else:
-            try:
-                import oss2
-
-                bucket = storage._oss_bucket(cfg)
-                oss2.resumable_upload(
-                    bucket, oss_key, out,
-                    multipart_threshold=CHUNK * 5, part_size=CHUNK * 5,
-                )
-            finally:
-                try:
-                    os.remove(out)
-                except OSError:
-                    pass
+            _convert_oss_stream(cfg, oss_key, url)
         return "converted"
     except Exception as e:  # noqa: BLE001
         logger.warning("音频降位深失败 track=%s：%s", track.id, e)
         return f"error:{e}"
     finally:
-        if local_path:
-            try:
-                os.remove(local_path + ".new16")
-            except OSError:
-                pass
         for f in os.listdir(tmpdir):
             try:
                 os.remove(os.path.join(tmpdir, f))
