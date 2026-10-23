@@ -94,3 +94,9 @@ export async function uploadAvatar(filePath: string): Promise<string> {
   }
   return body.data.url;
 }
+
+// 注销当前账号：后端软删除并匿名化；成功后由调用方清理本地登录态。
+export async function cancelAccount(): Promise<void> {
+  if (USE_MOCK) return;
+  await request('/api/mp/cancel-account', { method: 'POST' });
+}

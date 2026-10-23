@@ -1,7 +1,7 @@
 """微信支付 v3（小程序 JSAPI）最小实现：统一下单 + 回调解密。
 
 依赖商户 APIv3 配置（后台「支付设置」pay_config）：
-  wx_app_id      小程序 AppID
+  wx_app_id      小程序 AppID（下单实际以签发 openid 的 AppID 为准，见 mp._resolve_pay_payer）
   wx_mch_id      商户号
   wx_api_key     APIv3 密钥（32 位，用于回调 AEAD 解密）
   wx_cert_serial 商户证书序列号
@@ -25,9 +25,21 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 WXPAY_BASE = "https://api.mch.weixin.qq.com"
 
+# APIv3 接口规则要求标识商户系统；httpx 默认 UA 不携带商户号，排查时无法定位
+_USER_AGENT = "wuxing-music/1.0 (https://api.mch.weixin.qq.com)"
+
 
 class WxPayError(Exception):
     pass
+
+
+def _headers(cfg: dict, method: str, url_path: str, body: str = "") -> dict:
+    return {
+        "Authorization": _authorization(cfg, method, url_path, body),
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": f"{_USER_AGENT} mchid/{cfg.get('wx_mch_id', '')}",
+    }
 
 
 def _require(cfg: dict, *keys: str) -> None:
@@ -72,8 +84,12 @@ def create_jsapi_order(
     app_id: Optional[str] = None,
 ) -> dict:
     """调用 JSAPI 下单，返回前端 wx.requestPayment 所需参数（已二次签名）。
-    app_id 可选：H5 公众号支付传公众号 AppID；缺省用 pay_config 的小程序 wx_app_id。"""
-    _require(cfg, "wx_app_id", "wx_mch_id", "wx_key_pem", "wx_cert_serial", "notify_url")
+    app_id 应传签发 payer openid 的那个 AppID（小程序支付传小程序 AppID，
+    H5 公众号支付传公众号 AppID）；缺省才回退 pay_config 的 wx_app_id。"""
+    required = ["wx_mch_id", "wx_key_pem", "wx_cert_serial", "notify_url"]
+    if not app_id:
+        required.append("wx_app_id")
+    _require(cfg, *required)
 
     appid = app_id or cfg["wx_app_id"]
     url_path = "/v3/pay/transactions/jsapi"
@@ -87,13 +103,11 @@ def create_jsapi_order(
         "payer": {"openid": openid},
     }
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-    headers = {
-        "Authorization": _authorization(cfg, "POST", url_path, body),
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-    }
     try:
-        resp = httpx.post(f"{WXPAY_BASE}{url_path}", content=body.encode("utf-8"), headers=headers, timeout=15)
+        resp = httpx.post(
+            f"{WXPAY_BASE}{url_path}", content=body.encode("utf-8"),
+            headers=_headers(cfg, "POST", url_path, body), timeout=15,
+        )
     except httpx.HTTPError as e:
         raise WxPayError(f"调用微信下单失败：{e}")
     if resp.status_code != 200:
@@ -133,8 +147,15 @@ def refund(
     refund_fen: int,
     total_fen: int,
     reason: str = "",
+    notify_url: Optional[str] = None,
 ) -> dict:
     """申请退款（v3 /refund/domestic/refunds）。
+
+    ⚠️ 返回 200 仅表示退款单已**受理**，不代表退款成功：
+    应答里的 status 可能是 SUCCESS / PROCESSING / ABNORMAL / CLOSED，
+    最终结果以退款结果通知（notify_url）或 query_refund 查询为准。
+    同一 out_refund_no 重复提交是幂等的，微信只受理一次。
+
     refund_fen 退款金额，total_fen 原订单金额（分）。成功返回微信响应 dict。"""
     _require(cfg, "wx_mch_id", "wx_key_pem", "wx_cert_serial")
     if not transaction_id:
@@ -148,20 +169,35 @@ def refund(
     }
     if reason:
         payload["reason"] = reason
+    if notify_url:
+        payload["notify_url"] = notify_url
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-    headers = {
-        "Authorization": _authorization(cfg, "POST", url_path, body),
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-    }
     try:
         resp = httpx.post(
-            f"{WXPAY_BASE}{url_path}", content=body.encode("utf-8"), headers=headers, timeout=15
+            f"{WXPAY_BASE}{url_path}", content=body.encode("utf-8"),
+            headers=_headers(cfg, "POST", url_path, body), timeout=15,
         )
     except httpx.HTTPError as e:
         raise WxPayError(f"调用微信退款失败：{e}")
     if resp.status_code not in (200, 201):
         raise WxPayError(f"微信退款返回 {resp.status_code}：{resp.text}")
+    return resp.json()
+
+
+def query_refund(cfg: dict, *, out_refund_no: str) -> dict:
+    """查询单笔退款（GET /v3/refund/domestic/refunds/out_refund_no/{out_refund_no}）。
+    用于退款处理中时手动同步状态。"""
+    _require(cfg, "wx_mch_id", "wx_key_pem", "wx_cert_serial")
+    url_path = f"/v3/refund/domestic/refunds/out_refund_no/{out_refund_no}"
+    try:
+        resp = httpx.get(
+            f"{WXPAY_BASE}{url_path}",
+            headers=_headers(cfg, "GET", url_path), timeout=15,
+        )
+    except httpx.HTTPError as e:
+        raise WxPayError(f"调用微信退款查询失败：{e}")
+    if resp.status_code != 200:
+        raise WxPayError(f"微信退款查询返回 {resp.status_code}：{resp.text}")
     return resp.json()
 
 
@@ -204,14 +240,10 @@ def transfer(
         "transfer_remark": (remark or "分成提现")[:32],
     }
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-    headers = {
-        "Authorization": _authorization(cfg, "POST", url_path, body),
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-    }
     try:
         resp = httpx.post(
-            f"{WXPAY_BASE}{url_path}", content=body.encode("utf-8"), headers=headers, timeout=20
+            f"{WXPAY_BASE}{url_path}", content=body.encode("utf-8"),
+            headers=_headers(cfg, "POST", url_path, body), timeout=20,
         )
     except httpx.HTTPError as e:
         raise WxPayError(f"调用微信转账失败：{e}")

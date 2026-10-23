@@ -17,6 +17,7 @@ from app.database import get_db
 from app.models import Admin, Agent, Commission, Setting, User, Withdrawal
 from app.schemas import ok
 from app.security import require_perm
+from app.user_delete import is_deleted
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -177,8 +178,11 @@ def _check_user_id(db: Session, user_id: int | None, exclude_agent_id: int | Non
     """一个用户账号只能是一个代理，否则代理中心不知道该认哪个身份。"""
     if not user_id:
         return
-    if not db.query(User.id).filter(User.id == user_id).first():
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
         raise HTTPException(status_code=400, detail="关联的用户不存在")
+    if is_deleted(user):
+        raise HTTPException(status_code=400, detail="已注销账号不能关联代理")
     q = db.query(Agent.id).filter(Agent.user_id == user_id)
     if exclude_agent_id:
         q = q.filter(Agent.id != exclude_agent_id)

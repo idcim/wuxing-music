@@ -1,11 +1,10 @@
 import json
 import logging
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app import agent_service, wxpay
+from app import refund_service, wxpay
 from app.database import get_db
 from app.models import Admin, Order, Setting, User
 from app.schemas import RefundIn, ok
@@ -124,7 +123,13 @@ def confirm_refund(
     db: Session = Depends(get_db),
     admin: Admin = Depends(require_perm("orders:refund")),
 ):
-    """确认退款完成：标记已退款，并回收该用户会员权益。"""
+    """确认退款：调微信退款 API，并按退款单实时状态收尾。
+
+    微信退款是异步的——接口 200 只代表受理（文档：结果以退款结果通知/查询为准）。
+    - SUCCESS：立即 finalize（回收会员/作废礼物码/冲正分成）；
+    - PROCESSING：保持「退款中」，等退款结果通知或手动「同步退款状态」；
+    - ABNORMAL/CLOSED：保持「退款中」并报错，需到商户平台处理。
+    同一 out_refund_no 重复申请是幂等的，重复确认安全。"""
     o = db.query(Order).filter(Order.id == order_id).first()
     if not o:
         raise HTTPException(status_code=404, detail="订单不存在")
@@ -137,33 +142,61 @@ def confirm_refund(
     pay_enabled = bool(cfg.get("enabled")) and bool(cfg.get("wx_mch_id")) and bool(cfg.get("wx_key_pem"))
     if pay_enabled and o.transaction_id:
         try:
-            wxpay.refund(
+            resp = wxpay.refund(
                 cfg,
                 transaction_id=o.transaction_id,
                 out_refund_no="RF" + o.order_no,
                 refund_fen=int(round((o.refund_amount or o.amount) * 100)),
                 total_fen=int(round(o.amount * 100)),
                 reason=o.refund_reason or "",
+                notify_url=refund_service.refund_notify_url(cfg),
             )
         except wxpay.WxPayError as e:
             logger.warning("微信退款失败 订单 %s：%s", o.order_no, e)
             raise HTTPException(status_code=400, detail=f"微信退款失败：{e}")
+        state = resp.get("status")
+        if state == "PROCESSING":
+            return ok({**_to_dict(o), "refund_state": "PROCESSING"})
+        if state in ("ABNORMAL", "CLOSED"):
+            logger.warning("微信退款状态异常 订单 %s：%s", o.order_no, state)
+            raise HTTPException(
+                status_code=400,
+                detail=f"微信退款状态为 {state}，请到商户平台核查后重试",
+            )
 
-    o.status = "refunded"
-    o.refund_at = datetime.utcnow()
-    o.refund_by = admin.username
-
-    # 回收会员权益：若用户当前会员来自购买，降级为免费
-    user = db.query(User).filter(User.id == o.user_id).first()
-    if user and user.membership_source == "purchase" and user.membership_type == o.plan_id:
-        user.membership_type = "free"
-        user.membership_name = "听闻"
-        user.membership_expire_at = None
-        user.membership_source = ""
-
-    # 代理分成冲正：还没提走的直接作废；已提现的钱追不回来，标记 clawback 由人工追讨
-    agent_service.void_commission(db, o, reason=f"订单退款（{admin.username}）")
-
-    db.commit()
-    db.refresh(o)
+    refund_service.finalize_refund(db, o, admin.username)
     return ok(_to_dict(o))
+
+
+@router.post("/{order_id}/refund/sync")
+def sync_refund(
+    order_id: int,
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(require_perm("orders:refund")),
+):
+    """同步退款状态：退款处理中时，主动查微信退款单并据此收尾。"""
+    o = db.query(Order).filter(Order.id == order_id).first()
+    if not o:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    if o.status != "refunding":
+        raise HTTPException(status_code=400, detail="仅退款中订单可同步")
+
+    cfg = _pay_cfg(db)
+    pay_enabled = bool(cfg.get("enabled")) and bool(cfg.get("wx_mch_id")) and bool(cfg.get("wx_key_pem"))
+    if not (pay_enabled and o.transaction_id):
+        raise HTTPException(status_code=400, detail="该订单未走微信退款，直接确认退款即可")
+
+    try:
+        resp = wxpay.query_refund(cfg, out_refund_no="RF" + o.order_no)
+    except wxpay.WxPayError as e:
+        logger.warning("微信退款查询失败 订单 %s：%s", o.order_no, e)
+        raise HTTPException(status_code=400, detail=f"微信退款查询失败：{e}")
+
+    state = resp.get("status")
+    if state == "SUCCESS":
+        refund_service.finalize_refund(db, o, admin.username)
+        return ok({**_to_dict(o), "refund_state": "SUCCESS"})
+    if state == "PROCESSING":
+        return ok({**_to_dict(o), "refund_state": "PROCESSING"})
+    # ABNORMAL / CLOSED / 其它
+    raise HTTPException(status_code=400, detail=f"微信退款状态为 {state}，请到商户平台核查")

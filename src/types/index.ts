@@ -91,7 +91,8 @@ export interface QuizQuestion {
 }
 
 // ─── 会员 / 用户 ─────────────────────────────────────
-export type PlanId = 'free' | 'month' | 'year' | 'trial';
+// 套餐 ID 由后台「套餐」管理（可增删），不再限定字面量；常见值 free / trial / month / year
+export type PlanId = string;
 
 export interface Plan {
   id: PlanId;

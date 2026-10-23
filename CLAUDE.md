@@ -185,7 +185,7 @@ wuxing-music/
 
 **`USE_MOCK` 开关**（`src/constants/env.ts`）：每个 service（auth / cdkey / pay / content …）内部 `if (USE_MOCK) { …本地假数据… }`，因此后端未就绪时前端可独立跑通。切真实接口只需把 `USE_MOCK` 置 `false`，并在根目录 `.env.local` 填对 `TARO_APP_API_BASE`。修改任何 service 时**务必同时维护 mock 与真实两条分支**。
 
-**登录约定（小程序）**：`wxLogin()` 取 `wx.login()` 的临时 `code` + 稳定游客 openid 一起发给 `/api/mp/login`；后端配置了 AppSecret 时用 `code` 调 `jscode2session` 换真实 openid，否则回退前端直传的稳定 openid（保证游客态身份不漂移）。**切勿把每次都变的 `code` 当 openid 用**。
+**登录约定（小程序）**：`wxLogin()` 取 `wx.login()` 的临时 `code` + 稳定游客 openid 一起发给 `/api/mp/login`；后端配置了 AppSecret 时用 `code` 调 `jscode2session` 换真实 openid，否则回退前端直传的稳定 openid（保证游客态身份不漂移）。**切勿把每次都变的 `code` 当 openid 用**。启动只恢复已有缓存/token，**不能静默调用 `login()`**——`/api/mp/login` 是 get-or-create，打开小程序就调用等于自动注册用户；只有登录页的明确操作才允许建行。
 
 **登录约定（H5，v1.1）**：按平台分支（`utils/platform.ts` 的 `isH5`/`isInWeChat`）。手机登录（`loginByPhone`/`loginByPassword`）平台无关。微信登录 `wechatLoginH5()` 走公众号网页授权：无 `code` → 取 `/api/mp/h5/oauth-url` 跳转授权；带 `code` 回跳 → `/api/mp/h5/login` 换 `oa_openid`（`app.tsx` 在微信内静默触发并清理 URL）。**安全约束**：`/api/mp/login`（小程序）、`/api/mp/h5/login`（公众号）与 `/api/mp/h5/qrlogin`（浏览器扫码）均——已配置密钥时**必须用真实 `code` 换 openid、忽略前端直传标识**，仅未配置时才用游客标识走 dev 兜底（防绕过授权/顶号）；手机号合成 openid `phone:<手机号>` 不可经 openid 直信路径登录（详见 [`docs/ROADMAP.md`](docs/ROADMAP.md) 安全加固清单）。
 
@@ -399,8 +399,10 @@ const top = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
 
 ### 2. 音频播放 `services/audio/`（分端）
 
-- 小程序：`Taro.getBackgroundAudioManager()`（**用 BackgroundAudioManager 才能后台/锁屏播放**，`app.config.ts` 已配 `requiredBackgroundModes: ['audio']`）。
+- 小程序：`Taro.getBackgroundAudioManager()`（**用 BackgroundAudioManager 才能后台/锁屏播放**，`app.config.ts` 已配 `requiredBackgroundModes: ['audio']`）。**例外：PC 微信（platform 为 `windows`/`mac`）改用 `InnerAudioContext`**——背景音频管理器在 PC 微信虽标注支持但有大量「设置 src 不出声」的反馈，且 PC 无锁屏续播场景。`onError` 的真实回调带 `{errCode, errMsg}`（Taro 类型没声明，用类型断言拿），必须透到 `loadError` 展示，否则平台差异类故障完全无法定位。
 - H5：`index.h5.ts` 对应实现；统一接口见 `types.ts`。
+- `MiniPlayer` 按当前页路由自动定位：四个 TabBar 页面用 `mini-player--tabbar` 保持导航上方，二级页（元素详情/聆听历史等）默认贴底部安全区，不要在页面里各自写死 bottom。
+- **播放列表**：`TabBar` 中央按钮与全屏播放器都打开 `components/Playlist`，分「当前列表 / 全部歌曲」。`stores/player.ts` 的 `addToQueue` / `addAllToQueue` 按曲目 id 去重，队列可移除并点击播放；移除当前曲目自动切下一首，移除最后一首调用 `stop()`。新增队列操作必须同步重建 `order`，否则顺序/随机/悦动模式会读到旧下标。滚动区由 `ScrollArea` 分端实现：小程序 `ScrollView`、H5 原生 CSS 滚动，均有明确视口高度；遮罩关闭不能用 `onClick`（Taro 会把列表拖动合成为点击），要用触摸起止坐标判断，位移超过阈值不关闭，标题栏关闭按钮两端都可用。队列、当前曲目与播放模式持久化在 `wx_player_queue`，启动只恢复为暂停态、不自动播放；`stop()` 会删除该记录。恢复后的曲目本次会话还没有音源，`resume()` 必须按 `loadedTrackId` 重新 `_start`，不能直接 `audioService.play()`。
 - 非会员 **30 秒试听**：`previewSec` 到点由 `stores/player.ts::onTimeUpdate` **release 音源**（不是 pause——暂停后底层仍会把整包缓冲完），并经 `components/UpgradePrompt` 弹升级引导。
 - ⚠️ **`isLoading` 绝不能有「进得去出不来」的路径**：播放器页 `toggle()` 首行是 `if (isLoading) return`，一旦 `isLoading` 卡在 true，播放键就永久失效、一直转圈，用户只能刷新。两条已修的坑：① 加载看门狗超时必须**同时**置 `isLoading:false`，只写 `loadError` 等于把按钮焊死；② `audioService.release()` 拆音源前先 `bound = {}`，否则元素收尾时吐的 `stalled`/`waiting` 会把 `isLoading` 重新置真，而没了音源 `canplay` 永不到达。新增任何 `set({isLoading:true})` 都要问一句「谁保证它会被清掉」。
 - ⚠️ **「会员专属」不等于不能播**：付费曲目对非会员**照样点得动**，只是听到 `previewSec` 就断。列表页一律 `onPlay={() => onTrack(t.id)}`，**不要**再写成 `locked ? goMember() : onTrack(...)` —— v1.8.1 之前三个列表页都是那么写的，结果把曲目设成会员专属就等于彻底锁死，`player.ts` 里的断流逻辑和 `UpgradePrompt` 成了永远走不到的死代码。`TrackCard` 的 `locked` 只控制右侧的「试听 30s」徽标，**不控制能否播放**（也别再画锁头图标，那会让人以为点不动）。
@@ -424,7 +426,7 @@ const top = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
 
 ### 5. 会员体系与支付
 
-**三档套餐**（`constants/plans.ts` 兜底，后台 `plan` 表可改）：
+**套餐**（后台 `plan` 表为准，会员页运行时拉 `GET /api/mp/plans`，`constants/plans.ts` 仅作接口失败时的兜底）：
 
 | ID    | 名称 | 价格 | 时长  | 特性                          |
 | ----- | ---- | ---- | ----- | ----------------------------- |
@@ -438,7 +440,10 @@ const top = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
   后台「支付设置」分三段（商户共用 / 小程序 / H5）：`h5_enabled` **默认 true**（存量库没这个键，
   按 `cfg.get("h5_enabled", True)` 读，别改成 `cfg.get("h5_enabled")` 否则老库的 H5 支付会静默关停）；
   `h5_app_id` 留空则回退 `oa_config.app_id`。**两个 appid 都得在商户平台「APPID 授权管理」里绑定商户号**。
+  小程序下单的 appid 以**签发 openid 的一方**为准，即「小程序设置」的 `mp_config.app_id`（`_resolve_pay_payer` 强制使用它并在两处不一致时告警）——支付设置的 `wx_app_id` 只在未配小程序设置时兜底，填错不会再导致「appid和openid不匹配」。空 openid 的早期 dev 账号会在下单前置为失败并提示重新登录。
   微信外浏览器（MWEB）仍不支持。
+- 下单/调起支付的签名与参数已按 [JSAPI 下单](https://pay.weixin.qq.com/doc/v3/merchant/4012791856) 与 [小程序调起支付](https://pay.weixin.qq.com/doc/v3/merchant/4012791898) 核对：二次签名串 `appId\ntimeStamp\nonceStr\nprepay_id=…\n`、`signType` 仅 RSA、下单与调起的 appid 必须一致（`wxpay._build_pay_params` 用同一个 appid）。前端 `payFailure` 会把 `requestPayment:fail <detail>` 的原因透出来（如 `jsapi has no permission` = 小程序支付权限被公众平台限制，交易类小程序需按规范接入订单发货管理）。
+- **退款是异步的**（[申请退款](https://pay.weixin.qq.com/doc/v3/merchant/4013071036)：接口 200 只代表受理）。后台「确认退款」调微信退款后按应答 `status` 分支：`SUCCESS` 立即收尾；`PROCESSING` 保持「退款中」，由退款结果通知 `POST /api/mp/pay/refund-callback`（地址按 `notify_url` 推导，可用 `refund_notify_url` 覆盖）或后台「同步状态」（`POST /api/admin/orders/{id}/refund/sync` → `wxpay.query_refund`）收尾；`ABNORMAL/CLOSED` 保持退款中并提示去商户平台处理。收尾统一走 `app/refund_service.py::finalize_refund`（幂等）：置已退款 + 回收会员 + 作废未使用礼物码（已使用的记日志人工处理）+ 冲正分成。同一 `out_refund_no`（`RF`+订单号）重复申请微信侧幂等。
 - 会员发放一律**按套餐天数在剩余期上累加续期**。
 - iOS App 端订阅须走 Apple IAP（小程序端不受影响，详见「支付特别说明」）。
 
@@ -540,6 +545,7 @@ POST /api/mp/h5/qrlogin         # ★ 扫码 code 换 web_openid 登录（微信
 GET  /api/mp/h5/jssdk-config    # wx.config 签名（JSAPI 支付 / 分享）
 GET  /api/mp/profile            # 我的资料
 PATCH|POST /api/mp/profile      # 改昵称/头像/生日/时辰（同时支持 POST 规避代理对 PATCH 的 405）
+POST /api/mp/cancel-account     # 用户自助注销（软删除 + 匿名化，旧 token 立即失效）
 POST /api/mp/upload             # 用户头像上传（≤5MB）
 GET  /api/mp/membership         # 会员态（含 isPremium）
 POST /api/mp/bind-phone         # 绑定手机号
@@ -550,6 +556,7 @@ POST /api/mp/cdkey/redeem       # 兑换码
 GET  /api/mp/pay/purchase-status # 会员售卖开关（公开，仅返回 enabled）
 POST /api/mp/pay/create-order   # 会员下单（未配商户则直开）
 POST /api/mp/pay/callback       # 微信支付回调（验签/幂等/金额校验）
+POST /api/mp/pay/refund-callback # 微信退款结果通知（REFUND.SUCCESS 时 finalize）
 POST /api/mp/gift/create-order  # 买卡送人下单
 GET  /api/mp/gift/code          # 轮询礼物码
 GET  /api/mp/orders             # 我的订单
@@ -572,8 +579,9 @@ GET  /api/mp/agent/withdrawals  # 我的提现记录
 ```
 GET  /api/admin/captcha            # 登录图形验证码（免鉴权，一次性消费）
 POST /api/admin/login  GET /me  GET /dashboard   # 登录需带 captcha_id/captcha_code
-GET  /users  GET /users/{id}  POST /users/{id}/grant                 # 用户 + 后台开通会员
-GET  /orders GET /orders/{id} POST /orders/{id}/refund  .../refund/confirm  # 订单 + 退款
+GET  /users  GET /users/{id}  POST /users/{id}/grant  DELETE /users/{id}  POST /users/cleanup-test
+# 用户 + 开通会员 + 删除/注销 + 测试账号批量预检清理
+GET  /orders GET /orders/{id} POST /orders/{id}/refund  .../refund/confirm  .../refund/sync  # 订单 + 退款（confirm 按微信应答分支，sync 查单收尾）
 GET/POST /plans     DELETE /plans/{id}
 GET/POST /elements  DELETE /elements/{id}
 GET  /tracks POST /tracks  PUT/DELETE /tracks/{id}
@@ -614,7 +622,7 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 | `element` | 五行配置（id=木火土金水） | primary/accent/glow/bg、note/organ/season、sleep_tip、**meta**（JSON，33 项文化对照维度；后台一个 JSON 文本框编辑，前后端各校验一次格式，`/api/mp/elements` 解析失败降级 `{}`） |
 | `track` | 曲目 | element_id(FK)、hz、audio_url、cover_url、is_premium、preview_sec、is_online |
 | `plan` | 套餐 | id(free/month/year/trial)、price、duration_days、features(JSON) |
-| `user` | 用户 | openid/unionid/**oa_openid**/**web_openid**（开放平台网站应用，扫码登录）/**merged_into**（非空=已并入他行，登录与鉴权跟指针走）/phone/**password_hash**、element、**birthday/birth_hour**、**agent_id/agent_bound_at**（代理归因，永久绑定）、membership_type/name/expire_at/source |
+| `user` | 用户 | openid/unionid/**oa_openid**/**web_openid**（开放平台网站应用，扫码登录）/**merged_into**（非空=已并入他行，登录与鉴权跟指针走）/phone/**password_hash**、element、**birthday/birth_hour**、**agent_id/agent_bound_at**（代理归因，永久绑定）、membership_type/name/expire_at/source、**deleted_at**（注销/删除标记） |
 | `cdkey` | 兑换码 | code、batch_id、plan_type、status(unused/used/disabled/expired) |
 | `cdkey_redeem_log` | 兑换日志 | user_id、cdkey_id、ip、device |
 | `app_order` | 订单 | order_no、status(pending/paid/refunding/refunded…)、**is_gift/gift_code**、**refund_*** |
@@ -832,6 +840,7 @@ feat: 新功能   fix: 修复   style: 样式   refactor: 重构   docs: 文档 
 - 小程序需主体备案；**音乐版权**需授权或自制（建议与原创音乐人合作）。
 - **中医宣称**：UI 文案避免"治疗/治愈"等违反《广告法》的医疗宣称，"疗愈/安神"等谨慎使用。
 - **服务条款**：明确标注「本应用提供的音乐为放松辅助，不替代医疗诊断」。
+- **关于我们 / 服务条款**：后台按 Markdown 存储，仅支持白名单子集（标题、加粗、斜体、列表、引用、链接、行内代码）；小程序经 `components/MarkdownView` 渲染。不要把后台原始 HTML 直接入库或改用 `v-html` / `RichText` 原样渲染。
 
 ### 写文案的三条硬约束（v1.7.0 起，出自 [`docs/WUXING-REFERENCE.md`](docs/WUXING-REFERENCE.md) 第一节）
 

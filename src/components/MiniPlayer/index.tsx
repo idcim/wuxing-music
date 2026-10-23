@@ -15,6 +15,19 @@ import type { ElementId } from '@/types';
 import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
 
+const TAB_ROUTES = new Set([
+  'pages/home/index',
+  'pages/explore/index',
+  'pages/member/index',
+  'pages/profile/index'
+]);
+
+function currentPageHasTabBar(): boolean {
+  const pages = Taro.getCurrentPages();
+  const route = pages[pages.length - 1]?.route || '';
+  return TAB_ROUTES.has(route.replace(/^\/+/, ''));
+}
+
 export default function MiniPlayer() {
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
@@ -52,11 +65,12 @@ export default function MiniPlayer() {
   //  凡是时长不等于 36 分钟的曲目，显示的时间都是错的。）
   const curLabel = fmtTime(currentTime);
   const bufferedPct = duration ? Math.min(100, (buffered / duration) * 100) : 0;
+  const hasTabBar = currentPageHasTabBar();
 
   return (
     <Fragment>
     <View
-      className="mini-player"
+      className={`mini-player ${hasTabBar ? 'mini-player--tabbar' : ''}`}
       style={{
         borderColor: A.a40(el.primary),
         boxShadow: `0 ${rpx(-20)} ${rpx(80)} ${el.glow}`

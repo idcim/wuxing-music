@@ -31,7 +31,7 @@ interface UserStore {
   loginByWechatH5: () => Promise<WechatH5LoginResult>;
   loginByWechatQr: () => Promise<WechatH5LoginResult>;
   initFromCache: () => Promise<void>;
-  logout: () => void;
+  logout: (clearProfile?: boolean) => void;
 }
 
 function computePremium(m?: Membership | null): boolean {
@@ -140,10 +140,11 @@ export const useUserStore = create<UserStore>((set, get) => ({
     return res;
   },
 
-  // 启动时优先用缓存的登录态；token 失效(401)则清掉重新登录
+  // 启动时只恢复已有登录态；没有有效 token 就保持游客，不隐式创建用户
   initFromCache: async () => {
     const cached = storage.get<User>(STORAGE_KEYS.USER);
-    if (cached) {
+    const hasToken = Boolean(getToken());
+    if (cached && hasToken) {
       set({
         user: cached,
         element: cached.element ?? get().element,
@@ -151,31 +152,36 @@ export const useUserStore = create<UserStore>((set, get) => ({
       });
     }
 
-    if (getToken()) {
-      try {
-        const fresh = await fetchProfile();
-        get().setUser(fresh);
-        return;
-      } catch (e: any) {
-        // token 失效（如旧 mock token / 过期）：清理后走静默登录
-        if (e?.code === 401) {
-          clearAuth();
-        } else {
-          return; // 其他错误（如网络）保持缓存态，不强制重登
-        }
-      }
+    if (!hasToken) {
+      set({ user: null, isPremium: false });
+      return;
     }
 
-    // 无有效 token：静默登录
     try {
-      await get().login();
-    } catch {
-      // 静默登录失败，进入游客态
+      const fresh = await fetchProfile();
+      get().setUser(fresh);
+    } catch (e: any) {
+      // token 失效（如旧 mock token / 过期）：清掉本地凭据和内存态，由用户主动登录
+      if (e?.code === 401) {
+        clearAuth();
+        set({ user: null, isPremium: false });
+      }
+      // 其他错误（如网络）保持缓存态，不强制重登
     }
   },
 
-  logout: () => {
+  logout: (clearProfile = false) => {
     clearAuth();
-    set({ user: null, isPremium: false });
+    if (clearProfile) {
+      storage.remove(STORAGE_KEYS.ELEMENT);
+      storage.remove(STORAGE_KEYS.SCORES);
+      storage.remove(STORAGE_KEYS.QUIZ_PROGRESS);
+      storage.remove(STORAGE_KEYS.PENDING_AGENT);
+    }
+    set({
+      user: null,
+      isPremium: false,
+      ...(clearProfile ? { element: null, scores: null } : {})
+    });
   }
 }));

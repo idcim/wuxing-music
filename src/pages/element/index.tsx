@@ -1,6 +1,7 @@
 import { View, Text } from '@tarojs/components';
 import { useRouter, useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/taro';
-import { goBack } from '@/utils/nav';
+import { goBack, navTopStyle } from '@/utils/nav';
+import { rpx } from '@/utils/unit';
 import { WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
 import { usePlayerStore } from '@/stores/player';
@@ -51,6 +52,8 @@ export default function ElementDetail() {
   }));
 
   const back = () => goBack();
+  const navStyle = navTopStyle();
+  const contentTop = `calc(${navStyle.paddingTop} + ${rpx(80)})`;
 
   const onTrack = (trackId: number) => {
     const track = el.tracks.find((t) => t.id === trackId)!;
@@ -63,11 +66,11 @@ export default function ElementDetail() {
 
   return (
     <View className="el-detail" style={{ background: el.bg }}>
-      <View className="el-detail__nav">
+      <View className="el-detail__nav" style={{ ...navStyle, background: el.bg }}>
         <Text className="el-detail__back" onClick={back}>‹</Text>
       </View>
 
-      <View className="el-detail__header fade-up">
+      <View className="el-detail__header fade-up" style={{ paddingTop: contentTop }}>
         <Text className="el-detail__el serif" style={{ color: el.primary }}>{el.id}</Text>
         <Text className="el-detail__meta">
           {el.note}音 · {el.meta?.notation || el.notePinyin} · {el.season}季 · {el.quality}

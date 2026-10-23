@@ -32,11 +32,14 @@
       <el-table-column label="支付时间" width="170">
         <template #default="{ row }">{{ fmt(row.paid_at) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="210" fixed="right">
+      <el-table-column label="操作" width="290" fixed="right">
         <template #default="{ row }">
           <el-button size="small" @click="openDetail(row)">详情</el-button>
           <el-button v-if="row.status === 'paid'" size="small" type="warning" @click="openRefund(row)">退款</el-button>
-          <el-button v-else-if="row.status === 'refunding'" size="small" type="danger" @click="onConfirm(row)">确认退款</el-button>
+          <template v-else-if="row.status === 'refunding'">
+            <el-button size="small" type="danger" @click="onConfirm(row)">确认退款</el-button>
+            <el-button size="small" @click="onSyncRefund(row)">同步状态</el-button>
+          </template>
         </template>
       </el-table-column>
     </el-table>
@@ -102,7 +105,7 @@
 import { onMounted, reactive, ref } from 'vue';
 import { Search } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { listOrders, refundOrder, confirmRefund, getOrder } from '@/api';
+import { listOrders, refundOrder, confirmRefund, syncRefund, getOrder } from '@/api';
 
 const rows = ref<any[]>([]);
 const total = ref(0);
@@ -169,11 +172,25 @@ async function onRefund() {
 
 async function onConfirm(row: any) {
   await ElMessageBox.confirm(
-    `确认订单 ${row.order_no} 已退款完成？将回收该用户会员权益。`,
+    `确认订单 ${row.order_no} 退款？将调用微信退款 API，退款成功后回收该用户会员权益。`,
     '确认退款', { type: 'warning' }
   );
-  await confirmRefund(row.id);
-  ElMessage.success('退款已完成');
+  const res = await confirmRefund(row.id);
+  if (res?.refund_state === 'PROCESSING') {
+    ElMessage.warning('微信已受理，退款处理中，稍后可点「同步状态」');
+  } else {
+    ElMessage.success('退款已完成');
+  }
+  load();
+}
+
+async function onSyncRefund(row: any) {
+  const res = await syncRefund(row.id);
+  if (res?.refund_state === 'PROCESSING') {
+    ElMessage.info('微信退款仍在处理中，稍后再试');
+  } else {
+    ElMessage.success('退款已完成');
+  }
   load();
 }
 

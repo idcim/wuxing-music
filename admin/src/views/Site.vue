@@ -36,11 +36,12 @@
           <el-input v-model="form.contact_phone" />
         </el-form-item>
         <el-form-item label="关于我们">
-          <el-input v-model="form.about_us" type="textarea" :rows="6"
-            placeholder="将展示在小程序「关于我们」页面" />
+          <MarkdownEditor v-model="form.about_us" :rows="8"
+            placeholder="支持 Markdown：标题、加粗、列表、引用、链接和行内代码" />
         </el-form-item>
         <el-form-item label="服务条款">
-          <el-input v-model="form.service_terms" type="textarea" :rows="4" />
+          <MarkdownEditor v-model="form.service_terms" :rows="12"
+            placeholder="使用 Markdown 编写服务条款，右侧可切换预览" />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" :loading="saving" @click="onSave">保存</el-button>
@@ -56,6 +57,7 @@ import { Plus } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { getSiteSetting, updateSiteSetting, UPLOAD_URL } from '@/api';
 import { useSiteStore } from '@/stores/site';
+import MarkdownEditor from '@/components/MarkdownEditor.vue';
 
 const site = useSiteStore();
 const loading = ref(false);

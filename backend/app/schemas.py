@@ -115,6 +115,7 @@ class PaySettingIn(BaseModel):
     wx_mch_id: str = ""
     wx_api_key: str = ""          # APIv3 密钥（脱敏）
     notify_url: str = ""
+    refund_notify_url: str = ""   # 退款结果通知；留空按 notify_url 推导（…/pay/callback → …/pay/refund-callback）
     enabled: bool = False         # 微信支付通道开关
     purchase_enabled: bool = True  # 会员售卖开关；存量配置缺省开启，关闭后拒绝创建会员/礼物订单
     # ── H5（微信内 · 公众号 JSAPI）──
@@ -136,8 +137,8 @@ class SiteSettingIn(BaseModel):
     icp_no: str = ""             # 备案号
     contact_email: str = ""
     contact_phone: str = ""
-    about_us: str = ""          # 关于我们（富文本/纯文本）
-    service_terms: str = ""     # 服务条款
+    about_us: str = ""          # 关于我们（Markdown）
+    service_terms: str = ""     # 服务条款（Markdown）
 
 
 # ── 存储设置 ──

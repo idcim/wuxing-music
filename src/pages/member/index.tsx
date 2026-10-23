@@ -3,7 +3,7 @@ import { View, Text } from '@tarojs/components';
 import Taro, { useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/taro';
 import { PLANS } from '@/constants/plans';
 import { ELEMENT_LIST } from '@/constants/wuxing';
-import { purchasePlan, purchaseGift, getPurchaseStatus } from '@/services/pay';
+import { purchasePlan, purchaseGift, getPurchaseStatus, fetchPlans } from '@/services/pay';
 import { useUserStore } from '@/stores/user';
 import { siteName } from '@/stores/site';
 import { fetchProfile } from '@/services/auth';
@@ -14,7 +14,7 @@ import MiniPlayer from '@/components/MiniPlayer';
 import CdkeyModal from '@/components/CdkeyModal';
 import PosterShare from '@/components/PosterShare';
 import TabBar from '@/components/TabBar';
-import type { PlanId } from '@/types';
+import type { Plan, PlanId } from '@/types';
 import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
 
@@ -27,6 +27,8 @@ export default function Member() {
   const [posterSub, setPosterSub] = useState('我已开通会员，邀你一起听助眠音律');
   const [giftCode, setGiftCode] = useState('');
   const [purchaseEnabled, setPurchaseEnabled] = useState(true);
+  // 套餐以后台配置为准，接口失败时用本地 PLANS 兜底（与种子数据一致的三档）
+  const [plans, setPlans] = useState<Plan[]>(PLANS);
   const purchaseStatusRequestId = useRef(0);
   const isPremium = useUserStore((s) => s.isPremium);
   const currentType = useUserStore((s) => s.user?.membership.type);
@@ -39,6 +41,11 @@ export default function Member() {
     getPurchaseStatus()
       .then((enabled) => {
         if (requestId === purchaseStatusRequestId.current) setPurchaseEnabled(enabled);
+      })
+      .catch(() => {});
+    fetchPlans()
+      .then((list) => {
+        if (requestId === purchaseStatusRequestId.current && list.length > 0) setPlans(list);
       })
       .catch(() => {});
     // H5 的「···」转发文案要靠 JS-SDK 设，useShareAppMessage 在 H5 是空操作
@@ -162,9 +169,9 @@ export default function Member() {
   };
 
   const planIcon = (id: PlanId): IconName =>
-    id === 'year' ? 'crown' : id === 'month' ? 'star' : 'music2';
+    id === 'year' ? 'crown' : id === 'free' ? 'music2' : 'star';
   const planIconColor = (id: PlanId) =>
-    id === 'year' ? '#fde047' : id === 'month' ? '#cbd5e1' : '#64748b';
+    id === 'year' ? '#fde047' : id === 'free' ? '#64748b' : '#cbd5e1';
 
   return (
     <View className="member">
@@ -189,7 +196,7 @@ export default function Member() {
 
       {/* 套餐 */}
       <View className="member__list">
-        {PLANS.map((p, idx) => {
+        {plans.map((p, idx) => {
           const isCurrent = isPremium && currentType === p.id;
           return (
             <View

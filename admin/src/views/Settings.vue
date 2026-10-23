@@ -24,6 +24,10 @@
         <el-form-item label="回调地址">
           <el-input v-model="form.notify_url" placeholder="https://your-domain/api/mp/pay/callback" />
         </el-form-item>
+        <el-form-item label="退款回调地址">
+          <el-input v-model="form.refund_notify_url" placeholder="留空按上方回调地址自动推导" />
+          <div class="hint">微信退款是异步的，退款结果通知到 /api/mp/pay/refund-callback；留空时按支付回调地址自动推导，一般无需填写。</div>
+        </el-form-item>
 
         <el-divider content-position="left">小程序支付</el-divider>
         <el-form-item label="小程序 AppID">
@@ -75,7 +79,7 @@ const set = reactive({ wx_api_key: false, wx_cert_pem: false, wx_key_pem: false 
 const oaAppId = ref('');
 const form = reactive({
   enabled: false, purchase_enabled: true,
-  wx_app_id: '', wx_mch_id: '', wx_api_key: '', notify_url: '',
+  wx_app_id: '', wx_mch_id: '', wx_api_key: '', notify_url: '', refund_notify_url: '',
   h5_enabled: true, h5_app_id: '',
   wx_cert_serial: '', wx_cert_pem: '', wx_key_pem: ''
 });
@@ -94,6 +98,7 @@ async function load() {
     form.wx_app_id = data.wx_app_id ?? '';
     form.wx_mch_id = data.wx_mch_id ?? '';
     form.notify_url = data.notify_url ?? '';
+    form.refund_notify_url = data.refund_notify_url ?? '';
     // 存量配置里没有这个键，缺省视为开启（与后端 _resolve_pay_payer 的默认一致）
     form.h5_enabled = data.h5_enabled ?? true;
     form.h5_app_id = data.h5_app_id ?? '';

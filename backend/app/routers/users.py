@@ -11,6 +11,7 @@ from app.lunar import lunar_info
 from app.models import Admin, Agent, Cdkey, Order, Plan, Track, User
 from app.schemas import ok
 from app.security import require_perm
+from app.user_delete import cleanup_test_users, delete_user_record, is_deleted
 from app.user_merge import find_duplicates, merge_users
 
 router = APIRouter(prefix="/api/admin", tags=["users-stats"])
@@ -60,7 +61,7 @@ def list_users(
 ):
     # 已被合并的行是墓碑（历史订单仍指着它），不算真实账号，列表里不出现，
     # 要看它们走「重复账号」那一页
-    q = db.query(User).filter(User.merged_into.is_(None))
+    q = db.query(User).filter(User.merged_into.is_(None), User.deleted_at.is_(None))
     if keyword:
         q = q.filter(User.nickname.contains(keyword))
     total = q.count()
@@ -103,6 +104,8 @@ def merge_user(
         raise HTTPException(status_code=400, detail="不能与自己合并")
     if drop.merged_into or keep.merged_into:
         raise HTTPException(status_code=400, detail="所选账号已被合并过，请刷新后重试")
+    if is_deleted(drop) or is_deleted(keep):
+        raise HTTPException(status_code=400, detail="已注销账号不能合并")
 
     detail = merge_users(db, keep, drop, reason="manual", operator=admin.username)
     db.commit()
@@ -170,6 +173,8 @@ def grant_membership(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+    if is_deleted(user):
+        raise HTTPException(status_code=400, detail="已注销账号不能开通会员")
 
     if body.plan_id == "free":
         user.membership_type = "free"
@@ -222,6 +227,8 @@ def set_user_as_agent(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+    if is_deleted(user):
+        raise HTTPException(status_code=400, detail="已注销账号不能设为代理")
 
     exist = db.query(Agent).filter(Agent.user_id == user_id).first()
     if exist:
@@ -238,11 +245,38 @@ def set_user_as_agent(
     return ok(data)
 
 
+class CleanupTestIn(BaseModel):
+    confirm: bool = False
+
+
+@router.post("/users/cleanup-test")
+def cleanup_test_user(
+    body: CleanupTestIn,
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(require_perm("users:delete")),
+):
+    return ok(cleanup_test_users(db, confirm=body.confirm, operator=admin.username))
+
+
+@router.delete("/users/{user_id}")
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(require_perm("users:delete")),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user or is_deleted(user):
+        raise HTTPException(status_code=404, detail="用户不存在")
+    mode = delete_user_record(db, user, operator=admin.username)
+    return ok({"mode": mode})
+
+
 @router.get("/dashboard")
 def dashboard(db: Session = Depends(get_db), _: Admin = Depends(require_perm("dashboard:view"))):
+    alive = User.merged_into.is_(None) & User.deleted_at.is_(None)
     return ok({
-        "users": db.query(User).count(),
-        "premium_users": db.query(User).filter(User.membership_type != "free").count(),
+        "users": db.query(User).filter(alive).count(),
+        "premium_users": db.query(User).filter(alive, User.membership_type != "free").count(),
         "tracks": db.query(Track).count(),
         "cdkeys_total": db.query(Cdkey).count(),
         "cdkeys_used": db.query(Cdkey).filter(Cdkey.status == "used").count(),

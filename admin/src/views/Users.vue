@@ -4,6 +4,7 @@
       <el-input v-model="keyword" placeholder="按昵称搜索" clearable style="width: 200px" @keyup.enter="reload" />
       <el-button :icon="Search" @click="reload">搜索</el-button>
       <el-button :icon="CopyDocument" @click="openDup">重复账号</el-button>
+      <el-button v-if="canDelete" type="warning" plain @click="onCleanupTest">清理测试账号</el-button>
       <span class="hint">
         同一人在小程序与公众号各有一条账号时，接入微信开放平台后会按 unionid 自动并成一条；
         这里列出还没并掉的（同手机号的不自动并，需人工确认）。
@@ -45,7 +46,7 @@
       <el-table-column label="注册时间" width="170">
         <template #default="{ row }">{{ fmt(row.created_at) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="270" fixed="right">
+      <el-table-column label="操作" width="350" fixed="right">
         <template #default="{ row }">
           <el-button size="small" @click="openDetail(row)">详情</el-button>
           <el-button size="small" type="primary" @click="openGrant(row)">开通会员</el-button>
@@ -53,6 +54,9 @@
             @click="openSetAgent(row)">设为代理</el-button>
           <el-button v-else-if="agentEnabled" size="small" @click="$router.push('/agents')">
             查看代理
+          </el-button>
+          <el-button v-if="canDelete" size="small" type="danger" plain @click="onDelete(row)">
+            删除
           </el-button>
         </template>
       </el-table-column>
@@ -231,13 +235,14 @@ import { Search, CopyDocument } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   listUsers, grantMembership, listPlans, getUser, setUserAsAgent,
-  listDuplicateUsers, mergeUsers
+  listDuplicateUsers, mergeUsers, deleteUser, cleanupTestUsers
 } from '@/api';
 import { useAuthStore } from '@/stores/auth';
 
 const auth = useAuthStore();
 // 代理模块没开时，「设为代理」按钮不出现（后端也会 404）
 const agentEnabled = computed(() => auth.hasFeature('agent'));
+const canDelete = computed(() => auth.can('users:delete'));
 
 const rows = ref<any[]>([]);
 const total = ref(0);
@@ -363,6 +368,54 @@ async function load() {
 }
 function reload() { page.value = 1; load(); }
 function onPage(p: number) { page.value = p; load(); }
+
+async function onDelete(row: any) {
+  try {
+    await ElMessageBox.confirm(
+      `确定注销 / 删除 #${row.id}「${row.nickname}」？\n` +
+      '无订单、兑换、分成、代理或合并引用的测试账号会被物理删除；有业务记录的账号会被注销并匿名化。',
+      '删除用户',
+      { type: 'warning', confirmButtonText: '确认删除', confirmButtonClass: 'el-button--danger' }
+    );
+  } catch {
+    return;
+  }
+  submitting.value = true;
+  try {
+    const res = await deleteUser(row.id);
+    ElMessage.success(res.mode === 'deleted' ? '已删除测试账号' : '已注销并匿名化');
+    load();
+  } finally {
+    submitting.value = false;
+  }
+}
+
+async function onCleanupTest() {
+  submitting.value = true;
+  try {
+    const preview = await cleanupTestUsers(false);
+    if (!preview.candidates) {
+      ElMessage.info('没有发现可清理的候选账号');
+      return;
+    }
+    const sample = preview.sample.map((u: any) => `#${u.id} ${u.nickname}`).join('\n');
+    try {
+      await ElMessageBox.confirm(
+        `发现 ${preview.candidates} 个符合早期测试特征的候选账号：无开放平台标识、手机号、权益、个人资料和业务记录。\n` +
+        `将物理删除这些候选账号；有业务记录或个性化资料的用户不会被动。\n\n样例：\n${sample}`,
+        '清理测试账号',
+        { type: 'warning', confirmButtonText: '确认清理', confirmButtonClass: 'el-button--danger' }
+      );
+    } catch {
+      return;
+    }
+    const res = await cleanupTestUsers(true);
+    ElMessage.success(`已清理 ${res.deleted} 个候选账号`);
+    load();
+  } finally {
+    submitting.value = false;
+  }
+}
 
 function openGrant(row: any) {
   current.value = row;

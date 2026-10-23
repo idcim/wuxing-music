@@ -169,6 +169,8 @@
   }
 
   &__tool {
+    min-width: 96rpx;
+    padding: 12rpx 8rpx;
     display: flex;
     flex-direction: column;
     align-items: center;

@@ -4,16 +4,21 @@
   position: fixed;
   left: 28rpx;
   right: 28rpx;
-  // 位于 tabBar 之上。tabBar 自身还叠了 env(safe-area-inset-bottom)（见 TabBar/index.scss），
-  // 刘海屏上那部分约 34px，若这里只写死 144rpx，tabBar（z-index 60）会盖住本组件（z-index 50）。
-  bottom: 144rpx;
-  bottom: calc(144rpx + constant(safe-area-inset-bottom));
-  bottom: calc(144rpx + env(safe-area-inset-bottom));
+  // 默认贴近底部安全区；只有当前页有 TabBar 时才抬高到导航上方。
+  bottom: 32rpx;
+  bottom: calc(32rpx + constant(safe-area-inset-bottom));
+  bottom: calc(32rpx + env(safe-area-inset-bottom));
   border-radius: 36rpx;
   background: rgba(10, 14, 26, 0.92);
   border: 2rpx solid;
   padding: 24rpx 28rpx;
   z-index: 50;
+
+  &--tabbar {
+    bottom: 144rpx;
+    bottom: calc(144rpx + constant(safe-area-inset-bottom));
+    bottom: calc(144rpx + env(safe-area-inset-bottom));
+  }
 
   &__body {
     display: flex;

@@ -22,12 +22,18 @@ export const listDuplicateUsers = () => req.get('/api/admin/users/duplicates');
 // 把 id 并入 into。不可逆：订单/聆听历史/兑换记录都会改指向
 export const mergeUsers = (id: number, into: number) =>
   req.post(`/api/admin/users/${id}/merge`, { into });
+// 优先硬删无业务引用的测试号；有订单/分成/兑换等记录时后端会软删除并匿名化
+export const deleteUser = (id: number) => req.delete(`/api/admin/users/${id}`);
+// 早期测试账号批量清理：confirm=false 只预检，true 才物理删除安全候选
+export const cleanupTestUsers = (confirm: boolean) =>
+  req.post('/api/admin/users/cleanup-test', { confirm });
 
 // ── 订单 ──
 export const listOrders = (params: any) => req.get('/api/admin/orders', { params });
 export const getOrder = (id: number) => req.get(`/api/admin/orders/${id}`);
 export const refundOrder = (id: number, data: any) => req.post(`/api/admin/orders/${id}/refund`, data);
 export const confirmRefund = (id: number) => req.post(`/api/admin/orders/${id}/refund/confirm`);
+export const syncRefund = (id: number) => req.post(`/api/admin/orders/${id}/refund/sync`);
 
 // ── 套餐 ──
 export const listPlans = () => req.get('/api/admin/plans');

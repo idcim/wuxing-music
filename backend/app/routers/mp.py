@@ -17,7 +17,7 @@ from jose import JWTError, jwt
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app import agent_service, ratelimit, sms, storage, wxpay
+from app import agent_service, ratelimit, refund_service, sms, storage, wxpay
 from app.config import settings
 from app.database import get_db
 from app.lunar import lunar_info
@@ -37,6 +37,7 @@ from app.models import (
     Withdrawal,
 )
 from app.security import hash_password, verify_password
+from app.user_delete import deactivate_user
 from app.user_merge import resolve_login, resolve_user
 
 logger = logging.getLogger("uvicorn.error")
@@ -146,11 +147,15 @@ def _default_nickname() -> str:
     return f"律音用户·{suffix}"
 
 
+def _mp_cfg(db: Session) -> dict:
+    row = db.query(Setting).filter(Setting.key == "mp_config").first()
+    return json.loads(row.value) if row and row.value else {}
+
+
 def _jscode2session(db: Session, code: str) -> dict:
     """用 code + 小程序 AppID/Secret 调微信换取 openid/unionid。
     返回 {"openid":..., "unionid":...}；未配置或失败返回 {}。"""
-    row = db.query(Setting).filter(Setting.key == "mp_config").first()
-    cfg = json.loads(row.value) if row and row.value else {}
+    cfg = _mp_cfg(db)
     app_id = cfg.get("app_id")
     app_secret = cfg.get("app_secret")
     if not (app_id and app_secret and code):
@@ -748,6 +753,12 @@ def mp_profile(user: User = Depends(get_current_user)):
     return ok(_user_dict(user))
 
 
+@router.post("/cancel-account")
+def mp_cancel_account(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    deactivate_user(db, user)
+    return ok({"cancelled": True})
+
+
 class UpdateProfileIn(BaseModel):
     nickname: str | None = None
     avatar: str | None = None
@@ -1104,7 +1115,7 @@ def _resolve_pay_payer(db: Session, user: User, channel: str, order: Order):
     """按下单渠道确定 JSAPI payer openid 与 appid。
     h5：用公众号 oa_openid + 支付设置里的 h5_app_id（留空回退 oa_config.app_id）；
         未微信登录或 H5 支付已关停则订单置失败并 400。
-    weapp/缺省：用小程序 openid + 默认 appid（app_id=None，wxpay 内部用 wx_app_id）。
+    weapp/缺省：用小程序 openid + 签发该 openid 的小程序 AppID。
     返回 (payer_openid, pay_app_id)。"""
     if (channel or "weapp") == "h5":
         cfg = _pay_cfg(db)
@@ -1120,7 +1131,24 @@ def _resolve_pay_payer(db: Session, user: User, channel: str, order: Order):
         # 支付设置里单独配的 H5 AppID 优先；留空才回退公众号配置那一份
         app_id = cfg.get("h5_app_id") or _oa_cfg(db).get("app_id") or None
         return user.oa_openid, app_id
-    return user.openid, None
+    if not user.openid:
+        # 早期 dev 兜底账号没有真实 openid，微信只会回「appid和openid不匹配」，
+        # 提前拦截给个能看懂的提示
+        order.status = "failed"
+        db.commit()
+        raise HTTPException(status_code=400, detail="当前账号缺少微信标识，请退出登录后重新进入小程序再试")
+    cfg = _pay_cfg(db)
+    mp_app_id = _mp_cfg(db).get("app_id")
+    # openid 是「小程序设置」的 AppID 通过 jscode2session 签发的，下单 appid 必须与签发方一致，
+    # 否则微信报 appid和openid不匹配——所以以 mp_config.app_id 为准，wx_app_id 只在没配小程序设置时兜底
+    if mp_app_id:
+        if cfg.get("wx_app_id") and cfg["wx_app_id"] != mp_app_id:
+            logger.warning(
+                "支付设置 wx_app_id(%s) 与小程序设置 app_id(%s) 不一致，下单以小程序设置为准",
+                cfg["wx_app_id"], mp_app_id,
+            )
+        return user.openid, mp_app_id
+    return user.openid, cfg.get("wx_app_id") or None
 
 
 class CreateOrderIn(BaseModel):
@@ -1193,11 +1221,13 @@ def mp_create_order(
             app_id=pay_app_id,
         )
     except wxpay.WxPayError as e:
-        # 上游原文仅入日志，对外返回通用文案（避免泄露商户/接口细节）
+        # 上游原文仅入日志，对外返回通用文案（避免泄露商户/接口细节）；
+        # 配置缺失是商户侧可自查的问题，单独给个方向性提示
         logger.warning("微信下单失败（订单 %s）：%s", order.order_no, e)
         order.status = "failed"
         db.commit()
-        raise HTTPException(status_code=400, detail="支付下单失败，请稍后重试")
+        detail = "支付配置不完整，请联系客服" if str(e).startswith("支付配置缺失") else "支付下单失败，请稍后重试"
+        raise HTTPException(status_code=400, detail=detail)
 
     return ok({
         "dev_opened": False,
@@ -1248,7 +1278,7 @@ async def mp_pay_callback(request: Request, db: Session = Depends(get_db)):
             order.gift_code = _issue_gift_cdkey(db, plan, order.order_no)
     else:
         user = db.query(User).filter(User.id == order.user_id).first()
-        if user:
+        if user and not user.deleted_at:
             _grant_membership(db, user, plan)
     order.status = "paid"
     order.transaction_id = data.get("transaction_id", "")
@@ -1257,6 +1287,35 @@ async def mp_pay_callback(request: Request, db: Session = Depends(get_db)):
     # 重复回调由 commission.order_id 的唯一约束兜住，不会重复记账。
     agent_service.record_commission(db, order)
     db.commit()
+    return JSONResponse(content={"code": "SUCCESS", "message": "成功"})
+
+
+@router.post("/pay/refund-callback")
+async def mp_pay_refund_callback(request: Request, db: Session = Depends(get_db)):
+    """微信退款结果通知。退款是异步的：退款单状态变更为 SUCCESS 时在这里收尾
+    （置已退款 + 回收会员 + 作废未用礼物码 + 冲正分成），与后台「同步退款状态」互为兜底。"""
+    fail = JSONResponse(status_code=500, content={"code": "FAIL", "message": "处理失败"})
+    cfg = _pay_cfg(db)
+    try:
+        envelope = json.loads(await request.body())
+        resource = envelope.get("resource") or {}
+        data = wxpay.decrypt_callback_resource(cfg.get("wx_api_key", ""), resource)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("退款回调解密失败：%s", e)
+        return fail
+
+    out_refund_no = data.get("out_refund_no") or ""
+    if not out_refund_no.startswith("RF"):
+        return JSONResponse(content={"code": "SUCCESS", "message": "已接收"})
+    order = db.query(Order).filter(Order.order_no == out_refund_no[2:]).first()
+    if not order:
+        logger.warning("退款回调订单不存在：%s", out_refund_no)
+        return JSONResponse(content={"code": "SUCCESS", "message": "已接收"})
+
+    if data.get("refund_status") == "SUCCESS" and order.status == "refunding":
+        refund_service.finalize_refund(db, order, order.refund_by or "")
+    elif data.get("refund_status") in ("ABNORMAL", "CLOSED"):
+        logger.warning("退款回调状态异常 订单 %s：%s", order.order_no, data.get("refund_status"))
     return JSONResponse(content={"code": "SUCCESS", "message": "成功"})
 
 
@@ -1356,7 +1415,8 @@ def mp_gift_create_order(
         logger.warning("礼物卡下单失败（订单 %s）：%s", order.order_no, e)
         order.status = "failed"
         db.commit()
-        raise HTTPException(status_code=400, detail="支付下单失败，请稍后重试")
+        detail = "支付配置不完整，请联系客服" if str(e).startswith("支付配置缺失") else "支付下单失败，请稍后重试"
+        raise HTTPException(status_code=400, detail=detail)
 
     return ok({
         "dev_opened": False,

@@ -4,7 +4,7 @@ import { request, ApiError } from '@/services/api';
 import { isWeapp, isH5 } from '@/utils/platform';
 import wechat from '@/services/wechat';
 import type { PayParams } from '@/services/wechat/types';
-import type { PlanId, Membership } from '@/types';
+import type { Plan, PlanId, Membership } from '@/types';
 
 interface CreateOrderResult {
   dev_opened?: boolean;       // 开发期后端直接开通
@@ -13,14 +13,15 @@ interface CreateOrderResult {
   payParams?: PayParams;      // 生产期微信支付参数
 }
 
-const PLAN_DAYS: Record<PlanId, number> = {
+// 仅 mock / 兜底用；真实天数与名称以后端套餐为准
+const PLAN_DAYS: Record<string, number> = {
   free: 0,
   trial: 7,
   month: 30,
   year: 365
 };
 
-const PLAN_NAMES: Record<PlanId, string> = {
+const PLAN_NAMES: Record<string, string> = {
   free: '听闻',
   trial: '体验',
   month: '月悦',
@@ -35,10 +36,10 @@ export type PayOutcome =
   | { ok: false; reason: 'cancel' | 'fail' | 'platform' | 'auth' | 'pending'; message?: string };
 
 function buildMembership(planId: PlanId): Membership {
-  const days = PLAN_DAYS[planId];
+  const days = PLAN_DAYS[planId] ?? 30;
   return {
     type: planId,
-    name: PLAN_NAMES[planId],
+    name: PLAN_NAMES[planId] ?? '会员',
     startAt: new Date().toISOString(),
     expireAt: new Date(Date.now() + days * 86400000).toISOString(),
     source: 'purchase'
@@ -101,13 +102,27 @@ function payFailure(err: any): { ok: false; reason: 'cancel' | 'fail' | 'auth'; 
   if (code === 401 || msg.includes('请先微信登录') || msg.includes('请先登录')) {
     return { ok: false, reason: 'auth', message: msg || '请先登录后再购买' };
   }
-  return { ok: false, reason: 'fail', message: msg };
+  // requestPayment:fail <detail> —— detail 是微信给的失败原因（如 jsapi has no permission），
+  // 透出来才能定位是配置/权限问题还是真故障，否则永远只有一句「支付失败，请重试」
+  const raw = String(err?.errMsg || err?.message || '');
+  const detail = raw.replace(/^requestPayment:fail\s*/i, '').trim();
+  return { ok: false, reason: 'fail', message: msg || detail || undefined };
 }
 
 export async function getPurchaseStatus(): Promise<boolean> {
   if (USE_MOCK) return true;
   const res = await request<{ enabled: boolean }>('/api/mp/pay/purchase-status', { auth: false });
   return res.enabled;
+}
+
+// 套餐列表以后台「套餐」管理为准（后台新增/调价立即生效，不用发版）；
+// 失败时调用方回退到本地 PLANS 兜底
+export async function fetchPlans(): Promise<Plan[]> {
+  if (USE_MOCK) {
+    const { PLANS } = await import('@/constants/plans');
+    return PLANS;
+  }
+  return request<Plan[]>('/api/mp/plans', { auth: false });
 }
 
 // 创建订单并拉起微信支付。成功后返回新会员信息（由调用方刷新 store）。

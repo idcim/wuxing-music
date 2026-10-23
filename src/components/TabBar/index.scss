@@ -46,15 +46,6 @@
     justify-content: center;
   }
 
-  &__player-spinner {
-    width: 36rpx;
-    height: 36rpx;
-    border: 4rpx solid rgba(10, 14, 26, 0.3);
-    border-top-color: #0a0e1a;
-    border-radius: 50%;
-    animation: rotate-slow 0.8s linear infinite;
-  }
-
   &__indicator {
     position: absolute;
     top: 0;

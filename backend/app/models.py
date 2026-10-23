@@ -150,6 +150,7 @@ class User(Base):
     membership_name: Mapped[str] = mapped_column(String(32), default="听闻")
     membership_expire_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     membership_source: Mapped[str] = mapped_column(String(16), default="")
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
 

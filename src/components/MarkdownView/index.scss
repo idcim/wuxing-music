@@ -1,0 +1,51 @@
+@use '../../styles/variables.scss' as *;
+
+.markdown-view {
+  display: block;
+  font-size: 28rpx;
+  line-height: 2;
+  color: $text-secondary;
+  overflow-wrap: anywhere;
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    margin: 32rpx 0 16rpx;
+    color: $text-primary;
+    font-weight: 400;
+  }
+
+  h1 { font-size: 40rpx; }
+  h2 { font-size: 36rpx; }
+  h3 { font-size: 32rpx; }
+  h4 { font-size: 30rpx; }
+
+  p {
+    margin: 16rpx 0;
+  }
+
+  ul,
+  ol {
+    padding-left: 48rpx;
+  }
+
+  blockquote {
+    margin: 24rpx 0;
+    padding-left: 24rpx;
+    border-left: 4rpx solid $border;
+    color: $text-tertiary;
+  }
+
+  code {
+    padding: 4rpx 10rpx;
+    border-radius: 8rpx;
+    background: $surface;
+    color: $text-primary;
+    font-size: 26rpx;
+  }
+
+  a {
+    color: #7dd3fc;
+  }
+}

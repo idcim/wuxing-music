@@ -4,6 +4,9 @@ import Taro, { useDidShow } from '@tarojs/taro';
 import { TOKEN_KEY } from '@/constants/env';
 import { APP_VERSION } from '@/constants/version';
 import { STORAGE_KEYS } from '@/services/storage';
+import { cancelAccount } from '@/services/user';
+import { usePlayerStore } from '@/stores/player';
+import { useUserStore } from '@/stores/user';
 import { isWeapp } from '@/utils/platform';
 import { goBack } from '@/utils/nav';
 import Icon from '@/components/Icon';
@@ -37,6 +40,7 @@ function readVersion(): string {
 export default function Settings() {
   const [cacheKB, setCacheKB] = useState<number | null>(null);
   const [version, setVersion] = useState(APP_VERSION);
+  const [cancelling, setCancelling] = useState(false);
 
   useDidShow(() => {
     setCacheKB(readCacheKB());
@@ -65,6 +69,35 @@ export default function Settings() {
     });
   };
 
+  const cancel = () => {
+    if (cancelling) return;
+    if (!useUserStore.getState().user) {
+      Taro.showToast({ title: '请先登录', icon: 'none' });
+      return;
+    }
+    Taro.showModal({
+      title: '注销账号',
+      content: '注销后账号将退出登录，个人资料与聆听记录会被删除，剩余会员与代理身份立即失效；订单记录按监管要求保留。',
+      confirmText: '确认注销',
+      confirmColor: '#f87171',
+      success: async (res) => {
+        if (!res.confirm) return;
+        setCancelling(true);
+        try {
+          await cancelAccount();
+          usePlayerStore.getState().stop();
+          useUserStore.getState().logout(true);
+          Taro.showToast({ title: '账号已注销', icon: 'success' });
+          Taro.reLaunch({ url: '/pages/home/index' });
+        } catch (e: any) {
+          Taro.showToast({ title: e?.message || '注销失败，请重试', icon: 'none' });
+        } finally {
+          setCancelling(false);
+        }
+      }
+    });
+  };
+
   return (
     <View className="settings">
       <View className="settings__nav">
@@ -83,9 +116,16 @@ export default function Settings() {
           </View>
         </View>
 
-        <View className="settings__row" onClick={goAbout}>
+        <View className="settings__row settings__row--divider" onClick={goAbout}>
           <Text className="settings__label">关于我们 / 服务条款</Text>
           <Icon name="chevronRight" size={28} color="#334155" strokeWidth={1.5} />
+        </View>
+
+        <View className="settings__row" onClick={cancel}>
+          <Text className="settings__label settings__label--danger">
+            {cancelling ? '注销中…' : '注销账号'}
+          </Text>
+          <Icon name="chevronRight" size={28} color="#7f1d1d" strokeWidth={1.5} />
         </View>
       </View>
 

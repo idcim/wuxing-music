@@ -1,5 +1,7 @@
 import type { Plan } from '@/types';
 
+// 仅作兜底：会员页运行时拉 /api/mp/plans（后台「套餐」可增删改），
+// 这里与后端 seed 的三档保持一致，接口失败时不至于白屏
 export const PLANS: Plan[] = [
   {
     id: 'free',

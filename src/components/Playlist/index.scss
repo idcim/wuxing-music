@@ -11,7 +11,7 @@
 
 .playlist {
   width: 100%;
-  max-height: 70vh;
+  height: 70vh;
   background: $bg-mid;
   border-top-left-radius: $radius-xl;
   border-top-right-radius: $radius-xl;
@@ -36,6 +36,20 @@
     flex-shrink: 0;
   }
 
+  &__head-actions {
+    display: flex;
+    align-items: center;
+    gap: 24rpx;
+  }
+
+  &__close {
+    width: 56rpx;
+    height: 56rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   &__title {
     font-size: 36rpx;
     color: $text-primary;
@@ -52,17 +66,96 @@
     }
   }
 
-  &__count {
-    display: block;
-    margin: 8rpx 0 20rpx;
-    font-size: 22rpx;
-    color: $text-tertiary;
+  &__tabs {
+    display: flex;
+    gap: 16rpx;
+    margin: 24rpx 0 12rpx;
     flex-shrink: 0;
   }
 
-  &__scroll {
+  &__tab {
     flex: 1;
+    height: 64rpx;
+    border: 2rpx solid $border;
+    border-radius: $radius-sm;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &--active {
+      background: $surface;
+      border-color: $text-quaternary;
+    }
+  }
+
+  &__tab-text {
+    font-size: 24rpx;
+    color: $text-tertiary;
+  }
+
+  &__tab--active &__tab-text {
+    color: $text-primary;
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 8rpx 0;
+    flex-shrink: 0;
+  }
+
+  &__remaining {
+    font-size: 22rpx;
+    color: $text-tertiary;
+  }
+
+  &__add-all {
+    padding: 12rpx 24rpx;
+    border: 2rpx solid $border;
+    border-radius: $radius-pill;
+    background: $surface;
+
+    &--disabled {
+      opacity: 0.45;
+    }
+  }
+
+  &__add-all-text {
+    font-size: 24rpx;
+    color: $text-secondary;
+  }
+
+  &__empty {
+    padding: 80rpx 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28rpx;
+  }
+
+  &__empty-text {
+    font-size: 26rpx;
+    color: $text-tertiary;
+  }
+
+  &__empty-btn {
+    padding: 16rpx 32rpx;
+    border: 2rpx solid $border;
+    border-radius: $radius-pill;
+  }
+
+  &__empty-btn-text {
+    font-size: 24rpx;
+    color: $text-secondary;
+  }
+
+  &__scroll {
+    height: 45vh;
     min-height: 0;
+    flex-shrink: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   &__item {
@@ -110,6 +203,22 @@
       font-size: 24rpx;
       color: $text-quaternary;
       flex-shrink: 0;
+    }
+
+    &-remove,
+    &-add {
+      width: 56rpx;
+      height: 56rpx;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    &-add-text {
+      font-size: 40rpx;
+      line-height: 1;
+      color: $text-secondary;
     }
   }
 }

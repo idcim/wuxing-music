@@ -25,7 +25,7 @@ H5 相关域名散落三处，逐一配好：
 
 ### 2) 后端 / 后台（改 `.env` 或后台设置，**无需重新构建前端**）
 - **`backend/.env` → `CORS_ORIGINS`**：**H5 已同源反代，无需 CORS**；这里通常只需管理后台域名（若后台与 API 不同源）。例：`["https://admin.your-domain.com"]`。
-- **管理后台 → 设置 → 支付设置 → 回调地址**（`pay_config.notify_url`）：填 `https://<后端域名>/api/mp/pay/callback`（公网可达 HTTPS）。⚠️ 后台输入框占位符误写成 `/api/pay/callback`，**实际路由是 `/api/mp/pay/callback`**，以此为准。
+- **管理后台 → 设置 → 支付设置 → 回调地址**（`pay_config.notify_url`）：填 `https://<后端域名>/api/mp/pay/callback`（公网可达 HTTPS）。退款结果通知地址默认按它推导为 `…/api/mp/pay/refund-callback`，也可用「退款回调地址」单独覆盖。
 - **管理后台 → 设置 → 公众号**（`oa_config`）：公众号 AppID / AppSecret（H5 网页授权 + JS-SDK + JSAPI 支付共用）。
 
 ### 3) 微信平台后台（填 H5 域名，不在代码里）

@@ -7,11 +7,20 @@ import { request } from '@/services/api';
 import { useUserStore } from './user';
 import Taro from '@tarojs/taro';
 import { storage, STORAGE_KEYS } from '@/services/storage';
+import {
+  appendTracks,
+  getAdjacentTrack,
+  removeTrackAt,
+  restorePersistedQueue,
+  toPersistedQueue,
+  type PlayMode
+} from '@/utils/queue';
 
 let timerId: ReturnType<typeof setTimeout> | null = null;
 // 睡眠定时的截止时间戳（ms）。只靠 setTimeout 在 H5 后台会被节流，
 // 存下 deadline 才能在回前台时按真实时间校正。
 let timerDeadline = 0;
+let loadedTrackId: number | null = null;
 
 // 加载看门狗：超过这个时间还没 canplay，就认定为「慢/卡住」并提示用户
 const LOAD_TIMEOUT_MS = 15000;
@@ -21,7 +30,7 @@ function clearLoadTimer(): void {
 }
 
 // 顺序 / 随机 / 悦动（本命优先智能洗牌，类心动模式）
-export type PlayMode = 'order' | 'shuffle' | 'pulse';
+export type { PlayMode } from '@/utils/queue';
 
 interface PlayerStore {
   currentTrack: Track | null;
@@ -43,6 +52,9 @@ interface PlayerStore {
   play: (track: Track) => void;
   playWithQueue: (track: Track, queue: Track[]) => void;
   playAt: (index: number) => void;   // 按 queue 下标播放
+  addToQueue: (track: Track) => boolean;
+  addAllToQueue: (tracks: Track[]) => number;
+  removeFromQueue: (index: number) => void;
   next: () => void;
   prev: () => void;
   setPlayMode: (m: PlayMode) => void;
@@ -99,11 +111,17 @@ function buildOrder(queue: Track[], mode: PlayMode): number[] {
   return Array.from({ length: queue.length }, (_, i) => i); // order
 }
 
+const restoredQueue = restorePersistedQueue(storage.get(STORAGE_KEYS.PLAYER_QUEUE));
+
+function persistPlayerQueue(queue: Track[], currentTrack: Track | null, playMode: PlayMode): void {
+  storage.set(STORAGE_KEYS.PLAYER_QUEUE, toPersistedQueue(queue, currentTrack, playMode));
+}
+
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
-  currentTrack: null,
-  queue: [],
-  order: [],
-  playMode: 'order',
+  currentTrack: restoredQueue.queue.find((track) => track.id === restoredQueue.currentTrackId) || null,
+  queue: restoredQueue.queue,
+  order: buildOrder(restoredQueue.queue, restoredQueue.playMode),
+  playMode: restoredQueue.playMode,
   isPlaying: false,
   isLoading: false,
   progress: 0,
@@ -117,10 +135,24 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   // 内部：真正加载并播放某曲目
   _start: (track: Track) => {
+    loadedTrackId = track.id;
     const url = resolveUrl(track.audioUrl) || (USE_MOCK ? MOCK_AUDIO_URL : '');
     if (!url) {
       console.warn('[player] 曲目无音频地址', track.id);
-      set({ loadError: '该曲目暂无音频', isLoading: false, isPlaying: false });
+      clearLoadTimer();
+      audioService.release();
+      set({
+        currentTrack: track,
+        isLoading: false,
+        isPlaying: false,
+        progress: 0,
+        currentTime: 0,
+        buffered: 0,
+        previewEnded: false,
+        loadError: '该曲目暂无音频',
+        duration: track.durationSec || 0
+      });
+      persistPlayerQueue(get().queue, track, get().playMode);
       return;
     }
     clearLoadTimer();
@@ -160,8 +192,18 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           console.error('[audio]', err);
           clearLoadTimer();
           // 之前只 console.error，用户面对的是一个永远转的 spinner。
-          // 记下错误让界面能提示并给出重试。
-          set({ isPlaying: false, isLoading: false, loadError: '音频加载失败' });
+          // 记下错误让界面能提示并给出重试；微信侧的 errCode/errMsg 一并透出，
+          // 否则「播放不了」没有任何可定位的信息（尤其 PC 微信这类差异平台）。
+          const e = (err ?? {}) as { errCode?: number | string; errMsg?: string };
+          const parts = [
+            e.errCode != null && e.errCode !== '' ? `errCode:${e.errCode}` : '',
+            e.errMsg || ''
+          ].filter(Boolean).join(' ');
+          set({
+            isPlaying: false,
+            isLoading: false,
+            loadError: `音频加载失败${parts ? `（${parts}）` : ''}`
+          });
         },
         onProgress: (bufferedSec) => set({ buffered: bufferedSec }),
         onTimeUpdate: (cur, dur) => {
@@ -204,6 +246,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       loadError: '',
       duration: track.durationSec || 0
     });
+    persistPlayerQueue(get().queue, track, get().playMode);
 
     if (!USE_MOCK) {
       request('/api/mp/history', {
@@ -236,35 +279,59 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     if (t) get()._start(t);
   },
 
-  next: () => {
+  addToQueue: (track) => {
+    const queue = get().queue;
+    const nextQueue = appendTracks(queue, [track]);
+    if (nextQueue === queue) return false;
+    set({ queue: nextQueue, order: buildOrder(nextQueue, get().playMode) });
+    persistPlayerQueue(nextQueue, get().currentTrack, get().playMode);
+    return true;
+  },
+
+  addAllToQueue: (tracks) => {
+    const queue = get().queue;
+    const nextQueue = appendTracks(queue, tracks);
+    if (nextQueue === queue) return 0;
+    set({ queue: nextQueue, order: buildOrder(nextQueue, get().playMode) });
+    persistPlayerQueue(nextQueue, get().currentTrack, get().playMode);
+    return nextQueue.length - queue.length;
+  },
+
+  removeFromQueue: (index) => {
     const { queue, order, currentTrack } = get();
-    if (queue.length === 0) return;
-    if (queue.length === 1) {
-      // 单曲循环重播
-      get()._start(queue[0]);
+    const removing = queue[index];
+    if (!removing) return;
+    const replacement = currentTrack?.id === removing.id
+      ? getAdjacentTrack(queue, order, currentTrack, 1)
+      : null;
+    const nextQueue = removeTrackAt(queue, index);
+    if (!nextQueue.length) {
+      get().stop();
       return;
     }
-    const curIdx = currentTrack ? queue.findIndex((t) => t.id === currentTrack.id) : -1;
-    const pos = order.indexOf(curIdx);
-    const nextPos = (pos + 1) % order.length;
-    get()._start(queue[order[nextPos]]);
+    set({ queue: nextQueue, order: buildOrder(nextQueue, get().playMode) });
+    if (replacement) {
+      get()._start(replacement);
+    } else {
+      persistPlayerQueue(nextQueue, currentTrack, get().playMode);
+    }
+  },
+
+  next: () => {
+    const { queue, order, currentTrack } = get();
+    const nextTrack = getAdjacentTrack(queue, order, currentTrack, 1);
+    if (nextTrack) get()._start(nextTrack);
   },
 
   prev: () => {
     const { queue, order, currentTrack } = get();
-    if (queue.length === 0) return;
-    if (queue.length === 1) {
-      get()._start(queue[0]);
-      return;
-    }
-    const curIdx = currentTrack ? queue.findIndex((t) => t.id === currentTrack.id) : -1;
-    const pos = order.indexOf(curIdx);
-    const prevPos = (pos - 1 + order.length) % order.length;
-    get()._start(queue[order[prevPos]]);
+    const prevTrack = getAdjacentTrack(queue, order, currentTrack, -1);
+    if (prevTrack) get()._start(prevTrack);
   },
 
   setPlayMode: (m) => {
     set({ playMode: m, order: buildOrder(get().queue, m) });
+    persistPlayerQueue(get().queue, get().currentTrack, m);
   },
 
   cyclePlayMode: () => {
@@ -286,6 +353,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       get()._start(currentTrack);
       return;
     }
+    // 冷启动恢复出的曲目只有元数据，本次会话还没有加载音源。
+    if (currentTrack && currentTrack.id !== loadedTrackId) {
+      get()._start(currentTrack);
+      return;
+    }
     audioService.play();
     set({ isPlaying: true });
   },
@@ -303,6 +375,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     if (timerId) { clearTimeout(timerId); timerId = null; }
     timerDeadline = 0;
     storage.remove(STORAGE_KEYS.SLEEP_DEADLINE);
+    storage.remove(STORAGE_KEYS.PLAYER_QUEUE);
+    loadedTrackId = null;
     clearLoadTimer();
     set({
       isPlaying: false,

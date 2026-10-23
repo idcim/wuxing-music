@@ -1,3 +1,4 @@
+import { Fragment, useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { WUXING } from '@/constants/wuxing';
@@ -7,6 +8,7 @@ import { useContentStore } from '@/stores/content';
 import { isH5 } from '@/utils/platform';
 import { rpx } from '@/utils/unit';
 import Icon from '@/components/Icon';
+import Playlist from '@/components/Playlist';
 import type { ElementId } from '@/types';
 import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
@@ -30,13 +32,8 @@ const normalize = (p = '') => p.replace(/^\/+/, '').replace(/\/+$/, '');
 export default function TabBar({ active }: Props) {
   const element = useUserStore((s) => s.element) || ('木' as ElementId);
   const currentTrack = usePlayerStore((s) => s.currentTrack);
-  const isPlaying = usePlayerStore((s) => s.isPlaying);
-  const isLoading = usePlayerStore((s) => s.isLoading);
-  const loadError = usePlayerStore((s) => s.loadError);
-  const retry = usePlayerStore((s) => s.retry);
-  const pause = usePlayerStore((s) => s.pause);
-  const resume = usePlayerStore((s) => s.resume);
   const getElementOfTrack = useContentStore((s) => s.getElementOfTrack);
+  const [listOpen, setListOpen] = useState(false);
   const el = WUXING[element];
   const playerEl = currentTrack ? getElementOfTrack(currentTrack, element) : el;
 
@@ -66,16 +63,6 @@ export default function TabBar({ active }: Props) {
     Taro.navigateTo({ url: tab.path });
   };
 
-  const onPlayerClick = () => {
-    if (!currentTrack) {
-      go(TABS[1]);
-      return;
-    }
-    if (loadError) { retry(); return; }
-    if (isLoading) return;
-    isPlaying ? pause() : resume();
-  };
-
   const renderTab = (tab: (typeof TABS)[number]) => {
     const on = active === tab.key;
     return (
@@ -95,26 +82,21 @@ export default function TabBar({ active }: Props) {
   };
 
   return (
-    <View className="tabbar">
-      {TABS.slice(0, 2).map(renderTab)}
-      <View className="tabbar__player">
-        <View
-          className="tabbar__player-button"
-          style={{ background: playerEl.primary, boxShadow: `0 ${rpx(8)} ${rpx(32)} ${playerEl.glow}` }}
-          onClick={onPlayerClick}
-        >
-          {loadError ? (
-            <Icon name="repeat" size={38} color="#0a0e1a" strokeWidth={2} />
-          ) : isLoading ? (
-            <View className="tabbar__player-spinner" />
-          ) : isPlaying ? (
-            <Icon name="pause" size={38} fill="#0a0e1a" strokeWidth={0} color="#0a0e1a" />
-          ) : (
-            <Icon name="play" size={38} fill="#0a0e1a" strokeWidth={0} color="#0a0e1a" />
-          )}
+    <Fragment>
+      <View className="tabbar">
+        {TABS.slice(0, 2).map(renderTab)}
+        <View className="tabbar__player">
+          <View
+            className="tabbar__player-button"
+            style={{ background: playerEl.primary, boxShadow: `0 ${rpx(8)} ${rpx(32)} ${playerEl.glow}` }}
+            onClick={() => setListOpen(true)}
+          >
+            <Icon name="listMusic" size={38} color="#0a0e1a" strokeWidth={1.8} />
+          </View>
         </View>
+        {TABS.slice(2).map(renderTab)}
       </View>
-      {TABS.slice(2).map(renderTab)}
-    </View>
+      <Playlist open={listOpen} onClose={() => setListOpen(false)} />
+    </Fragment>
   );
 }

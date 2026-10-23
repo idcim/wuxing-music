@@ -8,10 +8,19 @@
   padding-bottom: calc(#{$mini-player-clearance} + env(safe-area-inset-bottom));
 
   &__nav {
-    padding: 88rpx 0 24rpx;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 0 $pad-outer 24rpx;
+    z-index: 80;
   }
 
   &__back {
+    width: 80rpx;
+    height: 56rpx;
+    display: flex;
+    align-items: center;
     font-size: 56rpx;
     color: $text-primary;
     line-height: 1;

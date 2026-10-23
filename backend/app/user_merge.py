@@ -52,6 +52,8 @@ def resolve_user(db: Session, user: User | None) -> User | None:
         hops += 1
     if hops >= _MAX_HOPS:
         logger.warning("merged_into 链过长或成环，停在 user_id=%s", user.id if user else None)
+    if user and user.deleted_at:
+        return None
     return user
 
 
@@ -222,7 +224,7 @@ def find_duplicates(db: Session) -> list[dict]:
       并错了不可逆，交给人工判断。绑定开放平台之前产生的孤儿账号主要靠这条找回。
     """
     groups: list[dict] = []
-    alive = User.merged_into.is_(None)
+    alive = User.merged_into.is_(None) & User.deleted_at.is_(None)
 
     for field, label in (("unionid", "unionid"), ("phone", "phone")):
         col = getattr(User, field)

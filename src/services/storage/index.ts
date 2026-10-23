@@ -34,6 +34,7 @@ export const STORAGE_KEYS = {
   SITE: 'wx_site',                     // 站点信息（品牌名/副标题/LOGO），冷启动先用缓存避免闪默认名
   QUIZ_PROGRESS: 'wx_quiz_progress',  // 测评中途进度（答完即清）
   SLEEP_DEADLINE: 'wx_sleep_deadline', // 睡眠定时截止时间戳（抗后台节流/刷新）
+  PLAYER_QUEUE: 'wx_player_queue',      // 播放队列 / 当前曲目 / 播放模式（本地恢复）
   // 扫码带进来的代理推广码：进入时可能还没登录，先存着，登录后再提交绑定
   PENDING_AGENT: 'wx_pending_agent'
 } as const;

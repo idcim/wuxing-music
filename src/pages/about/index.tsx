@@ -6,6 +6,7 @@ import { getSiteInfo, type SiteInfo } from '@/services/site';
 import { useSiteStore } from '@/stores/site';
 import { WUXING_DISCLAIMER, WUXING_MNEMONIC } from '@/constants/wuxing';
 import { resolveUrl } from '@/utils/url';
+import MarkdownView from '@/components/MarkdownView';
 import './index.scss';
 
 export default function About() {
@@ -39,14 +40,14 @@ export default function About() {
 
       {!!info?.about_us && (
         <View className="about__section fade-up">
-          <Text className="about__text">{info.about_us}</Text>
+          <MarkdownView source={info.about_us} />
         </View>
       )}
 
       {!!info?.service_terms && (
         <View className="about__section fade-up">
           <Text className="about__section-title">服务条款</Text>
-          <Text className="about__text">{info.service_terms}</Text>
+          <MarkdownView source={info.service_terms} />
         </View>
       )}
 
