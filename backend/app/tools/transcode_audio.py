@@ -34,7 +34,7 @@ def main() -> int:
         print(f"共 {len(tracks)} 条 WAV 曲目")
         stats: dict[str, int] = {}
         for t in tracks:
-            result = audio_norm.process_track(cfg, t, dry=args.dry)
+            result = audio_norm.process_track(db, cfg, t, dry=args.dry)
             key = result.split(":")[0]
             stats[key] = stats.get(key, 0) + 1
             print(f"  [{t.id}] {t.title}: {result}", flush=True)

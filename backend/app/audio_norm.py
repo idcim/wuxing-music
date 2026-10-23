@@ -7,7 +7,8 @@
 - 曲目保存（新建/编辑且音频是 .wav）→ 自动排队单条，24-bit 会被默默转成 16-bit。
 
 进程内单 worker 线程：部署是单容器，线程队列够用；多实例部署时才需要换真队列。
-幂等：已是 16-bit 的跳过；覆盖写回原地址（URL 不变，不动数据库）。
+幂等：已有 play_url 或已是 16-bit 的跳过；母版（audio_url）永不被修改，
+16-bit 播放副本写到 play/ 前缀的衍生地址并存入 track.play_url。
 """
 import logging
 import os
@@ -118,31 +119,32 @@ def _stream_with_resume(url: str, retries: int = 4):
             time.sleep(2 * (attempt + 1))
 
 
-def _convert_local_stream(local_path: str) -> None:
-    """本地文件流式转换：磁盘上只有「原文件 + 产物」两份，产物落在同目录
-    （os.replace 不能跨挂载点），完成后原子替换。"""
-    out = local_path + ".new16"
+def _convert_local_stream(local_path: str, out_path: str) -> None:
+    """本地文件流式转换：先写到同目录临时文件（os.replace 不能跨挂载点），
+    完成后原子改名到衍生路径；母版原样保留。"""
+    tmp = out_path + ".part"
     conv = Wav24To16Streamer()
     try:
-        with open(local_path, "rb") as fin, open(out, "wb") as fout:
+        with open(local_path, "rb") as fin, open(tmp, "wb") as fout:
             while True:
                 chunk = fin.read(CHUNK)
                 if not chunk:
                     break
                 fout.write(conv.feed(chunk))
             fout.write(conv.finish())
-        os.replace(out, local_path)
+        os.replace(tmp, out_path)
     finally:
         try:
-            os.remove(out)
+            os.remove(tmp)
         except OSError:
             pass
 
 
 def _convert_oss_stream(cfg: dict, oss_key: str, url: str) -> None:
-    """OSS 对象流式转换：下载 → 转换 → 分片上传全程不落盘（磁盘零占用）。
-    分片缓存在内存里凑够 5MB 才传一片；上传完成前原对象不受影响，
-    任一步失败会 abort 掉这次分片上传，原对象原样保留。"""
+    """OSS 流式转换：下载母版 → 转换 → 分片上传到衍生键（play/ 前缀），
+    全程不落盘（磁盘零占用）。分片缓存在内存里凑够 5MB 才传一片；
+    上传完成前衍生对象不可见，任一步失败会 abort 掉这次分片上传。
+    母版对象全程不受影响。"""
     import time
 
     import oss2
@@ -190,24 +192,33 @@ def _convert_oss_stream(cfg: dict, oss_key: str, url: str) -> None:
         raise
 
 
-def process_track(cfg: dict, track: Track, dry: bool = False) -> str:
-    """处理单条曲目。返回 skip16 / skip-foreign / converted / dry-run / error:<原因>。
+def process_track(db, cfg: dict, track: Track, dry: bool = False) -> str:
+    """处理单条曲目：24-bit 母版 → 16-bit 播放副本（track.play_url），母版不动。
+    返回 skip-done / skip16 / skip-foreign / converted / dry-run / error:<原因>。
     头部探测只下载前 64KB；确认需要转换才转换，全程流式、逐条处理完即清理。"""
+    if track.play_url:
+        return "skip-done"
     url = track.audio_url or ""
     provider = cfg.get("provider", "local")
 
     local_path = None
     oss_key = None
+    derivative_path = None   # 本地衍生文件路径
+    derivative_url = None    # 写进 play_url 的地址
     if url.startswith("/uploads/"):
-        local_path = os.path.join(storage.UPLOAD_DIR, url[len("/uploads/"):])
+        key = url[len("/uploads/"):]
+        local_path = os.path.join(storage.UPLOAD_DIR, key)
         if not os.path.exists(local_path):
             return f"error:本地文件不存在 {url}"
+        derivative_path = os.path.join(storage.UPLOAD_DIR, "play", key)
+        derivative_url = f"/uploads/play/{key}"
     elif url.startswith("http"):
         if provider != "oss":
             return "skip-foreign"
         oss_key = _oss_key_from_url(cfg, url)
         if not oss_key:
             return "skip-foreign"
+        derivative_url = storage._oss_public_url(cfg, f"play/{oss_key}")
     else:
         return "skip-foreign"
 
@@ -230,11 +241,15 @@ def process_track(cfg: dict, track: Track, dry: bool = False) -> str:
             return f"dry-run（{info['bits']}bit {info['sample_rate']}Hz {info['channels']}ch）"
 
         if local_path:
-            _convert_local_stream(local_path)
+            os.makedirs(os.path.dirname(derivative_path), exist_ok=True)
+            _convert_local_stream(local_path, derivative_path)
         else:
-            _convert_oss_stream(cfg, oss_key, url)
+            _convert_oss_stream(cfg, f"play/{oss_key}", url)
+        track.play_url = derivative_url
+        db.commit()
         return "converted"
     except Exception as e:  # noqa: BLE001
+        db.rollback()
         logger.warning("音频降位深失败 track=%s：%s", track.id, e)
         return f"error:{e}"
     finally:
@@ -316,7 +331,7 @@ def _run() -> None:
                 continue
             with _lock:
                 _current = track.title
-            _record(track, process_track(cfg, track))
+            _record(track, process_track(db, cfg, track))
         except Exception as e:  # noqa: BLE001
             logger.warning("音频归一 worker 异常（track=%s）：%s", item, e)
         finally:

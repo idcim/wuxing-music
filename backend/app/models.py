@@ -90,6 +90,9 @@ class Track(Base):
     tag: Mapped[str] = mapped_column(String(32), default="")
     plays: Mapped[str] = mapped_column(String(16), default="0")
     audio_url: Mapped[str] = mapped_column(Text, default="")
+    # 播放副本（16-bit PCM）。audio_url 永远是上传的母版原样；24-bit WAV 在 PC 微信
+    # 无法解码，归一工具（app/audio_norm.py）生成 16-bit 副本存这里，播放端优先用它。
+    play_url: Mapped[str] = mapped_column(Text, default="")
     cover_url: Mapped[str] = mapped_column(Text, default="")
     is_premium: Mapped[bool] = mapped_column(Boolean, default=True)
     preview_sec: Mapped[int] = mapped_column(Integer, default=30)

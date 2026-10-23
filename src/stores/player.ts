@@ -136,7 +136,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   // 内部：真正加载并播放某曲目
   _start: (track: Track) => {
     loadedTrackId = track.id;
-    const url = resolveUrl(track.audioUrl) || (USE_MOCK ? MOCK_AUDIO_URL : '');
+    // 优先播放副本（16-bit，全端可解）；母版（audio_url）可能是 PC 解不了的 24-bit WAV
+    const url = resolveUrl(track.playUrl || track.audioUrl) || (USE_MOCK ? MOCK_AUDIO_URL : '');
     if (!url) {
       console.warn('[player] 曲目无音频地址', track.id);
       clearLoadTimer();
