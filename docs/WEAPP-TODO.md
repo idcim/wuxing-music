@@ -153,8 +153,8 @@
       而不是游客兜底（`CLAUDE.md` 陷阱 5）。**验证点：换台设备登录，用户身份不应漂移。**
 - [ ] **PC 微信播放**（用户报障后新增）。两处修复：① `services/audio/index.weapp.ts` 对
       `platform` 为 `windows`/`mac` 的环境改用 `InnerAudioContext`；② 根因是线上音频为
-      **24-bit WAV，PC 微信解不了**（`Unable to decode audio data`）——需在服务器跑
-      `docker exec wuxing-backend python -m app.tools.transcode_audio` 把曲库降成 16-bit PCM。
+      **24-bit WAV，PC 微信解不了**（`Unable to decode audio data`）——后台「曲目 →
+      音频兼容修复」一键全量降成 16-bit PCM（保存 WAV 曲目时也会自动检查）。
       实测项：点播放出声、暂停/继续/切歌/进度拖动正常；若仍失败，界面会显示
       `errCode/errMsg`，按错误码再查。注意 PC 端 `InnerAudioContext` 不能后台续播
       （PC 上无此场景，属预期）。

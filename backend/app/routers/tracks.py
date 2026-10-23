@@ -1,12 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app import audio_norm
 from app.database import get_db
 from app.models import Admin, Track
 from app.schemas import TrackIn, ok
 from app.security import require_perm
 
 router = APIRouter(prefix="/api/admin/tracks", tags=["tracks"])
+
+
+def _enqueue_if_wav(track: Track) -> None:
+    """音频是 WAV 就排队做 24→16bit 兼容检查（后台线程，不阻塞保存）。
+    PC 微信解不了 24-bit WAV，详见 app/wav_compat.py。"""
+    if (track.audio_url or "").lower().endswith(".wav"):
+        audio_norm.enqueue(track.id)
 
 
 def _to_dict(t: Track) -> dict:
@@ -59,6 +67,7 @@ def create_track(
     db.add(track)
     db.commit()
     db.refresh(track)
+    _enqueue_if_wav(track)
     return ok(_to_dict(track))
 
 
@@ -76,6 +85,7 @@ def update_track(
         setattr(track, k, v)
     db.commit()
     db.refresh(track)
+    _enqueue_if_wav(track)
     return ok(_to_dict(track))
 
 
@@ -91,3 +101,18 @@ def delete_track(
     db.delete(track)
     db.commit()
     return ok()
+
+
+# ── 音频兼容归一（24bit WAV → 16bit，修 PC 微信无法解码）──
+# 不存在 GET/POST /{track_id} 路由，/normalize-audio 不会被抢占，声明顺序无关。
+
+@router.post("/normalize-audio")
+def normalize_audio(_: Admin = Depends(require_perm("tracks:edit"))):
+    """全量扫描曲库 WAV，后台线程逐个降位深。重复调用幂等。"""
+    audio_norm.enqueue(None)
+    return ok(audio_norm.status())
+
+
+@router.get("/normalize-audio")
+def normalize_audio_status(_: Admin = Depends(require_perm("tracks:view"))):
+    return ok(audio_norm.status())

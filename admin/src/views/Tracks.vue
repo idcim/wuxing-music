@@ -5,6 +5,10 @@
         <el-option v-for="e in elements" :key="e.id" :label="`${e.id} · ${e.note}音`" :value="e.id" />
       </el-select>
       <el-button type="primary" :icon="Plus" @click="openEdit()">新增曲目</el-button>
+      <el-button plain :loading="normRunning" @click="onNormalize">
+        {{ normRunning ? normText || '修复中…' : '音频兼容修复' }}
+      </el-button>
+      <span class="hint">把 24-bit WAV 转成 16-bit（PC 微信无法解码 24-bit）；保存 WAV 曲目时也会自动检查</span>
     </div>
 
     <el-table :data="rows" v-loading="loading" border>
@@ -127,7 +131,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { Plus, Upload, Loading } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { listTracks, createTrack, updateTrack, deleteTrack, listElements, UPLOAD_URL, ossSign } from '@/api';
+import { listTracks, createTrack, updateTrack, deleteTrack, listElements, UPLOAD_URL, ossSign, normalizeAudio, normalizeAudioStatus } from '@/api';
 
 const uploadHeaders = computed(() => ({
   Authorization: `Bearer ${localStorage.getItem('admin_token')}`
@@ -320,9 +324,66 @@ async function onDelete(row: any) {
   load();
 }
 
+// ── 音频兼容修复（24bit → 16bit，后台线程跑，页面轮询进度）──
+const normRunning = ref(false);
+const normText = ref('');
+let normTimer: ReturnType<typeof setInterval> | null = null;
+let normStartDone = 0;
+
+async function pollNorm() {
+  try {
+    const s = await normalizeAudioStatus();
+    if (s.running) {
+      normText.value = `修复中（已完成 ${Math.max(0, s.done - normStartDone)}，队列剩 ${s.pending}）`;
+      return;
+    }
+    if (normTimer) clearInterval(normTimer);
+    normTimer = null;
+    normRunning.value = false;
+    // results 新的在前，取本轮新增的那段
+    const fresh = s.results.slice(0, Math.max(0, s.done - normStartDone));
+    const conv = fresh.filter((r: any) => r.result === 'converted').length;
+    const errs = fresh.filter((r: any) => String(r.result).startsWith('error'));
+    const skip = fresh.length - conv - errs.length;
+    ElMessageBox.alert(
+      `转换 ${conv} 条，已是 16-bit 或外链跳过 ${skip} 条` +
+      (errs.length
+        ? `，失败 ${errs.length} 条：\n` + errs.map((e: any) => `#${e.trackId} ${e.title}：${e.result}`).join('\n')
+        : ''),
+      '音频兼容修复完成'
+    );
+  } catch {
+    // 轮询失败（网络抖动）下一轮再试，不打断任务
+  }
+}
+
+async function onNormalize() {
+  await ElMessageBox.confirm(
+    '扫描全部 WAV 曲目，把 24-bit 音频转成 16-bit（修复 PC 微信无法播放）。任务在后台执行，期间可正常操作后台。',
+    '音频兼容修复',
+    { type: 'info', confirmButtonText: '开始修复' }
+  );
+  const s = await normalizeAudio();
+  normStartDone = s.done;
+  normRunning.value = true;
+  normText.value = '';
+  if (normTimer) clearInterval(normTimer);
+  normTimer = setInterval(pollNorm, 3000);
+  pollNorm();
+}
+
 onMounted(async () => {
   elements.value = await listElements();
   load();
+  // 可能上一轮修复还在后台跑（比如刚保存过 WAV 曲目），接上进度显示
+  try {
+    const s = await normalizeAudioStatus();
+    if (s.running) {
+      normStartDone = Math.max(0, s.done - s.pending);
+      normRunning.value = true;
+      normTimer = setInterval(pollNorm, 3000);
+    }
+  } catch { /* 状态拉不到就算了 */ }
 });
 </script>
 

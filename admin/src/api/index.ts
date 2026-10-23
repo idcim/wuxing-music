@@ -37,6 +37,10 @@ export const refundOrder = (id: number, data: any) => req.post(`/api/admin/order
 export const confirmRefund = (id: number) => req.post(`/api/admin/orders/${id}/refund/confirm`);
 export const syncRefund = (id: number) => req.post(`/api/admin/orders/${id}/refund/sync`);
 
+// 音频兼容归一：24bit WAV → 16bit（后台线程执行，GET 轮询进度）
+export const normalizeAudio = () => req.post('/api/admin/tracks/normalize-audio');
+export const normalizeAudioStatus = () => req.get('/api/admin/tracks/normalize-audio');
+
 // ── 套餐 ──
 export const listPlans = () => req.get('/api/admin/plans');
 export const upsertPlan = (data: any) => req.post('/api/admin/plans', data);
