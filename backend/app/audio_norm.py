@@ -52,17 +52,41 @@ def _oss_key_from_url(cfg: dict, url: str) -> str | None:
     return None
 
 
-def _download(url: str, dst: str, limit: int | None = None) -> None:
-    with httpx.stream("GET", url, timeout=60, follow_redirects=True) as resp:
-        resp.raise_for_status()
-        total = 0
-        with open(dst, "wb") as f:
-            for chunk in resp.iter_bytes(CHUNK):
-                if limit is not None and total + len(chunk) > limit:
-                    f.write(chunk[: limit - total])
-                    return
-                f.write(chunk)
-                total += len(chunk)
+def _download(url: str, dst: str, limit: int | None = None, retries: int = 4) -> None:
+    """下载到本地，支持断点续传。服务器出网间歇抖动，几百 MB 的 WAV
+    一次下完是奢望——中断后按已落盘字节发 Range 续传；对方不支持 Range
+    （回 200 而非 206）则从头重来。"""
+    import time
+
+    have = 0
+    for attempt in range(retries):
+        try:
+            headers = {"Range": f"bytes={have}-"} if have else {}
+            with httpx.stream(
+                "GET", url, timeout=httpx.Timeout(60, read=300),
+                follow_redirects=True, headers=headers,
+            ) as resp:
+                resp.raise_for_status()
+                mode = "ab"
+                if have and resp.status_code == 200:
+                    # 对方不认 Range，续传会拼出重复数据，只能清零重来
+                    have = 0
+                    mode = "wb"
+                with open(dst, mode) as f:
+                    # 256KB 粒度：断流时已落盘的进度才能记上账，下次 Range 从这里续。
+                    # 用 1MB 粒度的话，断在第一块内 = 进度归零，续传无从谈起。
+                    for chunk in resp.iter_bytes(256 * 1024):
+                        if limit is not None and have + len(chunk) >= limit:
+                            f.write(chunk[: limit - have])
+                            return
+                        f.write(chunk)
+                        have += len(chunk)
+            return  # 完整下完
+        except (httpx.HTTPError, OSError) as e:
+            logger.warning("下载中断（已落盘 %s 字节）：%s；第 %s 次重试", have, e, attempt + 1)
+            if attempt == retries - 1:
+                raise RuntimeError(f"下载失败（重试 {retries} 次后放弃）：{e}") from e
+            time.sleep(2 * (attempt + 1))
 
 
 def process_track(cfg: dict, track: Track, dry: bool = False) -> str:
