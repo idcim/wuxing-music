@@ -5,3 +5,5 @@ venv/
 *.db
 .env
 uploads/
+backend/_els.json
+backend/_h*.wav
