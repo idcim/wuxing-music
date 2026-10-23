@@ -151,13 +151,13 @@
       `<Input>` 陷阱（陷阱 14），小程序端 `<Input>` 行为不同，需确认昵称/手机号/密码三个形态切换正常。
 - [ ] **`code → openid`**。配上真实 AppSecret 后要确认走的是 `jscode2session` 换来的真 openid，
       而不是游客兜底（`CLAUDE.md` 陷阱 5）。**验证点：换台设备登录，用户身份不应漂移。**
-- [ ] **PC 微信播放**（用户报障后新增）。两处修复：① `services/audio/index.weapp.ts` 对
-      `platform` 为 `windows`/`mac` 的环境改用 `InnerAudioContext`；② 根因是线上音频为
-      **24-bit WAV，PC 微信解不了**（`Unable to decode audio data`）——后台「曲目 →
-      音频兼容修复」一键全量降成 16-bit PCM（保存 WAV 曲目时也会自动检查）。
+- [ ] **PC 微信播放**（用户报障后新增）。两处根因：① 线上音频是 **24-bit WAV**，
+      PC 端解码不了（`Unable to decode audio data`）——后台「曲目 → 音频兼容修复」
+      全量降 16-bit PCM（保存 WAV 时自动检查）；② PC 端 `InnerAudioContext` 是
+      WebAudio 实现（decodeAudioData 全量读内存 + 无 MP3/AAC 私有解码器），
+      大文件与 MP3 都挂——已回退为 BackgroundAudioManager（PC 上流式路径）。
       实测项：点播放出声、暂停/继续/切歌/进度拖动正常；若仍失败，界面会显示
-      `errCode/errMsg`，按错误码再查。注意 PC 端 `InnerAudioContext` 不能后台续播
-      （PC 上无此场景，属预期）。
+      `errCode/errMsg`，按错误码再查。
 
 ---
 

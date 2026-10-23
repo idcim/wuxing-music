@@ -401,7 +401,7 @@ const top = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
 
 ### 2. 音频播放 `services/audio/`（分端）
 
-- 小程序：`Taro.getBackgroundAudioManager()`（**用 BackgroundAudioManager 才能后台/锁屏播放**，`app.config.ts` 已配 `requiredBackgroundModes: ['audio']`）。**例外：PC 微信（platform 为 `windows`/`mac`）改用 `InnerAudioContext`**——背景音频管理器在 PC 微信虽标注支持但有大量「设置 src 不出声」的反馈，且 PC 无锁屏续播场景。`onError` 的真实回调带 `{errCode, errMsg}`（Taro 类型没声明，用类型断言拿），必须透到 `loadError` 展示，否则平台差异类故障完全无法定位。
+- 小程序：`Taro.getBackgroundAudioManager()`（**用 BackgroundAudioManager 才能后台/锁屏播放**，`app.config.ts` 已配 `requiredBackgroundModes: ['audio']`）。**PC 微信也走它**——PC 端 InnerAudioContext 是 WebAudio 实现，decodeAudioData 全量读进内存（数百 MB 曲目必炸），且那套 Chromium 不带 MP3/AAC 私有解码器、不支持 24-bit WAV（报 `Unable to decode audio data`），实测 MP3 也挂；BackgroundAudioManager 在 PC 是流式路径，官方标注支持 Windows/Mac。`onError` 的真实回调带 `{errCode, errMsg}`（Taro 类型没声明，用类型断言拿），必须透到 `loadError` 展示，否则平台差异类故障完全无法定位。
 - H5：`index.h5.ts` 对应实现；统一接口见 `types.ts`。
 - `MiniPlayer` 按当前页路由自动定位：四个 TabBar 页面用 `mini-player--tabbar` 保持导航上方，二级页（元素详情/聆听历史等）默认贴底部安全区，不要在页面里各自写死 bottom。
 - **播放列表**：`TabBar` 中央按钮与全屏播放器都打开 `components/Playlist`，分「当前列表 / 全部歌曲」。`stores/player.ts` 的 `addToQueue` / `addAllToQueue` 按曲目 id 去重，队列可移除并点击播放；移除当前曲目自动切下一首，移除最后一首调用 `stop()`。新增队列操作必须同步重建 `order`，否则顺序/随机/悦动模式会读到旧下标。滚动区由 `ScrollArea` 分端实现：小程序 `ScrollView`、H5 原生 CSS 滚动，均有明确视口高度；遮罩关闭不能用 `onClick`（Taro 会把列表拖动合成为点击），要用触摸起止坐标判断，位移超过阈值不关闭，标题栏关闭按钮两端都可用。队列、当前曲目与播放模式持久化在 `wx_player_queue`，启动只恢复为暂停态、不自动播放；`stop()` 会删除该记录。恢复后的曲目本次会话还没有音源，`resume()` 必须按 `loadedTrackId` 重新 `_start`，不能直接 `audioService.play()`。
