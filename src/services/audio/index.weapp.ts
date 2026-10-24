@@ -2,14 +2,16 @@ import Taro from '@tarojs/taro';
 import type { AudioService, AudioCallbacks, AudioMeta } from './types';
 import { siteName } from '@/stores/site';
 import { logInfo, logError } from '@/utils/logger';
+import { createPcmStreamService } from './pcm-stream';
 
 // 端选择：
 // - 手机（iOS/Android）：BackgroundAudioManager（后台/锁屏播放靠它）
-// - PC 微信（Windows/Mac）：InnerAudioContext。PC 的 BGM 是媒体元素实现，
-//   实测「onPlay 假动作 + 立刻 10004 Format error」，连公共测试 MP3 都起不来；
-//   InnerAudioContext 在 PC 上走 WebAudio decodeAudioData——是另一条管线，
-//   不需要任何私有解码器，16-bit PCM WAV 是纯数据可解（24-bit/MP3/AAC 不行）。
-//   注意它是整文件下载后解码：大文件首播慢、占内存，只作 PC 端的退路。
+// - PC 微信（Windows/Mac）：流式 PCM 播放器（pcm-stream.ts）。PC 的 BGM/媒体元素
+//   实测坏死（假 onPlay + 10004，连公共测试 MP3 都起不来），InnerAudioContext 走
+//   decodeAudioData 整文件解码也撑不住大文件；PCM 流式这条路不碰任何坏组件、
+//   不需要解码器、边下边播（实测该端 WebAudio 蜂鸣可用）。
+//   个别老基础库没有 createWebAudioContext 时退回 InnerAudioContext，并由
+//   stores/player.ts 再退到 web-view 内嵌 H5。
 const IS_PC = (() => {
   try {
     const info = Taro.getDeviceInfo ? Taro.getDeviceInfo() : Taro.getSystemInfoSync();
@@ -18,6 +20,10 @@ const IS_PC = (() => {
     return false;
   }
 })();
+
+// PC 流式 PCM 依赖 createWebAudioContext；个别老基础库没有它就退回 InnerAudioContext
+const PCM_SUPPORTED = typeof (Taro as any).createWebAudioContext === 'function';
+export const PCM_STREAM_SUPPORTED = IS_PC && PCM_SUPPORTED;
 
 // ── BackgroundAudioManager（手机）──
 // BackgroundAudioManager 为全局单例，支持锁屏/后台继续播放。
@@ -173,6 +179,10 @@ function createInnerService(): AudioService {
   };
 }
 
-const service: AudioService = IS_PC ? createInnerService() : bgmService;
+const service: AudioService = PCM_STREAM_SUPPORTED
+  ? createPcmStreamService()
+  : IS_PC
+    ? createInnerService()
+    : bgmService;
 
 export default service;

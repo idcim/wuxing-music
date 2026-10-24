@@ -4,6 +4,7 @@ import audioService from '@/services/audio';
 import { USE_MOCK, MOCK_AUDIO_URL, H5_BASE } from '@/constants/env';
 import { resolveUrl } from '@/utils/url';
 import { isPcWechat } from '@/utils/platform';
+import { PCM_STREAM_SUPPORTED } from '@/services/audio';
 import { request, ApiError } from '@/services/api';
 import { getPlayUrl } from '@/services/content';
 import { logInfo, logError } from '@/utils/logger';
@@ -164,10 +165,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   // 内部：真正加载并播放某曲目
   _start: (track: Track) => {
-    // PC 微信小程序的音频运行时不可用（BGM 假 onPlay + 10004、InnerAudioContext
-    // 解不了大文件/MP3/AAC，连公共测试音频都起不了播——实测）。
-    // 改走 web-view 内嵌 H5 播放页（完整浏览器内核，不挑格式）。
-    if (isPcWechat) {
+    // PC 微信小程序的原生音频运行时不可用（BGM/媒体元素实测坏死），
+    // 优先走流式 PCM 播放器（不碰坏组件）；个别老基础库没有
+    // createWebAudioContext 时退到 web-view 内嵌 H5 播放页。
+    if (isPcWechat && !PCM_STREAM_SUPPORTED) {
       if (H5_BASE) {
         Taro.navigateTo({
           url: `/pages/webview/index?url=${encodeURIComponent(`${H5_BASE}/#/pages/h5play/index?id=${track.id}`)}`

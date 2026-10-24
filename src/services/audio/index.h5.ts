@@ -137,3 +137,6 @@ const service: AudioService = {
 };
 
 export default service;
+
+// PC 流式 PCM 是小程序端能力，H5 恒为 false（H5 用 HTMLAudioElement 就够）
+export const PCM_STREAM_SUPPORTED = false;

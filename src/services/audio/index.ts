@@ -2,3 +2,4 @@
 // 构建时 Taro 会优先选用 index.weapp.ts / index.h5.ts。
 export type { AudioService, AudioCallbacks } from './types';
 export { default } from './index.weapp';
+export { PCM_STREAM_SUPPORTED } from './index.weapp';
