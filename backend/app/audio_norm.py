@@ -172,7 +172,11 @@ def _convert_oss_stream(cfg: dict, oss_key: str, url: str) -> None:
                 time.sleep(2 * (attempt + 1))
 
     try:
-        upload_id = bucket.init_multipart_upload(oss_key).upload_id
+        # Content-Type 必须在 init 时给（分片上传的特性），否则对象是
+        # application/octet-stream，PC 微信媒体元素会报 Format error
+        upload_id = bucket.init_multipart_upload(
+            oss_key, headers={"Content-Type": "audio/wav"}
+        ).upload_id
         for chunk in _stream_with_resume(url):
             part_buf += conv.feed(chunk)
             while len(part_buf) >= PART:
@@ -217,10 +221,19 @@ def _encode_aac(src_path: str, dst_path: str, bitrate: str = AAC_BITRATE, clip_s
 
 
 def _upload_oss(cfg: dict, key: str, path: str) -> None:
+    import mimetypes
+
     import oss2
 
+    # 分片上传必须显式给 Content-Type——裸 upload_part 出来的是 application/octet-stream，
+    # PC 微信的媒体元素对错误的 Content-Type 会报 Format error（实测 10004）
+    ctype = mimetypes.guess_type(key)[0] or "application/octet-stream"
     bucket = storage._oss_bucket(cfg)
-    oss2.resumable_upload(bucket, key, path, multipart_threshold=CHUNK * 5, part_size=CHUNK * 5)
+    oss2.resumable_upload(
+        bucket, key, path,
+        multipart_threshold=CHUNK * 5, part_size=CHUNK * 5,
+        headers={"Content-Type": ctype},
+    )
 
 
 def _probe_audio(src_path: str) -> None:

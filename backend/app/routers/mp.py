@@ -1078,6 +1078,15 @@ def mp_play_url(track_id: int, request: Request, fmt: str = "aac", db: Session =
             raise HTTPException(status_code=404, detail="该曲目暂无音频")
 
     resolved = track.preview_url if rendition == streaming.RENDITION_PREVIEW else _full_url_for_fmt(track, chosen)
+    # 实际命中的格式要回给前端：wav16 在 PC 微信解码失败时，前端据此降级重试 AAC
+    if rendition == streaming.RENDITION_PREVIEW:
+        actual = "prev"
+    elif resolved == track.play_url:
+        actual = "wav16"
+    elif resolved == track.aac_url:
+        actual = "aac"
+    else:
+        actual = "master"
     # OSS 对象直接回签名地址，不再经过 /stream 的 302 跳转——PC 微信的媒体栈对
     # 302 跟随支持存疑（实测跳转后报 Format error），少一跳最稳。签名地址本身
     # 就带 10 分钟过期，保护水位不变。本地存储（无签名能力）才走 token 路径。
@@ -1091,6 +1100,7 @@ def mp_play_url(track_id: int, request: Request, fmt: str = "aac", db: Session =
         return ok({
             "url": signed,
             "preview": rendition == streaming.RENDITION_PREVIEW,
+            "format": actual,
             "expiresIn": streaming.TOKEN_TTL,
         })
 
@@ -1098,13 +1108,14 @@ def mp_play_url(track_id: int, request: Request, fmt: str = "aac", db: Session =
     return ok({
         "url": f"/api/mp/stream/{token}",
         "preview": rendition == streaming.RENDITION_PREVIEW,
+        "format": actual,
         "expiresIn": streaming.TOKEN_TTL,
     })
 
 
 @router.get("/stream/{token}")
 def mp_stream(token: str, request: Request, db: Session = Depends(get_db)):
-    """按 token 出流：OSS 302 到签名地址；本地存储 Range 流式输出。
+    """按 token 出流（仅本地存储——OSS 已在 play-url 直接回签名地址）。
     token 即凭证（音频播放器带不了 Authorization 头）。"""
     parsed = streaming.verify_stream_token(token)
     if not parsed:

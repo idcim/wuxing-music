@@ -23,6 +23,10 @@ let timerId: ReturnType<typeof setTimeout> | null = null;
 // 存下 deadline 才能在回前台时按真实时间校正。
 let timerDeadline = 0;
 let loadedTrackId: number | null = null;
+// 本次播放请求的格式上下文（trackId → 请求的 fmt 与实际命中的 format），
+// PC 微信 wav16 解码失败时据此降级到 AAC 重试
+const playFmtByTrack = new Map<number, { fmt: string; format?: string }>();
+const pcAacRetried = new Set<number>();
 
 // 加载看门狗：超过这个时间还没 canplay，就认定为「慢/卡住」并提示用户
 const LOAD_TIMEOUT_MS = 15000;
@@ -178,6 +182,17 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       onError: (err?: unknown) => {
         console.error('[audio]', err);
         clearLoadTimer();
+        // PC 微信的媒体栈解不了 wav16（MEDIA_ELEMENT_ERROR 10004）时，
+        // 自动降级到 AAC 副本重试一次（每曲目每会话一次，避免死循环）
+        const info = playFmtByTrack.get(track.id);
+        if (
+          isPcWechat && info?.fmt === 'wav' && info?.format === 'wav16' &&
+          !pcAacRetried.has(track.id)
+        ) {
+          pcAacRetried.add(track.id);
+          get()._start(track);
+          return;
+        }
         // 之前只 console.error，用户面对的是一个永远转的 spinner。
         // 记下错误让界面能提示并给出重试；微信侧的 errCode/errMsg 一并透出，
         // 否则「播放不了」没有任何可定位的信息（尤其 PC 微信这类差异平台）。
@@ -251,11 +266,14 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       return;
     }
     // 版权保护：目录接口不含音频地址，播放前用曲目 id 换短时效签名地址。
-    // PC 微信只信 16-bit PCM（fmt=wav），其余端优先 AAC 副本。
-    getPlayUrl(track.id, isPcWechat ? 'wav' : 'aac')
+    // PC 微信只信 16-bit PCM（fmt=wav），其余端优先 AAC 副本；
+    // PC 已降级重试过的曲目直接要 AAC（见 onError 的降级逻辑）。
+    const fmt = isPcWechat && !pcAacRetried.has(track.id) ? 'wav' : 'aac';
+    getPlayUrl(track.id, fmt)
       .then((res) => {
         // 换地址期间用户可能已经切歌/停止了，别覆盖别人的播放
         if (loadedTrackId !== track.id) return;
+        playFmtByTrack.set(track.id, { fmt, format: res.format });
         set({ previewClip: res.preview });
         audioService.load(resolveUrl(res.url), meta, callbacks);
       })

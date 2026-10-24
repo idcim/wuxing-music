@@ -12,6 +12,7 @@ export async function fetchElements(): Promise<WuxingElement[]> {
 export interface PlayUrlResult {
   url: string;          // 短时效签名播放地址（相对路径，resolveUrl 补全）
   preview: boolean;     // true = 试听剪辑（会员曲目的非会员播放）
+  format?: string;      // 实际命中的格式：prev / wav16 / aac / master
   expiresIn: number;    // 秒
 }
 
