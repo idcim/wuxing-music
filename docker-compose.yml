@@ -22,6 +22,12 @@ services:
       - BUILT_AT=${BUILT_AT:-}
     ports:
       - "8000:8000"
+    # 宿主机 DNS 不稳会同时表现为「jscode2session 解析失败」和「MySQL 查询中途断连」
+    # （Docker 内嵌 DNS 的外部转发走宿主 resolv.conf）；固定公共 DNS 兜底。
+    # 容器名解析（MySQL 走 1panel-network）由内嵌 DNS 负责，不受此影响。
+    dns:
+      - 223.5.5.5
+      - 119.29.29.29
     volumes:
       - uploads_data:/app/uploads
     networks:

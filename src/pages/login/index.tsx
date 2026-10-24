@@ -63,8 +63,9 @@ export default function Login() {
     try {
       await login();
       Taro.reLaunch({ url: AFTER_LOGIN });
-    } catch {
-      Taro.showToast({ title: '登录失败，请重试', icon: 'none' });
+    } catch (e: any) {
+      // 透传后端的具体原因（网络异常 / 凭证失效），别一律「登录失败」
+      Taro.showToast({ title: e?.message || '登录失败，请重试', icon: 'none' });
     }
   };
 

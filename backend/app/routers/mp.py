@@ -153,16 +153,17 @@ def _mp_cfg(db: Session) -> dict:
     return json.loads(row.value) if row and row.value else {}
 
 
-def _jscode2session(db: Session, code: str) -> dict:
+def _jscode2session(db: Session, code: str) -> tuple[dict, str]:
     """用 code + 小程序 AppID/Secret 调微信换取 openid/unionid。
-    返回 {"openid":..., "unionid":...}；未配置或失败返回 {}。
+    返回 ({"openid":..., "unionid":...}, "")；失败时 ( {}, 原因类别 )：
+    "config"=未配置，"network"=网络/DNS 故障，"wechat"=微信拒绝了 code。
     网络类失败（DNS 抖动、超时）重试两次——服务器出网间歇不稳时，
     一次 DNS 失败不该直接把用户登录打死。"""
     cfg = _mp_cfg(db)
     app_id = cfg.get("app_id")
     app_secret = cfg.get("app_secret")
     if not (app_id and app_secret and code):
-        return {}
+        return {}, "config"
     import time
 
     import httpx
@@ -186,11 +187,11 @@ def _jscode2session(db: Session, code: str) -> dict:
             if attempt < 2:
                 time.sleep(1)
     if data is None:
-        return {}
+        return {}, "network"
     if data.get("openid"):
-        return {"openid": data["openid"], "unionid": data.get("unionid", "")}
+        return {"openid": data["openid"], "unionid": data.get("unionid", "")}, ""
     logger.warning("jscode2session 返回异常：%s", data)
-    return {}
+    return {}, "wechat"
 
 
 @router.post("/login")
@@ -206,11 +207,15 @@ def mp_login(body: LoginIn, db: Session = Depends(get_db)):
         # 已配置：必须用真实 code 换 openid，忽略前端直传（防顶号）
         if not body.code:
             raise HTTPException(status_code=400, detail="缺少登录 code")
-        sess = _jscode2session(db, body.code)
+        sess, sess_err = _jscode2session(db, body.code)
         openid = sess.get("openid", "")
         unionid = sess.get("unionid") or unionid
         if not openid:
-            raise HTTPException(status_code=400, detail="微信登录失败，请重试")
+            # 分清「我们够不到微信」（网络/DNS，可重试）和「微信拒绝 code」（凭证问题），
+            # 混成一句「微信登录失败」的话，服务器断网时用户会误以为是自己账号的问题
+            if sess_err == "network":
+                raise HTTPException(status_code=503, detail="登录服务网络异常，请稍后重试")
+            raise HTTPException(status_code=400, detail="登录凭证已失效，请重新进入小程序后再试")
     else:
         # 未配置小程序密钥：仅开发态允许前端稳定游客标识兜底；生产拒绝
         if not settings.debug:
