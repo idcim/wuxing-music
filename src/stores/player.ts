@@ -39,7 +39,12 @@ function logEnvOnce(): void {
   envLogged = true;
   try {
     const info = Taro.getDeviceInfo ? Taro.getDeviceInfo() : Taro.getSystemInfoSync();
-    logInfo('env', `platform=${info.platform} 基础库=${(info as any).SDKVersion || '?'} 微信=${(info as any).version || '?'}`);
+    // 微信客户端版本在 getAppBaseInfo 里，getDeviceInfo 没有
+    const app = Taro.getAppBaseInfo ? Taro.getAppBaseInfo() : ({} as any);
+    logInfo(
+      'env',
+      `platform=${info.platform} 基础库=${(info as any).SDKVersion || '?'} 微信=${(app as any).version || '?'}`
+    );
   } catch { /* 拿不到就算了 */ }
 }
 

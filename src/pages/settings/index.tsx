@@ -6,6 +6,8 @@ import { APP_VERSION } from '@/constants/version';
 import { STORAGE_KEYS } from '@/services/storage';
 import { cancelAccount } from '@/services/user';
 import { logsToText } from '@/utils/logger';
+import audioService from '@/services/audio';
+import { logInfo, logError } from '@/utils/logger';
 import { usePlayerStore } from '@/stores/player';
 import { useUserStore } from '@/stores/user';
 import { isWeapp } from '@/utils/platform';
@@ -43,10 +45,35 @@ export default function Settings() {
   const [version, setVersion] = useState(APP_VERSION);
   const [cancelling, setCancelling] = useState(false);
   const [diagOpen, setDiagOpen] = useState(false);
+  const [testingAudio, setTestingAudio] = useState(false);
 
   const copyLogs = async () => {
     await Taro.setClipboardData({ data: logsToText() || '暂无日志' });
     Taro.showToast({ title: '已复制', icon: 'success' });
+  };
+
+  // 播放公认公共测试音频：确认「这台设备能不能放任何远程音频」，
+  // 与我们自己的文件/签名/格式完全解耦。直接用音频服务（会顶掉正在播的曲子，
+  // 下次点播放会重新绑定，无残留）。
+  const TEST_AUDIO_URL = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3';
+  const onTestAudio = () => {
+    if (testingAudio) {
+      audioService.stop();
+      setTestingAudio(false);
+      logInfo('test', '手动停止测试音频');
+      return;
+    }
+    setTestingAudio(true);
+    logInfo('test', '播放公共测试音频（SoundHelix mp3）');
+    audioService.load(TEST_AUDIO_URL, { title: '公共测试音频' }, {
+      onPlay: () => logInfo('test', 'onPlay ✓ 这台设备能放远程音频'),
+      onError: (e) => {
+        logError('test', 'onError ✗ 连公共测试音频都放不了', e);
+        setTestingAudio(false);
+      },
+      onEnded: () => setTestingAudio(false),
+      onStop: () => setTestingAudio(false)
+    });
   };
 
   useDidShow(() => {
@@ -160,6 +187,11 @@ export default function Settings() {
             </ScrollView>
             <View className="settings__diag-copy" onClick={copyLogs}>
               <Text className="settings__diag-copy-text">复制全部</Text>
+            </View>
+            <View className="settings__diag-copy" onClick={onTestAudio}>
+              <Text className="settings__diag-copy-text">
+                {testingAudio ? '停止测试音频' : '播放测试音频（公共 MP3）'}
+              </Text>
             </View>
           </View>
         </View>
