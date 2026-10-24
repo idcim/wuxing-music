@@ -169,6 +169,11 @@ export default function Member() {
   const planIconColor = (id: PlanId) =>
     id === 'year' ? '#fde047' : id === 'free' ? '#64748b' : '#cbd5e1';
 
+  // 推荐（featured）套餐永远浮到最上面，其余保持后台 sort 顺序
+  const displayPlans = [...plans].sort(
+    (a, b) => Number(b.featured ?? false) - Number(a.featured ?? false)
+  );
+
   return (
     <View className="member">
       {/* 标题 */}
@@ -192,7 +197,7 @@ export default function Member() {
 
       {/* 套餐 */}
       <View className="member__list">
-        {plans.map((p, idx) => {
+        {displayPlans.map((p, idx) => {
           const isCurrent = isPremium && currentType === p.id;
           return (
             <View
