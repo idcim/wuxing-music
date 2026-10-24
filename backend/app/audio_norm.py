@@ -40,7 +40,9 @@ _queue: list[int | None] = []   # None = 全量扫描（worker 展开成具体 i
 _worker: threading.Thread | None = None
 _results: list[dict] = []       # 最近 100 条处理结果
 _done = 0
+_seq = 0                        # 结果记录的单调序号，前端据此识别「这次点击之后的新结果」
 _current = ""
+_current_id = 0                 # 正在处理的曲目 id（0 = 空闲），前端行级「处理中」状态用
 _finished_at: str | None = None
 _job_seq = 0                    # 全量扫描的任务编号（每次点击 +1）
 _current_job = 0
@@ -410,10 +412,12 @@ def enqueue(track_id: int | None) -> int:
 
 
 def _record(track: Track | None, result: str) -> None:
-    global _done
+    global _done, _seq
     with _lock:
         _done += 1
+        _seq += 1
         _results.append({
+            "seq": _seq,
             "job": _current_job,
             "trackId": track.id if track else None,
             "title": track.title if track else "",
@@ -425,11 +429,12 @@ def _record(track: Track | None, result: str) -> None:
 
 
 def _run() -> None:
-    global _current, _finished_at, _worker
+    global _current, _current_id, _finished_at, _worker
     while True:
         with _lock:
             if not _queue:
                 _current = ""
+                _current_id = 0
                 _finished_at = datetime.utcnow().isoformat()
                 # 锁内置 None 再退出：enqueue 只在 _worker 为 None 时起新线程，
                 # 退出窗口期的入队不会被丢下
@@ -440,24 +445,28 @@ def _run() -> None:
         try:
             cfg = storage.get_storage_cfg(db)
             if item is None:
+                # 全量扫描覆盖所有有音频的曲目（不只 wav：AAC/试听剪辑对 mp3 同样要补）
                 ids = [
-                    t.id for t in db.query(Track.id).filter(Track.audio_url.like("%.wav")).all()
+                    t.id for t in db.query(Track.id).filter(Track.audio_url != "").all()
                 ]
-                logger.info("音频归一：任务 #%s 展开为 %s 条 WAV 曲目", _current_job, len(ids))
+                logger.info("音频归一：任务 #%s 展开为 %s 条曲目", _current_job, len(ids))
                 with _lock:
                     # 展开到队首，保持「先全量后单条」的触发顺序
                     fresh = [i for i in ids if i not in _queue]
                     _queue[:0] = fresh
                 continue
             track = db.query(Track).filter(Track.id == item).first()
-            if not track or not (track.audio_url or "").lower().endswith(".wav"):
+            if not track or not track.audio_url:
                 continue
             with _lock:
                 _current = track.title
+                _current_id = track.id
             _record(track, process_track(db, cfg, track))
         except Exception as e:  # noqa: BLE001
             logger.warning("音频归一 worker 异常（track=%s）：%s", item, e)
         finally:
+            with _lock:
+                _current_id = 0
             db.close()
 
 
@@ -467,6 +476,8 @@ def status() -> dict:
             # _worker 在锁内置 None 后才算退出，单看 is_alive 有退出窗口
             "running": _worker is not None,
             "pending": len(_queue),
+            "queuedIds": [i for i in _queue if i is not None],
+            "currentId": _current_id,
             "done": _done,
             "current": _current,
             "job": _current_job,

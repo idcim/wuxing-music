@@ -6,9 +6,9 @@
       </el-select>
       <el-button type="primary" :icon="Plus" @click="openEdit()">新增曲目</el-button>
       <el-button plain :loading="normRunning" @click="onNormalize">
-        {{ normRunning ? normText || '修复中…' : '音频兼容修复' }}
+        {{ normRunning ? normText || '修复中…' : '全部处理' }}
       </el-button>
-      <span class="hint">把 24-bit WAV 转成 16-bit（PC 微信无法解码 24-bit）；保存 WAV 曲目时也会自动检查</span>
+      <span class="hint">为每首曲目录入 16-bit（PC 兼容）与 AAC（省流量）播放副本，母版不动；单行「处理」可单独重做</span>
     </div>
 
     <el-table :data="rows" v-loading="loading" border>
@@ -25,11 +25,25 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="播放版本" width="120">
+      <el-table-column label="播放版本" width="230">
         <template #default="{ row }">
-          <el-tag v-if="row.play_url" size="small" type="success">16bit</el-tag>
-          <el-tag v-if="row.aac_url" size="small" type="warning" style="margin-left: 4px">AAC</el-tag>
-          <span v-if="!row.play_url && !row.aac_url" class="hint">仅母版</span>
+          <template v-if="normCurrentId === row.id">
+            <el-tag size="small" type="warning"><el-icon class="is-loading"><Loading /></el-icon> 处理中</el-tag>
+          </template>
+          <el-tag v-else-if="normQueuedIds.includes(row.id)" size="small" type="info">排队中</el-tag>
+          <template v-else>
+            <el-tag v-if="row.play_url" size="small" type="success">16bit</el-tag>
+            <el-tag v-if="row.aac_url" size="small" type="warning" style="margin-left: 4px">AAC</el-tag>
+            <span v-if="!row.play_url && !row.aac_url" class="hint">仅母版</span>
+            <el-tooltip v-if="normMap[row.id]?.result.startsWith('error:')" :content="normMap[row.id].result" placement="top">
+              <el-tag size="small" type="danger" style="margin-left: 4px">失败</el-tag>
+            </el-tooltip>
+          </template>
+          <el-button
+            size="small" text type="primary" style="margin-left: 6px"
+            :disabled="normQueuedIds.includes(row.id) || normCurrentId === row.id"
+            @click="onProcessOne(row)"
+          >处理</el-button>
         </template>
       </el-table-column>
       <el-table-column label="上架" width="80">
@@ -73,9 +87,8 @@
         <el-form-item label="播放量"><el-input v-model="form.plays" placeholder="12.4k" /></el-form-item>
         <el-form-item label="音频">
           <div class="up-row">
-            <!-- 音频用自定义上传：配了 OSS 就浏览器直传，不经服务器中转。
-                 曲目 WAV 母版可达数百 MB，走服务器要多占一份带宽/内存/磁盘，
-                 还会顶到 nginx 的 body 上限。 -->
+            <!-- 音频一律先传服务端暂存（见 uploadAudio），保存后归一管线在后台
+                 生成 16-bit/AAC 副本并把母版推上 OSS -->
             <el-upload
               :show-file-list="false"
               accept="audio/*,.mp3,.m4a,.wav"
@@ -138,7 +151,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { Plus, Upload, Loading } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { listTracks, createTrack, updateTrack, deleteTrack, listElements, UPLOAD_URL, normalizeAudio, normalizeAudioStatus } from '@/api';
+import { listTracks, createTrack, updateTrack, deleteTrack, listElements, UPLOAD_URL, normalizeAudio, normalizeAudioStatus, normalizeTrack } from '@/api';
 
 const uploadHeaders = computed(() => ({
   Authorization: `Bearer ${localStorage.getItem('admin_token')}`
@@ -303,35 +316,67 @@ async function onDelete(row: any) {
   load();
 }
 
-// ── 音频兼容修复（24bit → 16bit，后台线程跑，页面轮询进度）──
+// ── 音频归一（后台线程跑，页面轮询进度；支持全量与单曲目）──
 const normRunning = ref(false);
 const normText = ref('');
+const normQueuedIds = ref<number[]>([]);
+const normCurrentId = ref(0);
+// 每个曲目的最新处理结果（按 seq 取新），行内展示失败原因用
+const normMap = ref<Record<number, { seq: number; result: string }>>({});
 let normTimer: ReturnType<typeof setInterval> | null = null;
 let normJob = 0;
+
+function mergeResults(results: any[]) {
+  const m = { ...normMap.value };
+  for (const r of results || []) {
+    if (r.trackId && (!m[r.trackId] || m[r.trackId].seq < r.seq)) {
+      m[r.trackId] = { seq: r.seq, result: r.result };
+    }
+  }
+  normMap.value = m;
+}
+
+function stopPolling() {
+  if (normTimer) clearInterval(normTimer);
+  normTimer = null;
+}
+
+function ensurePolling() {
+  if (!normTimer) normTimer = setInterval(pollNorm, 3000);
+  pollNorm();
+}
 
 async function pollNorm() {
   try {
     const s = await normalizeAudioStatus();
+    normQueuedIds.value = s.queuedIds || [];
+    normCurrentId.value = s.currentId || 0;
+    mergeResults(s.results);
     if (s.running) {
-      const mine = s.results.filter((r: any) => r.job === normJob);
-      normText.value = `修复中（本轮已处理 ${mine.length}，队列剩 ${s.pending}）`;
+      if (normJob) {
+        const mine = s.results.filter((r: any) => r.job === normJob);
+        normText.value = `修复中（本轮已处理 ${mine.length}，队列剩 ${s.pending}）`;
+      }
       return;
     }
-    if (normTimer) clearInterval(normTimer);
-    normTimer = null;
-    normRunning.value = false;
-    // 按 job 编号取本轮结果（不能用条数偏移——多轮任务/自动检查会互相污染计数）
-    const fresh = s.results.filter((r: any) => r.job === normJob);
-    const conv = fresh.filter((r: any) => String(r.result).startsWith('done:')).length;
-    const errs = fresh.filter((r: any) => String(r.result).startsWith('error:'));
-    const skip = fresh.length - conv - errs.length;
-    ElMessageBox.alert(
-      `处理 ${conv} 条（母版上 OSS / 16-bit / AAC 副本按需生成），无需处理或跳过 ${skip} 条` +
-      (errs.length
-        ? `，失败 ${errs.length} 条：\n` + errs.map((e: any) => `#${e.trackId} ${e.title}：${e.result}`).join('\n')
-        : ''),
-      '音频兼容修复完成'
-    );
+    stopPolling();
+    if (normJob) {
+      normRunning.value = false;
+      // 按 job 编号取本轮结果（不能用条数偏移——多轮任务/自动检查会互相污染计数）
+      const fresh = s.results.filter((r: any) => r.job === normJob);
+      const conv = fresh.filter((r: any) => String(r.result).startsWith('done:')).length;
+      const errs = fresh.filter((r: any) => String(r.result).startsWith('error:'));
+      const skip = fresh.length - conv - errs.length;
+      normJob = 0;
+      ElMessageBox.alert(
+        `处理 ${conv} 条（母版上 OSS / 16-bit / AAC 副本按需生成），无需处理或跳过 ${skip} 条` +
+        (errs.length
+          ? `，失败 ${errs.length} 条：\n` + errs.map((e: any) => `#${e.trackId} ${e.title}：${e.result}`).join('\n')
+          : ''),
+        '全部处理完成'
+      );
+    }
+    load();  // 刷新版本标识
   } catch {
     // 轮询失败（网络抖动）下一轮再试，不打断任务
   }
@@ -339,29 +384,41 @@ async function pollNorm() {
 
 async function onNormalize() {
   await ElMessageBox.confirm(
-    '扫描全部 WAV 曲目，把 24-bit 音频转成 16-bit（修复 PC 微信无法播放）。任务在后台执行，期间可正常操作后台。',
-    '音频兼容修复',
-    { type: 'info', confirmButtonText: '开始修复' }
+    '扫描全部曲目，为每首生成缺失的 16-bit / AAC 播放副本（母版不动）。任务在后台执行，期间可正常操作后台。',
+    '全部处理',
+    { type: 'info', confirmButtonText: '开始处理' }
   );
   const s = await normalizeAudio();
   normJob = s.job;
   normRunning.value = true;
   normText.value = '';
-  if (normTimer) clearInterval(normTimer);
-  normTimer = setInterval(pollNorm, 3000);
-  pollNorm();
+  ensurePolling();
+}
+
+// 单曲目处理：后台执行，行内显示排队中/处理中/失败原因
+async function onProcessOne(row: any) {
+  try {
+    await normalizeTrack(row.id);
+    ElMessage.info(`「${row.title}」已加入后台处理队列`);
+    ensurePolling();
+  } catch {
+    // 拦截器已提示
+  }
 }
 
 onMounted(async () => {
   elements.value = await listElements();
   load();
-  // 可能上一轮修复还在后台跑（比如刚保存过 WAV 曲目），接上进度显示
+  // 可能上一轮处理还在后台跑（比如刚保存过曲目），接上进度显示
   try {
     const s = await normalizeAudioStatus();
+    normQueuedIds.value = s.queuedIds || [];
+    normCurrentId.value = s.currentId || 0;
+    mergeResults(s.results);
     if (s.running) {
-      normJob = s.job;
-      normRunning.value = true;
-      normTimer = setInterval(pollNorm, 3000);
+      normJob = s.job || 0;
+      if (normJob) normRunning.value = true;
+      ensurePolling();
     }
   } catch { /* 状态拉不到就算了 */ }
 });

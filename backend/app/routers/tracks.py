@@ -111,9 +111,23 @@ def delete_track(
 
 @router.post("/normalize-audio")
 def normalize_audio(_: Admin = Depends(require_perm("tracks:edit"))):
-    """全量扫描曲库 WAV，后台线程逐个降位深。返回 job 编号供前端过滤本轮结果。"""
+    """全量扫描曲库音频，后台线程逐条处理。返回 job 编号供前端过滤本轮结果。"""
     job = audio_norm.enqueue(None)
     return ok({**audio_norm.status(), "job": job})
+
+
+@router.post("/{track_id}/normalize")
+def normalize_track(
+    track_id: int,
+    db: Session = Depends(get_db),
+    _: Admin = Depends(require_perm("tracks:edit")),
+):
+    """单曲目处理（后台线程）：母版上 OSS、16-bit/AAC/试听剪辑缺啥补啥。"""
+    track = db.query(Track).filter(Track.id == track_id).first()
+    if not track:
+        raise HTTPException(status_code=404, detail="曲目不存在")
+    audio_norm.enqueue(track.id)
+    return ok(audio_norm.status())
 
 
 @router.get("/normalize-audio")
