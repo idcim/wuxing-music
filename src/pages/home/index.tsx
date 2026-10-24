@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, Button } from '@tarojs/components';
 import Taro, { useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/taro';
 import { openShareMenu, setH5Share } from '@/utils/share';
@@ -6,6 +6,7 @@ import { WUXING, ELEMENT_LIST } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
 import { usePlayerStore } from '@/stores/player';
 import { siteName, brandLine } from '@/stores/site';
+import { promptProfileIfIncomplete } from '@/utils/profile';
 import Icon from '@/components/Icon';
 import { A } from '@/utils/color';
 import { navTopStyle } from '@/utils/nav';
@@ -40,7 +41,17 @@ export default function Home() {
     openShareMenu();
     // H5 的「···」转发文案要靠 JS-SDK 设，useShareAppMessage 在 H5 是空操作
     setH5Share(`我的本命是${el.id}型·${el.note}音，来${siteName()}找你的助眠音律`, '循五行五音，为你匹配今晚适合的声音', '/pages/home/index');
+    // 落在主页后才提示补全资料：启动期弹会被 splash 导航/测评引导顶掉（实测被跳过）
+    promptProfileIfIncomplete();
   });
+  // 慢登录兜底：坐在主页时才完成登录（H5 授权回跳/弱网）也能收到提示
+  useEffect(
+    () =>
+      useUserStore.subscribe((s, prev) => {
+        if (!prev.user && s.user) promptProfileIfIncomplete();
+      }),
+    []
+  );
   useShareAppMessage(() => ({
     title: `我的本命是${el.id}型·${el.note}音，来${siteName()}找你的助眠音律`,
     path: '/pages/home/index'
