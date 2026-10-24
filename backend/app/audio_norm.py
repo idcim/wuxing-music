@@ -223,6 +223,30 @@ def _upload_oss(cfg: dict, key: str, path: str) -> None:
     oss2.resumable_upload(bucket, key, path, multipart_threshold=CHUNK * 5, part_size=CHUNK * 5)
 
 
+def _probe_audio(src_path: str) -> None:
+    """转码前确认源文件含可解码音频流。不是音频时给出可读原因，
+    而不是把 ffmpeg 的「received no packets」原文甩给管理员。"""
+    size = os.path.getsize(src_path)
+    if size < 1024:
+        raise RuntimeError(f"源文件只有 {size} 字节，不是有效音频（可能上传中断或传错文件）")
+    if src_path.lower().endswith(".wav"):
+        if read_wav_info(src_path):
+            return
+        head = open(src_path, "rb").read(16).hex()
+        raise RuntimeError(f"源文件不是有效 WAV（头部 {head}），可能传错文件类型")
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        return  # 没有 ffprobe 时不挡路，交给 ffmpeg 自己判断
+    import subprocess
+    r = subprocess.run(
+        [ffprobe, "-v", "error", "-show_entries", "stream=codec_type",
+         "-of", "csv=p=0", src_path],
+        capture_output=True, timeout=60,
+    )
+    if b"audio" not in r.stdout:
+        raise RuntimeError("源文件里没有音频流（可能传错文件类型）")
+
+
 def process_track(db, cfg: dict, track: Track, dry: bool = False) -> str:
     """单条曲目的完整管线（幂等，缺啥补啥）。返回 done:明细 / skip:原因 / dry:明细 / error:原因。
 
@@ -304,6 +328,7 @@ def process_track(db, cfg: dict, track: Track, dry: bool = False) -> str:
 
     tmpdir = tempfile.mkdtemp(prefix="wavpipe-")
     done: list[str] = []
+    failed: list[str] = []
     try:
         # ── 准备源文件：本地暂存直接用；OSS 母版下载到临时目录（带续传）──
         src = local_master
@@ -311,68 +336,90 @@ def process_track(db, cfg: dict, track: Track, dry: bool = False) -> str:
             src = os.path.join(tmpdir, "src" + os.path.splitext(key)[1])
             _download(url, src)
 
+        # 先确认源文件是音频，坏文件直接给可读结论，不必逐阶段炸 ffmpeg
+        try:
+            _probe_audio(src)
+        except RuntimeError as e:
+            return f"error:{e}"
+
+        # 各阶段互相隔离：一个失败不影响其它的落库（实测 AAC 失败曾把
+        # 已完成的 16-bit 副本标记回滚掉）
+
         # ── wav16 副本 ──
         if "wav16" in stages:
-            if provider == "oss":
-                out16 = os.path.join(tmpdir, "w16.wav")
-                _convert_local_stream(src, out16)
-                _upload_oss(cfg, wav16_key, out16)
-            else:
-                # 本地存储直接写目标目录（_convert_local_stream 内部同目录临时文件 +
-                # 原子改名，os.replace 跨挂载点会失败，不能先写 /tmp 再搬）
-                dest = _dest_path(wav16_key)
-                os.makedirs(os.path.dirname(dest), exist_ok=True)
-                _convert_local_stream(src, dest)
-            track.play_url = _dest_url(wav16_key)
-            done.append("wav16")
+            try:
+                if provider == "oss":
+                    out16 = os.path.join(tmpdir, "w16.wav")
+                    _convert_local_stream(src, out16)
+                    _upload_oss(cfg, wav16_key, out16)
+                else:
+                    # 本地存储直接写目标目录（_convert_local_stream 内部同目录临时文件 +
+                    # 原子改名，os.replace 跨挂载点会失败，不能先写 /tmp 再搬）
+                    dest = _dest_path(wav16_key)
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    _convert_local_stream(src, dest)
+                track.play_url = _dest_url(wav16_key)
+                done.append("wav16")
+            except Exception as e:  # noqa: BLE001
+                failed.append(f"wav16: {e}")
 
         # ── AAC 副本 ──
         if "aac" in stages:
-            if provider == "oss":
-                aac_tmp = os.path.join(tmpdir, "a.m4a")
-                _encode_aac(src, aac_tmp)
-                _upload_oss(cfg, aac_key, aac_tmp)
-            else:
-                dest = _dest_path(aac_key)
-                os.makedirs(os.path.dirname(dest), exist_ok=True)
-                # 同理：编码到同目录临时文件再原子改名，避免半截产物被当成品
-                _encode_aac(src, dest + ".part")
-                os.replace(dest + ".part", dest)
-            track.aac_url = _dest_url(aac_key)
-            done.append("aac")
+            try:
+                if provider == "oss":
+                    aac_tmp = os.path.join(tmpdir, "a.m4a")
+                    _encode_aac(src, aac_tmp)
+                    _upload_oss(cfg, aac_key, aac_tmp)
+                else:
+                    dest = _dest_path(aac_key)
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    # 同理：编码到同目录临时文件再原子改名，避免半截产物被当成品
+                    _encode_aac(src, dest + ".part")
+                    os.replace(dest + ".part", dest)
+                track.aac_url = _dest_url(aac_key)
+                done.append("aac")
+            except Exception as e:  # noqa: BLE001
+                failed.append(f"aac: {e}")
 
         # ── 试听剪辑（会员曲目，preview_sec 秒的 AAC）──
         if "preview" in stages:
-            if provider == "oss":
-                prev_tmp = os.path.join(tmpdir, "p.m4a")
-                _encode_aac(src, prev_tmp, bitrate="128k", clip_sec=track.preview_sec or 30)
-                _upload_oss(cfg, preview_key, prev_tmp)
-            else:
-                dest = _dest_path(preview_key)
-                os.makedirs(os.path.dirname(dest), exist_ok=True)
-                _encode_aac(src, dest + ".part", bitrate="128k", clip_sec=track.preview_sec or 30)
-                os.replace(dest + ".part", dest)
-            track.preview_url = _dest_url(preview_key)
-            done.append("preview")
+            try:
+                if provider == "oss":
+                    prev_tmp = os.path.join(tmpdir, "p.m4a")
+                    _encode_aac(src, prev_tmp, bitrate="128k", clip_sec=track.preview_sec or 30)
+                    _upload_oss(cfg, preview_key, prev_tmp)
+                else:
+                    dest = _dest_path(preview_key)
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    _encode_aac(src, dest + ".part", bitrate="128k", clip_sec=track.preview_sec or 30)
+                    os.replace(dest + ".part", dest)
+                track.preview_url = _dest_url(preview_key)
+                done.append("preview")
+            except Exception as e:  # noqa: BLE001
+                failed.append(f"preview: {e}")
 
         # ── 母版上 OSS（本地暂存 → OSS，字节原样），最后删本地暂存 ──
         if "master" in stages:
-            _upload_oss(cfg, key, local_master)
-            track.audio_url = storage._oss_public_url(cfg, key)
             try:
-                os.remove(local_master)
-            except OSError:
-                pass
-            done.append("master")
+                _upload_oss(cfg, key, local_master)
+                track.audio_url = storage._oss_public_url(cfg, key)
+                try:
+                    os.remove(local_master)
+                except OSError:
+                    pass
+                done.append("master")
+            except Exception as e:  # noqa: BLE001
+                failed.append(f"master: {e}")
 
-        db.commit()
+        if done:
+            db.commit()
+        else:
+            db.rollback()
+        if failed:
+            tail = f"（已完成 {'+'.join(done)}）" if done else ""
+            logger.warning("音频管线部分失败 track=%s：%s", track.id, "; ".join(failed))
+            return f"error:{'；'.join(failed)}{tail}"
         return "done:" + "+".join(done)
-    except RuntimeError as e:
-        db.rollback()
-        if str(e) == "no-ffmpeg":
-            return "skip:无ffmpeg(仅aac未做)"
-        logger.warning("音频管线失败 track=%s：%s", track.id, e)
-        return f"error:{e}"
     except Exception as e:  # noqa: BLE001
         db.rollback()
         logger.warning("音频管线失败 track=%s：%s", track.id, e)
