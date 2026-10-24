@@ -154,13 +154,12 @@
       `<Input>` 陷阱（陷阱 14），小程序端 `<Input>` 行为不同，需确认昵称/手机号/密码三个形态切换正常。
 - [ ] **`code → openid`**。配上真实 AppSecret 后要确认走的是 `jscode2session` 换来的真 openid，
       而不是游客兜底（`CLAUDE.md` 陷阱 5）。**验证点：换台设备登录，用户身份不应漂移。**
-- [ ] **PC 微信播放**（用户报障后新增）。PC 端两个原生音频 API 在这台客户端实测全灭
-      （BGM 假 onPlay + 10004，连公共测试 MP3 都起不来；InnerAudioContext 解不了大文件
-      与 MP3/AAC）——**PC 端改走 `pages/webview` 内嵌 H5 播放页 `pages/h5play`**
-      （完整浏览器内核，不挑格式）。前置条件：
-      ① 根目录 `.env.local` 配 `TARO_APP_H5_BASE` 为 H5 公网地址；
-      ② 小程序后台「开发管理 → 业务域名」登记该域名并上传校验文件（H5 nginx 根目录要能访问到）。
-      实测项：PC 点播放进入网页播放页，点「播放」出声、进度走字。
+- [x] **PC 微信播放**（已结案）。根因是 OSS 防盗链 referer 白名单缺
+      `https://servicewechat.com`——PC 微信的请求都带这个 Referer，拿到 403 XML
+      错误页，一切「Format error / Unable to decode」都是它。修白名单后 BGM 复活，
+      PC 回归 BGM 主路；两种格式都失败时自动落 `pages/webview` 内嵌 H5 播放页兜底
+      （需 `TARO_APP_H5_BASE` + 业务域名登记）。期间的 InnerAudioContext / 流式 PCM
+      尝试已废弃（git 历史保留）。
 
 ---
 
