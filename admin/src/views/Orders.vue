@@ -207,6 +207,8 @@ async function onSyncRefund(row: any) {
   const res = await syncRefund(row.id);
   if (res?.refund_state === 'PROCESSING') {
     ElMessage.info('微信退款仍在处理中，稍后再试');
+  } else if (res?.refund_state === 'NOT_SUBMITTED') {
+    ElMessage.info('微信侧还没有这笔退款，请先点「确认退款」提交');
   } else {
     ElMessage.success('退款已完成');
   }
