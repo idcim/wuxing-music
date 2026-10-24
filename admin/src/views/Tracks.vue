@@ -11,14 +11,16 @@
       <span class="hint">为每首曲目录入 16-bit（PC 兼容）与 AAC（省流量）播放副本，母版不动；单行「处理」可单独重做</span>
     </div>
 
-    <el-table :data="rows" v-loading="loading" border>
-      <el-table-column prop="id" label="ID" width="70" />
+    <el-table :data="rows" v-loading="loading" border @sort-change="onSort">
+      <el-table-column prop="id" label="ID" width="70" sortable="custom" />
       <el-table-column prop="element_id" label="五行" width="70" />
-      <el-table-column prop="title" label="曲名" min-width="120" />
+      <el-table-column prop="title" label="曲名" min-width="120" sortable="custom" />
       <el-table-column prop="hz" label="频率" width="90" />
       <el-table-column prop="tag" label="标签" width="110" />
-      <el-table-column prop="duration" label="时长" width="90" />
-      <el-table-column label="会员专属" width="90">
+      <el-table-column prop="duration_sec" label="时长" width="90" sortable="custom">
+        <template #default="{ row }">{{ row.duration }}</template>
+      </el-table-column>
+      <el-table-column label="会员专属" width="90" prop="is_premium" sortable="custom">
         <template #default="{ row }">
           <el-tag :type="row.is_premium ? 'warning' : 'success'" size="small">
             {{ row.is_premium ? '会员' : '免费' }}
@@ -46,7 +48,7 @@
           >处理</el-button>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="90">
+      <el-table-column label="状态" width="90" prop="is_online" sortable="custom">
         <template #default="{ row }">
           <el-tag v-if="!row.is_online" type="info" size="small">下架</el-tag>
           <el-tag v-else-if="row.process_state === 'processing'" type="warning" size="small">处理中</el-tag>
@@ -171,6 +173,8 @@ const page = ref(1);
 const size = ref(20);
 const loading = ref(false);
 const filterElement = ref('');
+const sortBy = ref('');
+const sortOrder = ref('');
 const dialog = ref(false);
 const form = ref<any>({});
 
@@ -264,12 +268,25 @@ function onUploadError() {
 async function load() {
   loading.value = true;
   try {
-    const data = await listTracks({ page: page.value, size: size.value, element_id: filterElement.value || undefined });
+    const data = await listTracks({
+      page: page.value, size: size.value,
+      element_id: filterElement.value || undefined,
+      sort_by: sortBy.value || undefined,
+      sort_order: sortOrder.value || undefined
+    });
     rows.value = data.items;
     total.value = data.total;
   } finally {
     loading.value = false;
   }
+}
+
+// 表头排序（Element Plus custom：真正排序在后端做，这里只换参数）
+function onSort({ prop, order }: { prop: string; order: string | null }) {
+  sortBy.value = order ? prop : '';
+  sortOrder.value = order === 'descending' ? 'desc' : 'asc';
+  page.value = 1;
+  load();
 }
 
 function reload() {

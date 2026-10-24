@@ -53,11 +53,24 @@ def _process_state(t: Track, norm: dict) -> str:
     return "pending" if needs else "ready"
 
 
+# 可按表头排序的列白名单（前端 sort-change 传 prop，后端映射列，防注入）
+_SORTABLE = {
+    "id": Track.id,
+    "title": Track.title,
+    "duration_sec": Track.duration_sec,
+    "sort": Track.sort,
+    "is_online": Track.is_online,
+    "is_premium": Track.is_premium,
+}
+
+
 @router.get("")
 def list_tracks(
     element_id: str | None = Query(None),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
+    sort_by: str | None = Query(None),
+    sort_order: str | None = Query(None),   # asc / desc
     db: Session = Depends(get_db),
     _: Admin = Depends(require_perm("tracks:view")),
 ):
@@ -65,12 +78,13 @@ def list_tracks(
     if element_id:
         q = q.filter(Track.element_id == element_id)
     total = q.count()
-    rows = (
-        q.order_by(Track.element_id, Track.sort)
-        .offset((page - 1) * size)
-        .limit(size)
-        .all()
-    )
+    col = _SORTABLE.get(sort_by or "")
+    if col is not None:
+        q = q.order_by(col.desc() if sort_order == "desc" else col.asc())
+    else:
+        # 默认：下架的排最后，组内按五行 + 自定义排序
+        q = q.order_by(Track.is_online.desc(), Track.element_id, Track.sort)
+    rows = q.offset((page - 1) * size).limit(size).all()
     norm = audio_norm.status()
     return ok({"total": total, "items": [_to_dict(t, norm) for t in rows]})
 
