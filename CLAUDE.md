@@ -185,7 +185,7 @@ wuxing-music/
 
 **`USE_MOCK` 开关**（`src/constants/env.ts`）：每个 service（auth / cdkey / pay / content …）内部 `if (USE_MOCK) { …本地假数据… }`，因此后端未就绪时前端可独立跑通。切真实接口只需把 `USE_MOCK` 置 `false`，并在根目录 `.env.local` 填对 `TARO_APP_API_BASE`。修改任何 service 时**务必同时维护 mock 与真实两条分支**。
 
-**登录约定（小程序）**：`wxLogin()` 取 `wx.login()` 的临时 `code` + 稳定游客 openid 一起发给 `/api/mp/login`；后端配置了 AppSecret 时用 `code` 调 `jscode2session` 换真实 openid，否则回退前端直传的稳定 openid（保证游客态身份不漂移）。**切勿把每次都变的 `code` 当 openid 用**。启动只恢复已有缓存/token，**不能静默调用 `login()`**——`/api/mp/login` 是 get-or-create，打开小程序就调用等于自动注册用户；只有登录页的明确操作才允许建行。
+**登录约定（小程序）**：`wxLogin()` 取 `wx.login()` 的临时 `code` + 稳定游客 openid 一起发给 `/api/mp/login`；后端配置了 AppSecret 时用 `code` 调 `jscode2session` 换真实 openid，否则回退前端直传的稳定 openid（保证游客态身份不漂移）。**切勿把每次都变的 `code` 当 openid 用**。启动只恢复已有缓存/token，**不能静默调用 `login()`**——`/api/mp/login` 是 get-or-create，打开小程序就调用等于自动注册用户；只有登录页的明确操作才允许建行。`jscode2session` 区分三类失败：未配置 / 网络故障（重试两次后 503「登录服务网络异常」，多是容器 DNS——compose 已给 api 固定公共 DNS）/ 微信拒绝 code（400「登录凭证已失效」）。
 
 **登录约定（H5，v1.1）**：按平台分支（`utils/platform.ts` 的 `isH5`/`isInWeChat`）。手机登录（`loginByPhone`/`loginByPassword`）平台无关。微信登录 `wechatLoginH5()` 走公众号网页授权：无 `code` → 取 `/api/mp/h5/oauth-url` 跳转授权；带 `code` 回跳 → `/api/mp/h5/login` 换 `oa_openid`（`app.tsx` 在微信内静默触发并清理 URL）。**安全约束**：`/api/mp/login`（小程序）、`/api/mp/h5/login`（公众号）与 `/api/mp/h5/qrlogin`（浏览器扫码）均——已配置密钥时**必须用真实 `code` 换 openid、忽略前端直传标识**，仅未配置时才用游客标识走 dev 兜底（防绕过授权/顶号）；手机号合成 openid `phone:<手机号>` 不可经 openid 直信路径登录（详见 [`docs/ROADMAP.md`](docs/ROADMAP.md) 安全加固清单）。
 
