@@ -969,6 +969,8 @@ def _track_dict(t: Track, counts: dict | None = None) -> dict:
         "audioUrl": t.audio_url,
         # 播放副本（16-bit）；空则由前端回退 audio_url（母版）
         "playUrl": t.play_url or "",
+        # AAC 副本（省流量，手机/H5 优先）；空则回退 playUrl/audioUrl
+        "aacUrl": t.aac_url or "",
         "coverUrl": t.cover_url,
         "isPremium": t.is_premium,
         "previewSec": t.preview_sec,

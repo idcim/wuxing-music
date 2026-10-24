@@ -133,7 +133,8 @@ H5 已作为 `wuxing-h5` 服务并入 `docker-compose.yml`——`docker compose 
       但请求先经过 1Panel 的 vhost，那里若仍是默认值，大文件会在最外层就被 413 掉。
       同时建议给该 vhost 加长 `proxy_read_timeout`（大文件上传/下载耗时长）。
 - [ ] **OSS 直传**：后台 → 设置 → 存储设置 选 OSS 并填全 endpoint / bucket / accessKey。
-      配好后后台上传音频会自动走浏览器直传，不经服务器中转（未配则回退中转，受上限约束）。
+      ⚠️ v1.12.0 起**音频不再走浏览器直传**：一律先传服务端暂存，归一管线（多版本副本 +
+      母版上 OSS）在后台自动完成，因此外层反代的 body 上限对音频上传是硬约束，必须配好。
 - [ ] **OSS 桶 CORS**：允许 H5 域名的 `GET`（含 `Range` 请求头）。
       不配的话：① 海报 canvas 会因跨域图片被污染而无法生成；② 部分浏览器的分段请求会被拒。
 - [ ] **小程序 `downloadFile` 合法域名**：把 OSS / CDN 域名也加进去，

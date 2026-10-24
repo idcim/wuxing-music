@@ -23,7 +23,9 @@ async def upload_file(
 
     分块落盘，不把整个文件读进内存——曲目 WAV 动辄上百 MB，
     旧写法先 `await file.read()` 再比对上限，超限请求反而最先把内存吃满。
-    真正的大文件建议走 OSS 直传（POST /api/admin/upload/oss-sign），不经服务器中转。
+
+    音频一律先落服务端本地（暂存母版）：后台管线（app/audio_norm.py）随后自动
+    生成多版本播放副本并连同母版一起推 OSS，上传者不必在场等。
     """
     ext = storage.ext_of(file.filename)
     if ext not in storage.ALL_EXT:
@@ -39,7 +41,8 @@ async def upload_file(
 
     try:
         result = await storage.save_stream(
-            db, file, ext, max_bytes, base_url=str(request.base_url)
+            db, file, ext, max_bytes, base_url=str(request.base_url),
+            force_local=ext in storage.AUDIO_EXT,
         )
     except ValueError:
         raise HTTPException(status_code=400, detail=too_large)

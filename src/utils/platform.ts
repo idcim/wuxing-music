@@ -13,4 +13,17 @@ export const isInWeChat =
   typeof navigator !== 'undefined' &&
   /micromessenger/i.test(navigator.userAgent);
 
+// 小程序是否跑在 PC 微信（Windows/Mac）。PC 端音频只信 16-bit PCM WAV
+// （WebAudio 无 MP3/AAC 私有解码器、解不了 24-bit WAV），选播放副本时用。
+export const isPcWechat =
+  isWeapp &&
+  (() => {
+    try {
+      const info = Taro.getDeviceInfo ? Taro.getDeviceInfo() : Taro.getSystemInfoSync();
+      return info.platform === 'windows' || info.platform === 'mac';
+    } catch {
+      return false;
+    }
+  })();
+
 export { Taro };

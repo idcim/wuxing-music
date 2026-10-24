@@ -10,10 +10,11 @@ from app.security import require_perm
 router = APIRouter(prefix="/api/admin/tracks", tags=["tracks"])
 
 
-def _enqueue_if_wav(track: Track) -> None:
-    """音频是 WAV 就排队做 24→16bit 兼容检查（后台线程，不阻塞保存）。
-    PC 微信解不了 24-bit WAV，详见 app/wav_compat.py。"""
-    if (track.audio_url or "").lower().endswith(".wav"):
+def _enqueue_audio_pipeline(track: Track) -> None:
+    """有音频地址就排队走一遍归一管线（后台线程，不阻塞保存）：
+    母版搬 OSS、24-bit WAV 补 16-bit 副本、有 ffmpeg 则补 AAC 副本。
+    详见 app/audio_norm.py。"""
+    if track.audio_url:
         audio_norm.enqueue(track.id)
 
 
@@ -29,6 +30,7 @@ def _to_dict(t: Track) -> dict:
         "plays": t.plays,
         "audio_url": t.audio_url,
         "play_url": t.play_url,
+        "aac_url": t.aac_url,
         "cover_url": t.cover_url,
         "is_premium": t.is_premium,
         "preview_sec": t.preview_sec,
@@ -68,7 +70,7 @@ def create_track(
     db.add(track)
     db.commit()
     db.refresh(track)
-    _enqueue_if_wav(track)
+    _enqueue_audio_pipeline(track)
     return ok(_to_dict(track))
 
 
@@ -86,7 +88,7 @@ def update_track(
         setattr(track, k, v)
     db.commit()
     db.refresh(track)
-    _enqueue_if_wav(track)
+    _enqueue_audio_pipeline(track)
     return ok(_to_dict(track))
 
 

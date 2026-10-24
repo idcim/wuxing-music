@@ -3,6 +3,7 @@ import type { Track } from '@/types';
 import audioService from '@/services/audio';
 import { USE_MOCK, MOCK_AUDIO_URL } from '@/constants/env';
 import { resolveUrl } from '@/utils/url';
+import { isPcWechat } from '@/utils/platform';
 import { request } from '@/services/api';
 import { useUserStore } from './user';
 import Taro from '@tarojs/taro';
@@ -136,8 +137,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   // 内部：真正加载并播放某曲目
   _start: (track: Track) => {
     loadedTrackId = track.id;
-    // 优先播放副本（16-bit，全端可解）；母版（audio_url）可能是 PC 解不了的 24-bit WAV
-    const url = resolveUrl(track.playUrl || track.audioUrl) || (USE_MOCK ? MOCK_AUDIO_URL : '');
+    // 播放地址按端选副本：
+    // PC 微信只信 16-bit PCM WAV（WebAudio 无 MP3/AAC 解码器）；
+    // 其余端（手机小程序/H5）优先 AAC 副本省流量，回退 16-bit WAV，最后才是母版
+    const src = isPcWechat
+      ? track.playUrl || track.aacUrl || track.audioUrl
+      : track.aacUrl || track.playUrl || track.audioUrl;
+    const url = resolveUrl(src) || (USE_MOCK ? MOCK_AUDIO_URL : '');
     if (!url) {
       console.warn('[player] 曲目无音频地址', track.id);
       clearLoadTimer();

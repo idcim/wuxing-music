@@ -155,6 +155,7 @@ async def save_stream(
     ext: str,
     max_bytes: int,
     base_url: str = "",
+    force_local: bool = False,  # True = 先落本地（音频母版暂存，等后台管线加工后再上 OSS）
 ) -> dict:
     """分块保存上传文件，返回 {url, full_url}；超过 max_bytes 抛 ValueError。
 
@@ -165,6 +166,8 @@ async def save_stream(
     """
     cfg = get_storage_cfg(db)
     provider = cfg.get("provider", "local")
+    if force_local:
+        provider = "local"
     key = _object_key(ext)
     total = 0
 

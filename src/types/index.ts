@@ -13,6 +13,7 @@ export interface Track {
   plays: string;             // "12.4k"
   audioUrl: string;          // 母版地址（上传原样）
   playUrl?: string;          // 播放副本（16-bit PCM，空则回退 audioUrl）
+  aacUrl?: string;           // AAC 192k 副本（省流量，手机/H5 优先）
   coverUrl?: string;
   isPremium: boolean;
   previewSec?: number;       // 免费试听秒数

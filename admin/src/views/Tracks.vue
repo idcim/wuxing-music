@@ -25,6 +25,13 @@
           </el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="播放版本" width="120">
+        <template #default="{ row }">
+          <el-tag v-if="row.play_url" size="small" type="success">16bit</el-tag>
+          <el-tag v-if="row.aac_url" size="small" type="warning" style="margin-left: 4px">AAC</el-tag>
+          <span v-if="!row.play_url && !row.aac_url" class="hint">仅母版</span>
+        </template>
+      </el-table-column>
       <el-table-column label="上架" width="80">
         <template #default="{ row }">
           <el-tag :type="row.is_online ? 'success' : 'info'" size="small">
@@ -81,8 +88,8 @@
             <el-input v-model="form.audio_url" placeholder="或填 CDN 地址" />
           </div>
           <div class="hint">
-            WAV 请用 16-bit PCM；24-bit 母版在 PC 微信无法解码（手机正常）。
-            存量 24-bit 文件可在服务器跑 <code>docker exec wuxing-backend python -m app.tools.transcode_audio</code> 批量降位深。
+            音频先传服务端暂存；保存曲目后后台自动生成 16-bit（PC 兼容）与 AAC（省流量）播放副本，
+            并把母版推上 OSS——母版内容永不改动。无需等待，保存后可离开页面。
           </div>
           <el-progress
             v-if="audioUploading"
@@ -131,7 +138,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { Plus, Upload, Loading } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { listTracks, createTrack, updateTrack, deleteTrack, listElements, UPLOAD_URL, ossSign, normalizeAudio, normalizeAudioStatus } from '@/api';
+import { listTracks, createTrack, updateTrack, deleteTrack, listElements, UPLOAD_URL, normalizeAudio, normalizeAudioStatus } from '@/api';
 
 const uploadHeaders = computed(() => ({
   Authorization: `Bearer ${localStorage.getItem('admin_token')}`
@@ -154,53 +161,25 @@ const dialog = ref(false);
 const form = ref<any>({});
 
 /**
- * 音频上传：优先 OSS 直传，否则回退服务器中转。
- *
- * 直传的意义在大文件上：曲目 WAV 母版可达数百 MB，经服务器要多占一份带宽、
- * 一份内存、一份磁盘，还受 nginx client_max_body_size 约束；
- * 直传由浏览器把文件送进 OSS，后端只签一张限定对象键与体积的准入条。
+ * 音频上传：一律先传服务端（暂存母版），保存曲目后归一管线在后台自动
+ * 生成 16-bit/AAC 播放副本并把母版推上 OSS——上传者不用在场等。
+ * 不再用浏览器直传 OSS：服务端拿不到字节就没法做转码。
  */
 async function uploadAudio(opt: any) {
   const file: File = opt.file;
   audioUploading.value = true;
   audioPct.value = 0;
   try {
-    let finalUrl = '';
-    let probeUrl = '';
-
-    let sign: any = null;
-    try {
-      sign = await ossSign(file.name);
-    } catch {
-      sign = null;   // 未配 OSS / 非 OSS provider：走服务器中转
-    }
-
-    if (sign?.provider === 'oss') {
-      const fd = new FormData();
-      fd.append('key', sign.key);
-      fd.append('policy', sign.policy);
-      fd.append('OSSAccessKeyId', sign.OSSAccessKeyId);
-      fd.append('signature', sign.signature);
-      fd.append('success_action_status', '200');
-      fd.append('file', file);
-      await xhrUpload(sign.host, fd, (p) => { audioPct.value = p; });
-      finalUrl = sign.url;
-      probeUrl = sign.url;
-    } else {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await xhrUpload(UPLOAD_URL, fd, (p) => { audioPct.value = p; }, {
-        Authorization: `Bearer ${localStorage.getItem('admin_token')}`
-      });
-      const body = JSON.parse(res);
-      if (body?.code !== 0) throw new Error(body?.msg || '上传失败');
-      finalUrl = body.data.url;
-      probeUrl = body.data.full_url || body.data.url;
-    }
-
-    form.value.audio_url = finalUrl;
-    ElMessage.success('音频已上传');
-    readAudioDuration(probeUrl);
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await xhrUpload(UPLOAD_URL, fd, (p) => { audioPct.value = p; }, {
+      Authorization: `Bearer ${localStorage.getItem('admin_token')}`
+    });
+    const body = JSON.parse(res);
+    if (body?.code !== 0) throw new Error(body?.msg || '上传失败');
+    form.value.audio_url = body.data.url;
+    ElMessage.success('音频已上传，保存后后台自动生成播放副本');
+    readAudioDuration(body.data.full_url || body.data.url);
     opt.onSuccess?.({});
   } catch (e: any) {
     ElMessage.error(e?.message || '上传失败');
@@ -343,11 +322,11 @@ async function pollNorm() {
     normRunning.value = false;
     // 按 job 编号取本轮结果（不能用条数偏移——多轮任务/自动检查会互相污染计数）
     const fresh = s.results.filter((r: any) => r.job === normJob);
-    const conv = fresh.filter((r: any) => r.result === 'converted').length;
-    const errs = fresh.filter((r: any) => String(r.result).startsWith('error'));
+    const conv = fresh.filter((r: any) => String(r.result).startsWith('done:')).length;
+    const errs = fresh.filter((r: any) => String(r.result).startsWith('error:'));
     const skip = fresh.length - conv - errs.length;
     ElMessageBox.alert(
-      `转换 ${conv} 条，已是 16-bit 或外链跳过 ${skip} 条` +
+      `处理 ${conv} 条（母版上 OSS / 16-bit / AAC 副本按需生成），无需处理或跳过 ${skip} 条` +
       (errs.length
         ? `，失败 ${errs.length} 条：\n` + errs.map((e: any) => `#${e.trackId} ${e.title}：${e.result}`).join('\n')
         : ''),

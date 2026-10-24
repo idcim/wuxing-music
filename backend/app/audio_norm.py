@@ -1,17 +1,24 @@
-"""曲库 24-bit WAV → 16-bit PCM 的后台自动归一。
+"""曲库音频管线的后台自动归一（多版本播放副本）。
 
-起因：PC 微信解不了 24-bit WAV（Unable to decode audio data），16-bit 是全端公分母。
+起因：PC 微信解不了 24-bit WAV（Unable to decode audio data），16-bit PCM 是全端公分母；
+AAC 副本给手机/H5 省一个数量级的流量。
+
+每条曲目的流水线（幂等，缺啥补啥）：
+1. 母版暂存在服务端本地且存储是 OSS → 母版推 OSS、改写 audio_url、删本地暂存；
+2. WAV 是 24-bit 且无 play_url → 生成 16-bit PCM 播放副本（play/ 前缀）；
+3. 有 ffmpeg 且无 aac_url → 生成 AAC 192k 副本（aac/ 前缀，.m4a）。
 
 两个触发口：
 - 后台「曲目 → 音频兼容修复」按钮 → 全量扫描；
-- 曲目保存（新建/编辑且音频是 .wav）→ 自动排队单条，24-bit 会被默默转成 16-bit。
+- 曲目保存（新建/编辑且有音频地址）→ 自动排队单条；音频上传接口先落服务端暂存，
+  保存曲目时管线就把母版+副本一起推 OSS——上传者不必在场等。
 
 进程内单 worker 线程：部署是单容器，线程队列够用；多实例部署时才需要换真队列。
-幂等：已有 play_url 或已是 16-bit 的跳过；母版（audio_url）永不被修改，
-16-bit 播放副本写到 play/ 前缀的衍生地址并存入 track.play_url。
+母版内容永不被修改（本地暂存的「修改」只是搬到 OSS，字节不动）。
 """
 import logging
 import os
+import shutil
 import tempfile
 import threading
 from datetime import datetime
@@ -192,65 +199,169 @@ def _convert_oss_stream(cfg: dict, oss_key: str, url: str) -> None:
         raise
 
 
-def process_track(db, cfg: dict, track: Track, dry: bool = False) -> str:
-    """处理单条曲目：24-bit 母版 → 16-bit 播放副本（track.play_url），母版不动。
-    返回 skip-done / skip16 / skip-foreign / converted / dry-run / error:<原因>。
-    头部探测只下载前 64KB；确认需要转换才转换，全程流式、逐条处理完即清理。"""
-    if track.play_url:
-        return "skip-done"
-    url = track.audio_url or ""
-    provider = cfg.get("provider", "local")
+AAC_BITRATE = "192k"
 
-    local_path = None
-    oss_key = None
-    derivative_path = None   # 本地衍生文件路径
-    derivative_url = None    # 写进 play_url 的地址
+
+def _encode_aac(src_path: str, dst_path: str) -> None:
+    """ffmpeg 转 AAC(m4a)，faststart 便于流式起播。没有 ffmpeg 抛 no-ffmpeg（调用方降级跳过）。"""
+    import subprocess
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RuntimeError("no-ffmpeg")
+    r = subprocess.run(
+        # -f mp4：目标可能是 .part 临时名，ffmpeg 按扩展名猜封装格式会猜错
+        [ffmpeg, "-y", "-i", src_path, "-f", "mp4", "-c:a", "aac", "-b:a", AAC_BITRATE,
+         "-movflags", "+faststart", dst_path],
+        capture_output=True, timeout=1800,
+    )
+    if r.returncode != 0 or not os.path.exists(dst_path) or os.path.getsize(dst_path) == 0:
+        tail = r.stderr.decode("utf-8", "ignore")[-200:] if r.stderr else ""
+        raise RuntimeError(f"ffmpeg 转码失败：{tail}")
+
+
+def _upload_oss(cfg: dict, key: str, path: str) -> None:
+    import oss2
+
+    bucket = storage._oss_bucket(cfg)
+    oss2.resumable_upload(bucket, key, path, multipart_threshold=CHUNK * 5, part_size=CHUNK * 5)
+
+
+def process_track(db, cfg: dict, track: Track, dry: bool = False) -> str:
+    """单条曲目的完整管线（幂等，缺啥补啥）。返回 done:明细 / skip:原因 / dry:明细 / error:原因。
+
+    母版内容永不修改；「master」阶段只是把本地暂存的母版原样搬上 OSS。
+    磁盘占用：一份母版 + 正在生成的副本，处理完即清理。
+    """
+    provider = cfg.get("provider", "local")
+    url = track.audio_url or ""
+    if not url:
+        return "skip:无音频地址"
+
+    # ── 定位母版与派生地址 ──
+    key = None          # 对象键（OSS 或本地相对 uploads 的路径，两者同构）
+    local_master = None  # 母版暂存在服务端本地的绝对路径
     if url.startswith("/uploads/"):
         key = url[len("/uploads/"):]
-        local_path = os.path.join(storage.UPLOAD_DIR, key)
-        if not os.path.exists(local_path):
+        p = os.path.join(storage.UPLOAD_DIR, key)
+        if not os.path.exists(p):
             return f"error:本地文件不存在 {url}"
-        derivative_path = os.path.join(storage.UPLOAD_DIR, "play", key)
-        derivative_url = f"/uploads/play/{key}"
+        local_master = p
     elif url.startswith("http"):
         if provider != "oss":
-            return "skip-foreign"
-        oss_key = _oss_key_from_url(cfg, url)
-        if not oss_key:
-            return "skip-foreign"
-        derivative_url = storage._oss_public_url(cfg, f"play/{oss_key}")
+            return "skip:外链非本店 OSS"
+        key = _oss_key_from_url(cfg, url)
+        if not key:
+            return "skip:外链非本店 OSS"
     else:
-        return "skip-foreign"
+        return "skip:地址形态未知"
 
-    tmpdir = tempfile.mkdtemp(prefix="wav16-")
-    try:
-        # 头部探测（只拉前 64KB）
-        head = os.path.join(tmpdir, "head.wav")
-        if local_path:
-            info = read_wav_info(local_path)
-            need = bool(info and info["format"] == 1 and info["bits"] == 24)
+    is_wav = url.lower().endswith(".wav")
+    key_noext = os.path.splitext(key)[0]
+    wav16_key = f"play/{key}"
+    aac_key = f"aac/{key_noext}.m4a"
+
+    def _dest_url(k: str) -> str:
+        return (f"/uploads/{k}" if provider != "oss" else storage._oss_public_url(cfg, k))
+
+    def _dest_path(k: str) -> str:
+        return os.path.join(storage.UPLOAD_DIR, k)
+
+    # ── 决定要做哪些阶段 ──
+    stages: list[str] = []
+    if local_master and provider == "oss":
+        stages.append("master")
+    need_wav16 = False
+    if is_wav and not track.play_url:
+        # 头部探测：本地直读；OSS 只拉前 64KB
+        if local_master:
+            info = read_wav_info(local_master)
         else:
-            _download(url, head, limit=_HEAD_BYTES)
-            info = read_wav_info(head)
-            need = needs_pcm16_downmix(head)
+            tmp_head = tempfile.mkdtemp(prefix="wav16-head-")
+            try:
+                head = os.path.join(tmp_head, "h.wav")
+                _download(url, head, limit=_HEAD_BYTES)
+                info = read_wav_info(head)
+            finally:
+                try:
+                    os.remove(head)
+                    os.rmdir(tmp_head)
+                except OSError:
+                    pass
         if not info:
             return "error:不是有效 WAV"
-        if not need:
-            return "skip16"
-        if dry:
-            return f"dry-run（{info['bits']}bit {info['sample_rate']}Hz {info['channels']}ch）"
+        need_wav16 = bool(info["format"] == 1 and info["bits"] == 24)
+        if need_wav16:
+            stages.append("wav16")
+    ffmpeg_ok = bool(shutil.which("ffmpeg"))
+    if not track.aac_url and ffmpeg_ok:
+        stages.append("aac")
 
-        if local_path:
-            os.makedirs(os.path.dirname(derivative_path), exist_ok=True)
-            _convert_local_stream(local_path, derivative_path)
-        else:
-            _convert_oss_stream(cfg, f"play/{oss_key}", url)
-        track.play_url = derivative_url
+    if not stages:
+        return "skip:已就绪"
+    if dry:
+        return "dry:" + "+".join(stages)
+
+    tmpdir = tempfile.mkdtemp(prefix="wavpipe-")
+    done: list[str] = []
+    try:
+        # ── 准备源文件：本地暂存直接用；OSS 母版下载到临时目录（带续传）──
+        src = local_master
+        if not src:
+            src = os.path.join(tmpdir, "src" + os.path.splitext(key)[1])
+            _download(url, src)
+
+        # ── wav16 副本 ──
+        if "wav16" in stages:
+            if provider == "oss":
+                out16 = os.path.join(tmpdir, "w16.wav")
+                _convert_local_stream(src, out16)
+                _upload_oss(cfg, wav16_key, out16)
+            else:
+                # 本地存储直接写目标目录（_convert_local_stream 内部同目录临时文件 +
+                # 原子改名，os.replace 跨挂载点会失败，不能先写 /tmp 再搬）
+                dest = _dest_path(wav16_key)
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                _convert_local_stream(src, dest)
+            track.play_url = _dest_url(wav16_key)
+            done.append("wav16")
+
+        # ── AAC 副本 ──
+        if "aac" in stages:
+            if provider == "oss":
+                aac_tmp = os.path.join(tmpdir, "a.m4a")
+                _encode_aac(src, aac_tmp)
+                _upload_oss(cfg, aac_key, aac_tmp)
+            else:
+                dest = _dest_path(aac_key)
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                # 同理：编码到同目录临时文件再原子改名，避免半截产物被当成品
+                _encode_aac(src, dest + ".part")
+                os.replace(dest + ".part", dest)
+            track.aac_url = _dest_url(aac_key)
+            done.append("aac")
+
+        # ── 母版上 OSS（本地暂存 → OSS，字节原样），最后删本地暂存 ──
+        if "master" in stages:
+            _upload_oss(cfg, key, local_master)
+            track.audio_url = storage._oss_public_url(cfg, key)
+            try:
+                os.remove(local_master)
+            except OSError:
+                pass
+            done.append("master")
+
         db.commit()
-        return "converted"
+        return "done:" + "+".join(done)
+    except RuntimeError as e:
+        db.rollback()
+        if str(e) == "no-ffmpeg":
+            return "skip:无ffmpeg(仅aac未做)"
+        logger.warning("音频管线失败 track=%s：%s", track.id, e)
+        return f"error:{e}"
     except Exception as e:  # noqa: BLE001
         db.rollback()
-        logger.warning("音频降位深失败 track=%s：%s", track.id, e)
+        logger.warning("音频管线失败 track=%s：%s", track.id, e)
         return f"error:{e}"
     finally:
         for f in os.listdir(tmpdir):

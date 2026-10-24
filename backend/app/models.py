@@ -93,6 +93,8 @@ class Track(Base):
     # 播放副本（16-bit PCM）。audio_url 永远是上传的母版原样；24-bit WAV 在 PC 微信
     # 无法解码，归一工具（app/audio_norm.py）生成 16-bit 副本存这里，播放端优先用它。
     play_url: Mapped[str] = mapped_column(Text, default="")
+    # AAC 192k 副本（m4a）：手机/H5 的省流量版本（约为 WAV 的 1/10），由 ffmpeg 生成。
+    aac_url: Mapped[str] = mapped_column(Text, default="")
     cover_url: Mapped[str] = mapped_column(Text, default="")
     is_premium: Mapped[bool] = mapped_column(Boolean, default=True)
     preview_sec: Mapped[int] = mapped_column(Integer, default=30)
