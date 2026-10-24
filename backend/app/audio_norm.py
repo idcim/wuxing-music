@@ -221,13 +221,12 @@ def _encode_aac(src_path: str, dst_path: str, bitrate: str = AAC_BITRATE, clip_s
 
 
 def _upload_oss(cfg: dict, key: str, path: str) -> None:
-    import mimetypes
-
     import oss2
 
     # 分片上传必须显式给 Content-Type——裸 upload_part 出来的是 application/octet-stream，
-    # PC 微信的媒体元素对错误的 Content-Type 会报 Format error（实测 10004）
-    ctype = mimetypes.guess_type(key)[0] or "application/octet-stream"
+    # PC 微信的媒体元素对错误的 Content-Type 会报 Format error（实测 10004）。
+    # 用硬编码表而不是 mimetypes：slim 容器没有系统 mime 库，.m4a 会猜空
+    ctype = storage.audio_content_type(key)
     bucket = storage._oss_bucket(cfg)
     oss2.resumable_upload(
         bucket, key, path,

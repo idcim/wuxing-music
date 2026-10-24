@@ -55,8 +55,6 @@ def fix_mime(db, cfg: dict) -> int:
     if cfg.get("provider") != "oss":
         print("非 OSS 存储，无需修")
         return 0
-    import mimetypes
-
     bucket = storage._oss_bucket(cfg)
     bucket_name = cfg["oss_bucket"]
     fixed = skipped = 0
@@ -69,7 +67,7 @@ def fix_mime(db, cfg: dict) -> int:
             key = storage.oss_key_from_url(cfg, url)
             if not key:
                 continue
-            ctype = mimetypes.guess_type(key)[0] or "application/octet-stream"
+            ctype = storage.audio_content_type(key)
             try:
                 cur = bucket.head_object(key).headers.get("Content-Type", "")
                 if cur == ctype:

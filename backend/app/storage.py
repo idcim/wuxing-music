@@ -334,6 +334,22 @@ IMAGE_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
 AUDIO_EXT = {".mp3", ".m4a", ".wav"}
 ALL_EXT = IMAGE_EXT | AUDIO_EXT
 
+# 音频 Content-Type 硬编码表：Python mimetypes 依赖系统 mime 库，
+# slim 容器里没有 /etc/mime.types，.m4a 会落空成 octet-stream（实测坑）
+AUDIO_CONTENT_TYPES = {
+    ".wav": "audio/wav",
+    ".m4a": "audio/mp4",
+    ".mp3": "audio/mpeg",
+}
+
+
+def audio_content_type(key: str) -> str:
+    """按扩展名取音频 Content-Type；非音频回退 mimetypes，再落空为 octet-stream。"""
+    import mimetypes
+
+    ext = os.path.splitext(key)[1].lower()
+    return AUDIO_CONTENT_TYPES.get(ext) or mimetypes.guess_type(key)[0] or "application/octet-stream"
+
 
 def ext_of(filename: Optional[str]) -> str:
     return os.path.splitext(filename or "")[1].lower()
