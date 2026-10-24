@@ -401,7 +401,7 @@ const top = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
 
 ### 2. 音频播放 `services/audio/`（分端）
 
-- **版权保护（v1.12.0）**：目录接口不下发任何音频地址；播放前 `stores/player.ts::_start` 先调 `GET /api/mp/tracks/{id}/play-url` 换 10 分钟有效的 HMAC 签名 token，再经 `GET /api/mp/stream/{token}` 出流（OSS 302 签名地址 / 本地 Range 流式）。会员曲目对非会员只发 `preview_url` 试听剪辑（管线用 ffmpeg 按 `preview_sec` 生成）——完整文件字节不出服务器。token 即凭证（播放器带不了 Authorization 头）；能播就能被录是物理边界，这层防的是批量爬目录和链接传播。
+- **版权保护（v1.12.0）**：目录接口不下发任何音频地址；播放前 `stores/player.ts::_start` 先调 `GET /api/mp/tracks/{id}/play-url` 换 10 分钟有效地址，再交给播放器：OSS 对象**直接回签名地址**（不要再过 /stream 的 302——PC 微信媒体栈对跳转支持存疑，实测跳转后报 Format error），本地存储才走 `GET /api/mp/stream/{token}`（HMAC token + Range 流式）。会员曲目对非会员只发 `preview_url` 试听剪辑（管线用 ffmpeg 按 `preview_sec` 生成）——完整文件字节不出服务器。token/签名地址即凭证（播放器带不了 Authorization 头）；能播就能被录是物理边界，这层防的是批量爬目录和链接传播。
 
 - 小程序：`Taro.getBackgroundAudioManager()`（**用 BackgroundAudioManager 才能后台/锁屏播放**，`app.config.ts` 已配 `requiredBackgroundModes: ['audio']`）。**PC 微信也走它**——PC 端 InnerAudioContext 是 WebAudio 实现，decodeAudioData 全量读进内存（数百 MB 曲目必炸），且那套 Chromium 不带 MP3/AAC 私有解码器、不支持 24-bit WAV（报 `Unable to decode audio data`），实测 MP3 也挂；BackgroundAudioManager 在 PC 是流式路径，官方标注支持 Windows/Mac。`onError` 的真实回调带 `{errCode, errMsg}`（Taro 类型没声明，用类型断言拿），必须透到 `loadError` 展示，否则平台差异类故障完全无法定位。
 - H5：`index.h5.ts` 对应实现；统一接口见 `types.ts`。

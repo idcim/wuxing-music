@@ -1076,6 +1076,24 @@ def mp_play_url(track_id: int, request: Request, fmt: str = "aac", db: Session =
         chosen = "wav16" if fmt == "wav" else "aac"
         if not _full_url_for_fmt(track, chosen):
             raise HTTPException(status_code=404, detail="该曲目暂无音频")
+
+    resolved = track.preview_url if rendition == streaming.RENDITION_PREVIEW else _full_url_for_fmt(track, chosen)
+    # OSS 对象直接回签名地址，不再经过 /stream 的 302 跳转——PC 微信的媒体栈对
+    # 302 跟随支持存疑（实测跳转后报 Format error），少一跳最稳。签名地址本身
+    # 就带 10 分钟过期，保护水位不变。本地存储（无签名能力）才走 token 路径。
+    if resolved.startswith("http"):
+        cfg = storage.get_storage_cfg(db)
+        key = storage.oss_key_from_url(cfg, resolved)
+        if not key:
+            raise HTTPException(status_code=404, detail="音频地址无效")
+        bucket = storage._oss_bucket(cfg)
+        signed = bucket.sign_url("GET", key, streaming.TOKEN_TTL, slash_safe=True)
+        return ok({
+            "url": signed,
+            "preview": rendition == streaming.RENDITION_PREVIEW,
+            "expiresIn": streaming.TOKEN_TTL,
+        })
+
     token = streaming.sign_stream_token(track.id, rendition, chosen, uid=str(user.id) if user else "")
     return ok({
         "url": f"/api/mp/stream/{token}",
