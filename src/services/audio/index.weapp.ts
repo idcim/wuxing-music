@@ -1,6 +1,7 @@
 import Taro from '@tarojs/taro';
 import type { AudioService, AudioCallbacks, AudioMeta } from './types';
 import { siteName } from '@/stores/site';
+import { logInfo, logError } from '@/utils/logger';
 
 // BackgroundAudioManager 为全局单例，支持锁屏/后台继续播放。
 // 注意：title 必填，否则 src 赋值会报错。
@@ -24,13 +25,19 @@ function getMgr(): Taro.BackgroundAudioManager {
 function bindOnce(m: Taro.BackgroundAudioManager): void {
   if (listening) return;
   listening = true;
-  m.onPlay(() => bound.onPlay?.());
+  m.onPlay(() => {
+    logInfo('audio', 'onPlay');
+    bound.onPlay?.();
+  });
   m.onPause(() => bound.onPause?.());
   m.onStop(() => bound.onStop?.());
   m.onEnded(() => bound.onEnded?.());
   // Taro 类型声明里 onError 回调不带参，但真实回调带 {errCode, errMsg}
   // （「Unable to decode audio data」这种关键线索全靠它），绕过类型拿到它
-  (m.onError as (fn: (res?: unknown) => void) => void)((res) => bound.onError?.(res ?? undefined));
+  (m.onError as (fn: (res?: unknown) => void) => void)((res) => {
+    logError('audio', 'onError', res);
+    bound.onError?.(res ?? undefined);
+  });
   m.onWaiting(() => bound.onWaiting?.());
   m.onCanplay(() => bound.onCanplay?.());
   m.onTimeUpdate(() => {
@@ -47,6 +54,9 @@ const service: AudioService = {
     const m = getMgr();
     bound = callbacks;
     bindOnce(m);
+    // 只记域名不记签名参数（签名地址十分钟就过期，记全文没意义）
+    const host = url.startsWith('http') ? new URL(url).host : url.slice(0, 40);
+    logInfo('audio', `load ${meta.title} @ ${host}`);
 
     // title 必须先于 src 设置
     m.title = meta.title;

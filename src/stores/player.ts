@@ -6,6 +6,7 @@ import { resolveUrl } from '@/utils/url';
 import { isPcWechat } from '@/utils/platform';
 import { request, ApiError } from '@/services/api';
 import { getPlayUrl } from '@/services/content';
+import { logInfo, logError } from '@/utils/logger';
 import { useUserStore } from './user';
 import Taro from '@tarojs/taro';
 import { storage, STORAGE_KEYS } from '@/services/storage';
@@ -27,6 +28,17 @@ let loadedTrackId: number | null = null;
 // PC 微信 wav16 解码失败时据此降级到 AAC 重试
 const playFmtByTrack = new Map<number, { fmt: string; format?: string }>();
 const pcAacRetried = new Set<number>();
+let envLogged = false;
+
+// 平台与基础库版本只记一次——PC 兼容性问题的第一嫌疑人就是它
+function logEnvOnce(): void {
+  if (envLogged) return;
+  envLogged = true;
+  try {
+    const info = Taro.getDeviceInfo ? Taro.getDeviceInfo() : Taro.getSystemInfoSync();
+    logInfo('env', `platform=${info.platform} 基础库=${(info as any).SDKVersion || '?'} 微信=${(info as any).version || '?'}`);
+  } catch { /* 拿不到就算了 */ }
+}
 
 // 加载看门狗：超过这个时间还没 canplay，就认定为「慢/卡住」并提示用户
 const LOAD_TIMEOUT_MS = 15000;
@@ -182,6 +194,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       onError: (err?: unknown) => {
         console.error('[audio]', err);
         clearLoadTimer();
+        logError('audio', `#${track.id} onError`, err);
         // PC 微信的媒体栈解不了 wav16（MEDIA_ELEMENT_ERROR 10004）时，
         // 自动降级到 AAC 副本重试一次（每曲目每会话一次，避免死循环）
         const info = playFmtByTrack.get(track.id);
@@ -190,6 +203,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           !pcAacRetried.has(track.id)
         ) {
           pcAacRetried.add(track.id);
+          logInfo('play', `#${track.id} wav16 失败，降级 AAC 重试`);
           get()._start(track);
           return;
         }
@@ -269,11 +283,16 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     // PC 微信只信 16-bit PCM（fmt=wav），其余端优先 AAC 副本；
     // PC 已降级重试过的曲目直接要 AAC（见 onError 的降级逻辑）。
     const fmt = isPcWechat && !pcAacRetried.has(track.id) ? 'wav' : 'aac';
+    logEnvOnce();
+    logInfo('play', `#${track.id} ${track.title} 签发请求 fmt=${fmt}`);
     getPlayUrl(track.id, fmt)
       .then((res) => {
         // 换地址期间用户可能已经切歌/停止了，别覆盖别人的播放
         if (loadedTrackId !== track.id) return;
         playFmtByTrack.set(track.id, { fmt, format: res.format });
+        // 签发结果只记形态不记地址本体（签名地址有时效，记了也没用）
+        const host = res.url.startsWith('http') ? new URL(res.url).host : 'local-token';
+        logInfo('play', `#${track.id} 签发 format=${res.format} preview=${res.preview} 地址=${host}`);
         set({ previewClip: res.preview });
         audioService.load(resolveUrl(res.url), meta, callbacks);
       })

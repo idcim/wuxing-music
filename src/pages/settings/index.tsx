@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { View, Text } from '@tarojs/components';
+import { View, Text, ScrollView } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { TOKEN_KEY } from '@/constants/env';
 import { APP_VERSION } from '@/constants/version';
 import { STORAGE_KEYS } from '@/services/storage';
 import { cancelAccount } from '@/services/user';
+import { logsToText } from '@/utils/logger';
 import { usePlayerStore } from '@/stores/player';
 import { useUserStore } from '@/stores/user';
 import { isWeapp } from '@/utils/platform';
@@ -41,6 +42,12 @@ export default function Settings() {
   const [cacheKB, setCacheKB] = useState<number | null>(null);
   const [version, setVersion] = useState(APP_VERSION);
   const [cancelling, setCancelling] = useState(false);
+  const [diagOpen, setDiagOpen] = useState(false);
+
+  const copyLogs = async () => {
+    await Taro.setClipboardData({ data: logsToText() || '暂无日志' });
+    Taro.showToast({ title: '已复制', icon: 'success' });
+  };
 
   useDidShow(() => {
     setCacheKB(readCacheKB());
@@ -121,6 +128,11 @@ export default function Settings() {
           <Icon name="chevronRight" size={28} color="#334155" strokeWidth={1.5} />
         </View>
 
+        <View className="settings__row settings__row--divider" onClick={() => setDiagOpen(true)}>
+          <Text className="settings__label">诊断日志</Text>
+          <Icon name="chevronRight" size={28} color="#334155" strokeWidth={1.5} />
+        </View>
+
         <View className="settings__row" onClick={cancel}>
           <Text className="settings__label settings__label--danger">
             {cancelling ? '注销中…' : '注销账号'}
@@ -132,6 +144,26 @@ export default function Settings() {
       <View className="settings__version">
         <Text className="settings__version-text">版本 {version || '—'}</Text>
       </View>
+
+      {/* 诊断日志：播放链路关键事件，可整段复制给客服/开发 */}
+      {diagOpen && (
+        <View className="settings__diag-mask" onClick={() => setDiagOpen(false)}>
+          <View className="settings__diag" onClick={(e) => e.stopPropagation()}>
+            <View className="settings__diag-head">
+              <Text className="settings__diag-title">诊断日志</Text>
+              <View className="settings__diag-close" onClick={() => setDiagOpen(false)}>
+                <Icon name="x" size={28} color="#94a3b8" strokeWidth={2} />
+              </View>
+            </View>
+            <ScrollView scrollY className="settings__diag-body">
+              <Text className="settings__diag-text">{logsToText() || '暂无日志'}</Text>
+            </ScrollView>
+            <View className="settings__diag-copy" onClick={copyLogs}>
+              <Text className="settings__diag-copy-text">复制全部</Text>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
