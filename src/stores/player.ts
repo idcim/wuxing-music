@@ -3,7 +3,6 @@ import type { Track } from '@/types';
 import audioService from '@/services/audio';
 import { USE_MOCK, MOCK_AUDIO_URL } from '@/constants/env';
 import { resolveUrl } from '@/utils/url';
-import { isPcWechat } from '@/utils/platform';
 import { request, ApiError } from '@/services/api';
 import { getPlayUrl } from '@/services/content';
 import { logInfo, logError } from '@/utils/logger';
@@ -25,9 +24,13 @@ let timerId: ReturnType<typeof setTimeout> | null = null;
 let timerDeadline = 0;
 let loadedTrackId: number | null = null;
 // 本次播放请求的格式上下文（trackId → 请求的 fmt 与实际命中的 format），
-// PC 微信 wav16 解码失败时据此降级到 AAC 重试
+// 解码失败时据此换另一种格式重试
 const playFmtByTrack = new Map<number, { fmt: string; format?: string }>();
-const pcAacRetried = new Set<number>();
+// 每曲目每会话只自动换格式重试一次（防死循环）
+const fmtRetried = new Set<number>();
+// 已真正开播过的曲目：之后的零星 error（缓冲抖动等）不再把界面打成失败，
+// 播放真停了会有 onStop/onPause 来接管状态（实测 PC 上 onPlay 后还会吐 10004）
+const playedTracks = new Set<number>();
 let envLogged = false;
 
 // 平台与基础库版本只记一次——PC 兼容性问题的第一嫌疑人就是它
@@ -172,6 +175,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const callbacks = {
       onPlay: () => {
         clearLoadTimer();
+        playedTracks.add(track.id);
         set({ isPlaying: true, isLoading: false, loadError: '' });
       },
       onPause: () => set({ isPlaying: false }),
@@ -194,16 +198,20 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       onError: (err?: unknown) => {
         console.error('[audio]', err);
         clearLoadTimer();
+        // 已经开播过的曲目：零星 error（缓冲抖动/seek 重缓冲）不打断播放，
+        // 只记日志——之前一律 set loadError，用户看着「播放失败」其实声音还在
+        if (playedTracks.has(track.id)) {
+          logError('audio', `#${track.id} 播放中 error（忽略，不打断）`, err);
+          return;
+        }
         logError('audio', `#${track.id} onError`, err);
-        // PC 微信的媒体栈解不了 wav16（MEDIA_ELEMENT_ERROR 10004）时，
-        // 自动降级到 AAC 副本重试一次（每曲目每会话一次，避免死循环）
+        // 开播前的解码失败：换一种格式重试一次（每曲目每会话一次，避免死循环）。
+        // AAC 在 PC 微信的 BGM 上实测可播，与 wav16 互为备份
         const info = playFmtByTrack.get(track.id);
-        if (
-          isPcWechat && info?.fmt === 'wav' && info?.format === 'wav16' &&
-          !pcAacRetried.has(track.id)
-        ) {
-          pcAacRetried.add(track.id);
-          logInfo('play', `#${track.id} wav16 失败，降级 AAC 重试`);
+        if (!fmtRetried.has(track.id)) {
+          const next = info?.fmt === 'aac' ? 'wav' : 'aac';
+          fmtRetried.set(track.id, next);
+          logInfo('play', `#${track.id} ${info?.format || info?.fmt} 失败，换 ${next} 重试`);
           get()._start(track);
           return;
         }
@@ -280,9 +288,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       return;
     }
     // 版权保护：目录接口不含音频地址，播放前用曲目 id 换短时效签名地址。
-    // PC 微信只信 16-bit PCM（fmt=wav），其余端优先 AAC 副本；
-    // PC 已降级重试过的曲目直接要 AAC（见 onError 的降级逻辑）。
-    const fmt = isPcWechat && !pcAacRetried.has(track.id) ? 'wav' : 'aac';
+    // 全端优先 AAC 副本（省流量；PC 微信 BGM 实测可播 AAC）；
+    // 解码失败时 onError 里自动换另一种格式重试一次。
+    const fmt = fmtRetried.get(track.id) ?? 'aac';
     logEnvOnce();
     logInfo('play', `#${track.id} ${track.title} 签发请求 fmt=${fmt}`);
     getPlayUrl(track.id, fmt)
