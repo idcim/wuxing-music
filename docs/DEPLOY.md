@@ -137,10 +137,11 @@ H5 已作为 `wuxing-h5` 服务并入 `docker-compose.yml`——`docker compose 
       母版上 OSS）在后台自动完成，因此外层反代的 body 上限对音频上传是硬约束，必须配好。
 - [ ] **OSS 桶 CORS**：允许 H5 域名的 `GET`（含 `Range` 请求头）。
       不配的话：① 海报 canvas 会因跨域图片被污染而无法生成；② 部分浏览器的分段请求会被拒。
-- [ ] **OSS 防盗链 referer 白名单**：要么关闭，要么把 H5 域名与 `*.servicewechat.com`
-      （小程序 webview）加进去，并允许空 referer。否则会看到「curl 能下、页面里 403」
-      ——海报二维码取图就是这么挂的。小程序码/链接二维码现已改为存服务端本地
-      （force_local），不走 OSS，不受此项影响。
+- [ ] **OSS 防盗链 referer 白名单**：必须加 `https://servicewechat.com`，并保持
+      「允许空 Referer」开启。缺它的表现：**PC 微信小程序里所有音频/图片报
+      Format error / Unable to decode**（PC 微信会带 `servicewechat.com` 的 Referer，
+      OSS 回 403 XML 错误页），手机端不受影响（原生请求不带 Referer）。
+      排查方法：`curl -H "Referer: https://servicewechat.com/xxx" <音频URL>` 看是否 403。
 - [ ] **小程序 `downloadFile` 合法域名**：把 OSS / CDN 域名也加进去，
       否则小程序端真机放不了（H5 不受此限）。
 - [ ] **Range 自检**：`curl -s -D- -o /dev/null -H "Range: bytes=0-1023" <音频URL>`
