@@ -154,13 +154,13 @@
       `<Input>` 陷阱（陷阱 14），小程序端 `<Input>` 行为不同，需确认昵称/手机号/密码三个形态切换正常。
 - [ ] **`code → openid`**。配上真实 AppSecret 后要确认走的是 `jscode2session` 换来的真 openid，
       而不是游客兜底（`CLAUDE.md` 陷阱 5）。**验证点：换台设备登录，用户身份不应漂移。**
-- [ ] **PC 微信播放**（用户报障后新增）。两处根因：① 线上音频是 **24-bit WAV**，
-      PC 端解码不了（`Unable to decode audio data`）——后台「曲目 → 音频兼容修复」
-      全量降 16-bit PCM（保存 WAV 时自动检查）；② PC 端 `InnerAudioContext` 是
-      WebAudio 实现（decodeAudioData 全量读内存 + 无 MP3/AAC 私有解码器），
-      大文件与 MP3 都挂——已回退为 BackgroundAudioManager（PC 上流式路径）。
-      实测项：点播放出声、暂停/继续/切歌/进度拖动正常；若仍失败，界面会显示
-      `errCode/errMsg`，按错误码再查。
+- [ ] **PC 微信播放**（用户报障后新增）。PC 端两个原生音频 API 在这台客户端实测全灭
+      （BGM 假 onPlay + 10004，连公共测试 MP3 都起不来；InnerAudioContext 解不了大文件
+      与 MP3/AAC）——**PC 端改走 `pages/webview` 内嵌 H5 播放页 `pages/h5play`**
+      （完整浏览器内核，不挑格式）。前置条件：
+      ① 根目录 `.env.local` 配 `TARO_APP_H5_BASE` 为 H5 公网地址；
+      ② 小程序后台「开发管理 → 业务域名」登记该域名并上传校验文件（H5 nginx 根目录要能访问到）。
+      实测项：PC 点播放进入网页播放页，点「播放」出声、进度走字。
 
 ---
 

@@ -1,0 +1,77 @@
+@use '../../styles/variables.scss' as *;
+
+// PC 端经小程序 web-view 打开的极简播放页：完整浏览器内核，不挑格式
+.h5play {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: $bg-deep;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: $pad-outer;
+  box-sizing: border-box;
+  gap: 28rpx;
+
+  &__eyebrow {
+    font-size: 22rpx;
+    letter-spacing: 6rpx;
+    color: $text-quaternary;
+  }
+
+  &__title {
+    font-size: 40rpx;
+    color: $text-primary;
+    text-align: center;
+  }
+
+  &__note {
+    font-size: 24rpx;
+    color: $text-tertiary;
+  }
+
+  &__error {
+    font-size: 26rpx;
+    color: #f87171;
+  }
+
+  &__btn {
+    width: 160rpx;
+    height: 160rpx;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #f8fafc, #cbd5e1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &--disabled {
+      opacity: 0.4;
+    }
+  }
+
+  &__btn-label {
+    font-size: 24rpx;
+    color: $text-secondary;
+  }
+
+  &__progress {
+    width: 70vw;
+    max-width: 600px;
+    height: 6rpx;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+  }
+
+  &__progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #38bdf8, #84cc16);
+    transition: width 0.3s linear;
+  }
+
+  &__time {
+    font-size: 22rpx;
+    color: $text-tertiary;
+    font-variant-numeric: tabular-nums;
+  }
+}

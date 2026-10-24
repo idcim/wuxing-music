@@ -7,6 +7,10 @@ export const USE_MOCK = false;
 export const API_BASE =
   process.env.TARO_ENV === 'h5' ? '' : process.env.TARO_APP_API_BASE || '';
 
+// H5 站点的公网地址（小程序 web-view 内嵌播放页用；PC 微信小程序音频不可用时的逃生通道）。
+// 目标域名须先登记到小程序后台「开发管理 → 业务域名」。
+export const H5_BASE = process.env.TARO_APP_H5_BASE || '';
+
 export const TOKEN_KEY = 'wx_token';
 
 // MOCK 模式下曲目 audioUrl 为空时，用此公开测试音频联调播放。

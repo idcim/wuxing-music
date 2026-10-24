@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { Track } from '@/types';
 import audioService from '@/services/audio';
-import { USE_MOCK, MOCK_AUDIO_URL } from '@/constants/env';
+import { USE_MOCK, MOCK_AUDIO_URL, H5_BASE } from '@/constants/env';
 import { resolveUrl } from '@/utils/url';
 import { isPcWechat } from '@/utils/platform';
 import { request, ApiError } from '@/services/api';
@@ -164,6 +164,23 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   // 内部：真正加载并播放某曲目
   _start: (track: Track) => {
+    // PC 微信小程序的音频运行时不可用（BGM 假 onPlay + 10004、InnerAudioContext
+    // 解不了大文件/MP3/AAC，连公共测试音频都起不了播——实测）。
+    // 改走 web-view 内嵌 H5 播放页（完整浏览器内核，不挑格式）。
+    if (isPcWechat) {
+      if (H5_BASE) {
+        Taro.navigateTo({
+          url: `/pages/webview/index?url=${encodeURIComponent(`${H5_BASE}/#/pages/h5play/index?id=${track.id}`)}`
+        });
+      } else {
+        Taro.showModal({
+          title: 'PC 端暂不支持播放',
+          content: 'PC 微信的小程序音频组件不可用，请用手机微信收听',
+          showCancel: false
+        });
+      }
+      return;
+    }
     loadedTrackId = track.id;
     clearLoadTimer();
     // 加载看门狗：迟迟等不到 canplay 就给用户一句话，

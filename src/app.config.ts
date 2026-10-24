@@ -17,7 +17,9 @@ export default defineAppConfig({
     'pages/history/index',
     'pages/player/index',
     'pages/agent/index',
-    'pages/about/index'
+    'pages/about/index',
+    'pages/h5play/index',
+    'pages/webview/index'
   ],
   window: {
     backgroundTextStyle: 'light',
