@@ -1765,7 +1765,7 @@ def mp_qrcode(
         raise HTTPException(status_code=400, detail="生成小程序码失败，请稍后重试")
 
     try:
-        result = storage.save_bytes(db, resp.content, ".png", base_url=str(request.base_url))
+        result = storage.save_bytes(db, resp.content, ".png", base_url=str(request.base_url), force_local=True)
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return ok(result)
@@ -1804,7 +1804,7 @@ def mp_qrcode_url(
     img.save(buf, format="PNG")
 
     try:
-        result = storage.save_bytes(db, buf.getvalue(), ".png", base_url=str(request.base_url))
+        result = storage.save_bytes(db, buf.getvalue(), ".png", base_url=str(request.base_url), force_local=True)
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return ok(result)

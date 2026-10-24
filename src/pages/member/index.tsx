@@ -128,11 +128,7 @@ export default function Member() {
     if (res.ok) {
       updateMembership(res.membership);
       Taro.showToast({ title: '开通成功', icon: 'success' });
-      // 开通成功 → 弹海报，鼓励分享给好友
-      setGiftCode('');
-      setPosterTitle(res.membership.name || '律音会员');
-      setPosterSub('我已开通会员，邀你一起听助眠音律');
-      setTimeout(() => setPosterOpen(true), 800);
+      // 自用开通不弹分享海报（用户反馈：自己用没必要）；买卡送人才弹（要拿礼物码分享）
     } else {
       onPayFail(res.reason, res.message);
     }

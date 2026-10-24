@@ -77,13 +77,17 @@ def _oss_public_url(cfg: dict, key: str) -> str:
     return f"https://{cfg.get('oss_bucket')}.{host}/{key}"
 
 
-def save_bytes(db: Session, content: bytes, ext: str, base_url: str = "") -> dict:
+def save_bytes(db: Session, content: bytes, ext: str, base_url: str = "", force_local: bool = False) -> dict:
     """保存字节内容，返回 {url, full_url}。base_url 仅本地存储用于拼 full_url。
 
     小文件（头像/封面）用这个即可；音频等大文件请用 save_stream，避免整包驻留内存。
+    force_local：强制落本地——小程序码等要进 canvas 的图必须走自有域名 /uploads，
+    OSS 的防盗链 referer 白名单会拦 webview 取图（403），换域名后整类问题消失。
     """
     cfg = get_storage_cfg(db)
     provider = cfg.get("provider", "local")
+    if force_local:
+        provider = "local"
     key = _object_key(ext)
 
     if provider == "oss":
