@@ -3,6 +3,7 @@ import { View, Text, Input } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { sendSmsCode, setPassword } from '@/services/auth';
 import { bindPhone, updateProfile } from '@/services/user';
+import { isWeapp } from '@/utils/platform';
 import Icon from '@/components/Icon';
 import './index.scss';
 
@@ -172,10 +173,11 @@ export default function UserEditSheet({ field, nickname, phone, onClose, onSaved
           </View>
         </View>
 
-        {/* 昵称 */}
+        {/* 昵称：小程序端 type="nickname"，聚焦时微信会提供「使用微信昵称」一键填入 */}
         <View className="edit-sheet__field" style={show('nickname')}>
           <Input
             className="edit-sheet__input"
+            type={isWeapp ? 'nickname' : 'text'}
             maxlength={32}
             placeholder="输入新昵称"
             placeholderStyle={PLACEHOLDER_STYLE}

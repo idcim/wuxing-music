@@ -7,6 +7,7 @@ import { useSiteStore } from '@/stores/site';
 import { isH5, isInWeChat } from '@/utils/platform';
 import { getToken, hasQrLoginCallback } from '@/services/auth';
 import { captureAgentCode } from '@/services/agent';
+import { isProfileIncomplete } from '@/utils/profile';
 import './app.scss';
 
 function App({ children }: PropsWithChildren) {
@@ -31,6 +32,7 @@ function App({ children }: PropsWithChildren) {
 // - H5 且在微信内、本地无 token → 走公众号网页授权静默登录，成功后清理 URL 上的 code/state
 //   （wechatLoginH5 内部自行处理「带 code 换取 / 无 code 跳授权」）。
 // - 其它端 / 已登录 → 常规缓存恢复。小程序端绝不触发 H5 逻辑。
+// 登录态落地后统一过一次资料完整度检查（每会话最多提示一次）。
 async function bootstrapAuth(): Promise<void> {
   // 微信外浏览器的扫码授权回跳。为什么在这儿而不是登录页：qrconnect 的 redirect_uri
   // 不能带 hash（微信把 ?code=.. 拼在末尾，带 hash 就落进 fragment 里读不到），
@@ -41,6 +43,7 @@ async function bootstrapAuth(): Promise<void> {
       if (user) {
         cleanOAuthParams();
         Taro.reLaunch({ url: '/pages/home/index' });
+        void maybePromptProfile();
         return;
       }
     } catch (e: any) {
@@ -48,7 +51,8 @@ async function bootstrapAuth(): Promise<void> {
       cleanOAuthParams();
       Taro.showToast({ title: e?.message || '扫码登录失败，请重试', icon: 'none' });
     }
-    useUserStore.getState().initFromCache();
+    await useUserStore.getState().initFromCache();
+    void maybePromptProfile();
     return;
   }
 
@@ -60,14 +64,35 @@ async function bootstrapAuth(): Promise<void> {
         cleanOAuthParams();
         // 开发游客兜底（公众号未配）：轻提示，区别于真实微信登录
         if (devGuest) Taro.showToast({ title: '开发环境·游客登录', icon: 'none', duration: 2500 });
+        void maybePromptProfile();
       }
     } catch {
       // 网页授权失败：退回常规流程（游客态兜底）
-      useUserStore.getState().initFromCache();
+      await useUserStore.getState().initFromCache();
     }
     return;
   }
-  useUserStore.getState().initFromCache();
+  await useUserStore.getState().initFromCache();
+  void maybePromptProfile();
+}
+
+// 老用户打开时资料没补全（未绑手机号 / 还是默认昵称）→ 每会话提示一次去补全。
+// 登录页和资料页自身不弹，免得打断正在进行的补全。
+let profilePrompted = false;
+async function maybePromptProfile(): Promise<void> {
+  if (profilePrompted) return;
+  const user = useUserStore.getState().user;
+  if (!isProfileIncomplete(user)) return;
+  const path = Taro.getCurrentInstance().router?.path || '';
+  if (path.includes('userinfo') || path.includes('login')) return;
+  profilePrompted = true;
+  const res = await Taro.showModal({
+    title: '完善个人信息',
+    content: '绑定手机号并设置昵称（可用微信昵称一键填入），账号找回与会员服务更有保障',
+    confirmText: '去完善',
+    cancelText: '下次再说'
+  });
+  if (res.confirm) Taro.navigateTo({ url: '/pages/userinfo/index?from=login' });
 }
 
 // 回到前台时校正睡眠定时：H5 切后台/锁屏会节流 setTimeout，

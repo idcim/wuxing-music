@@ -179,7 +179,7 @@ export default function UserInfo() {
 
       {fromLogin && (
         <Text className="userinfo__guide fade-up">
-          登录成功。补全生日与出生时辰，才能让五行音律推荐更贴合你。
+          登录成功。先绑定手机号、点昵称可用微信昵称一键填入；补全生日时辰，推荐更贴合你。
         </Text>
       )}
 
