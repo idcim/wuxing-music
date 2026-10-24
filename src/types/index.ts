@@ -11,9 +11,11 @@ export interface Track {
   hz: string;                // "324Hz" 或 "角调"
   tag: string;
   plays: string;             // "12.4k"
-  audioUrl: string;          // 母版地址（上传原样）
-  playUrl?: string;          // 播放副本（16-bit PCM，空则回退 audioUrl）
-  aacUrl?: string;           // AAC 192k 副本（省流量，手机/H5 优先）
+  // 版权保护：目录接口不下发音频地址，播放走 getPlayUrl(trackId) 换短时效签名地址；
+  // audioUrl 只剩 mock/旧缓存里可能有值
+  audioUrl?: string;
+  playUrl?: string;
+  aacUrl?: string;
   coverUrl?: string;
   isPremium: boolean;
   previewSec?: number;       // 免费试听秒数

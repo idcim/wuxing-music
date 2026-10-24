@@ -6,18 +6,19 @@
 """
 import json
 import logging
+import os
 import re
 import uuid
 from datetime import date, datetime, timedelta
 from typing import NoReturn
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from jose import JWTError, jwt
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app import agent_service, ratelimit, refund_service, sms, storage, wxpay
+from app import agent_service, ratelimit, refund_service, sms, storage, streaming, wxpay
 from app.config import settings
 from app.database import get_db
 from app.lunar import lunar_info
@@ -966,11 +967,8 @@ def _track_dict(t: Track, counts: dict | None = None) -> dict:
         "hz": t.hz,
         "tag": t.tag,
         "plays": plays,
-        "audioUrl": t.audio_url,
-        # 播放副本（16-bit）；空则由前端回退 audio_url（母版）
-        "playUrl": t.play_url or "",
-        # AAC 副本（省流量，手机/H5 优先）；空则回退 playUrl/audioUrl
-        "aacUrl": t.aac_url or "",
+        # 版权保护：目录接口不下发任何音频地址，播放走 /tracks/{id}/play-url 换
+        # 短时效签名地址（app/streaming.py）
         "coverUrl": t.cover_url,
         "isPremium": t.is_premium,
         "previewSec": t.preview_sec,
@@ -1018,6 +1016,92 @@ def mp_elements(db: Session = Depends(get_db)):
             "tracks": [_track_dict(t, counts) for t in tracks],
         })
     return ok(result)
+
+
+# ── 播放地址签发（版权保护：目录接口不下发音频地址，详见 app/streaming.py）──
+def _optional_user(db: Session, request: Request) -> User | None:
+    """可选登录：有合法用户 token 返回用户，没有/失效按游客处理（不抛错）。"""
+    auth = request.headers.get("authorization", "")
+    if not auth.startswith("Bearer "):
+        return None
+    try:
+        payload = jwt.decode(auth[7:], settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        sub = payload.get("sub", "")
+        if not sub.startswith("user:"):
+            return None
+        user = db.query(User).filter(User.id == int(sub.split(":", 1)[1])).first()
+        return resolve_user(db, user)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _full_url_for_fmt(track: Track, fmt: str) -> str:
+    """完整版的实际文件：按 fmt 偏好回退。"""
+    if fmt == "wav16":
+        return track.play_url or track.aac_url or track.audio_url
+    return track.aac_url or track.play_url or track.audio_url
+
+
+@router.get("/tracks/{track_id}/play-url")
+def mp_play_url(track_id: int, request: Request, fmt: str = "aac", db: Session = Depends(get_db)):
+    """签发短时效播放地址（10 分钟）。游客可听免费曲目与会员曲目的试听剪辑；
+    会员曲目完整版需会员。返回相对路径，前端 resolveUrl 补全。"""
+    track = db.query(Track).filter(Track.id == track_id, Track.is_online == True).first()  # noqa: E712
+    if not track:
+        raise HTTPException(status_code=404, detail="曲目不存在")
+    user = _optional_user(db, request)
+    rendition = streaming.RENDITION_FULL
+    if track.is_premium and not (user and _is_premium(user)):
+        rendition = streaming.RENDITION_PREVIEW
+        if not track.preview_url:
+            raise HTTPException(status_code=403, detail="该曲目为会员专属")
+    if rendition == streaming.RENDITION_PREVIEW:
+        chosen = "prev"
+    else:
+        chosen = "wav16" if fmt == "wav" else "aac"
+        if not _full_url_for_fmt(track, chosen):
+            raise HTTPException(status_code=404, detail="该曲目暂无音频")
+    token = streaming.sign_stream_token(track.id, rendition, chosen, uid=str(user.id) if user else "")
+    return ok({
+        "url": f"/api/mp/stream/{token}",
+        "preview": rendition == streaming.RENDITION_PREVIEW,
+        "expiresIn": streaming.TOKEN_TTL,
+    })
+
+
+@router.get("/stream/{token}")
+def mp_stream(token: str, request: Request, db: Session = Depends(get_db)):
+    """按 token 出流：OSS 302 到签名地址；本地存储 Range 流式输出。
+    token 即凭证（音频播放器带不了 Authorization 头）。"""
+    parsed = streaming.verify_stream_token(token)
+    if not parsed:
+        raise HTTPException(status_code=403, detail="播放地址无效或已过期")
+    track_id, rendition, fmt = parsed
+    track = db.query(Track).filter(Track.id == track_id).first()
+    if not track:
+        raise HTTPException(status_code=404, detail="曲目不存在")
+    if rendition == streaming.RENDITION_PREVIEW:
+        url = track.preview_url or ""
+    else:
+        url = _full_url_for_fmt(track, fmt)
+    if not url:
+        raise HTTPException(status_code=404, detail="音频不存在")
+
+    if url.startswith("/uploads/"):
+        path = os.path.join("uploads", url[len("/uploads/"):])
+        if not os.path.exists(path):
+            raise HTTPException(status_code=404, detail="音频文件不存在")
+        media_type = "audio/wav" if path.lower().endswith(".wav") else "audio/mp4"
+        return streaming.stream_local(path, request, media_type=media_type)
+
+    cfg = storage.get_storage_cfg(db)
+    key = storage.oss_key_from_url(cfg, url)
+    if not key:
+        raise HTTPException(status_code=404, detail="音频地址无效")
+    bucket = storage._oss_bucket(cfg)
+    # slash_safe：key 含 /，默认转义成 %2F 会让部分播放器路径解析出错
+    signed = bucket.sign_url("GET", key, streaming.TOKEN_TTL, slash_safe=True)
+    return RedirectResponse(signed, status_code=302)
 
 
 @router.get("/plans")

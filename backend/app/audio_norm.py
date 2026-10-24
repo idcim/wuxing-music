@@ -50,16 +50,7 @@ _MAX_RESULTS = 100
 
 def _oss_key_from_url(cfg: dict, url: str) -> str | None:
     """从完整 URL 反推 OSS 对象键；不是本店 OSS 的地址返回 None。"""
-    bases = []
-    if cfg.get("oss_base_url"):
-        bases.append(cfg["oss_base_url"].rstrip("/"))
-    endpoint = (cfg.get("oss_endpoint") or "").replace("https://", "").replace("http://", "").rstrip("/")
-    if cfg.get("oss_bucket") and endpoint:
-        bases.append(f"https://{cfg['oss_bucket']}.{endpoint}")
-    for base in bases:
-        if url.startswith(base + "/"):
-            return url[len(base) + 1 :]
-    return None
+    return storage.oss_key_from_url(cfg, url)
 
 
 def _download(url: str, dst: str, limit: int | None = None, retries: int = 4) -> None:
@@ -202,19 +193,22 @@ def _convert_oss_stream(cfg: dict, oss_key: str, url: str) -> None:
 AAC_BITRATE = "192k"
 
 
-def _encode_aac(src_path: str, dst_path: str) -> None:
-    """ffmpeg 转 AAC(m4a)，faststart 便于流式起播。没有 ffmpeg 抛 no-ffmpeg（调用方降级跳过）。"""
+def _encode_aac(src_path: str, dst_path: str, bitrate: str = AAC_BITRATE, clip_sec: int = 0) -> None:
+    """ffmpeg 转 AAC(m4a)，faststart 便于流式起播；clip_sec>0 时只取前 N 秒（试听剪辑）。
+    没有 ffmpeg 抛 no-ffmpeg（调用方降级跳过）。"""
     import subprocess
 
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise RuntimeError("no-ffmpeg")
-    r = subprocess.run(
+    cmd = [ffmpeg, "-y", "-i", src_path]
+    if clip_sec > 0:
+        cmd += ["-t", str(clip_sec)]
+    cmd += [
         # -f mp4：目标可能是 .part 临时名，ffmpeg 按扩展名猜封装格式会猜错
-        [ffmpeg, "-y", "-i", src_path, "-f", "mp4", "-c:a", "aac", "-b:a", AAC_BITRATE,
-         "-movflags", "+faststart", dst_path],
-        capture_output=True, timeout=1800,
-    )
+        "-f", "mp4", "-c:a", "aac", "-b:a", bitrate, "-movflags", "+faststart", dst_path,
+    ]
+    r = subprocess.run(cmd, capture_output=True, timeout=1800)
     if r.returncode != 0 or not os.path.exists(dst_path) or os.path.getsize(dst_path) == 0:
         tail = r.stderr.decode("utf-8", "ignore")[-200:] if r.stderr else ""
         raise RuntimeError(f"ffmpeg 转码失败：{tail}")
@@ -260,6 +254,7 @@ def process_track(db, cfg: dict, track: Track, dry: bool = False) -> str:
     key_noext = os.path.splitext(key)[0]
     wav16_key = f"play/{key}"
     aac_key = f"aac/{key_noext}.m4a"
+    preview_key = f"prev/{key_noext}.m4a"
 
     def _dest_url(k: str) -> str:
         return (f"/uploads/{k}" if provider != "oss" else storage._oss_public_url(cfg, k))
@@ -296,6 +291,9 @@ def process_track(db, cfg: dict, track: Track, dry: bool = False) -> str:
     ffmpeg_ok = bool(shutil.which("ffmpeg"))
     if not track.aac_url and ffmpeg_ok:
         stages.append("aac")
+    # 会员曲目的试听剪辑：非会员只能拿到这一段（版权保护，见 app/streaming.py）
+    if track.is_premium and ffmpeg_ok and not track.preview_url and (track.preview_sec or 30) > 0:
+        stages.append("preview")
 
     if not stages:
         return "skip:已就绪"
@@ -340,6 +338,20 @@ def process_track(db, cfg: dict, track: Track, dry: bool = False) -> str:
                 os.replace(dest + ".part", dest)
             track.aac_url = _dest_url(aac_key)
             done.append("aac")
+
+        # ── 试听剪辑（会员曲目，preview_sec 秒的 AAC）──
+        if "preview" in stages:
+            if provider == "oss":
+                prev_tmp = os.path.join(tmpdir, "p.m4a")
+                _encode_aac(src, prev_tmp, bitrate="128k", clip_sec=track.preview_sec or 30)
+                _upload_oss(cfg, preview_key, prev_tmp)
+            else:
+                dest = _dest_path(preview_key)
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                _encode_aac(src, dest + ".part", bitrate="128k", clip_sec=track.preview_sec or 30)
+                os.replace(dest + ".part", dest)
+            track.preview_url = _dest_url(preview_key)
+            done.append("preview")
 
         # ── 母版上 OSS（本地暂存 → OSS，字节原样），最后删本地暂存 ──
         if "master" in stages:

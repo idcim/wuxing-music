@@ -95,6 +95,9 @@ class Track(Base):
     play_url: Mapped[str] = mapped_column(Text, default="")
     # AAC 192k 副本（m4a）：手机/H5 的省流量版本（约为 WAV 的 1/10），由 ffmpeg 生成。
     aac_url: Mapped[str] = mapped_column(Text, default="")
+    # 试听剪辑（preview_sec 秒的 AAC）：会员曲目的非会员播放只发这段，
+    # 完整文件的字节不出服务器（版权保护，见 app/streaming.py）。
+    preview_url: Mapped[str] = mapped_column(Text, default="")
     cover_url: Mapped[str] = mapped_column(Text, default="")
     is_premium: Mapped[bool] = mapped_column(Boolean, default=True)
     preview_sec: Mapped[int] = mapped_column(Integer, default=30)

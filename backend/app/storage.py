@@ -52,6 +52,20 @@ def _oss_bucket(cfg: dict):
     return oss2.Bucket(auth, endpoint, bucket_name)
 
 
+def oss_key_from_url(cfg: dict, url: str) -> Optional[str]:
+    """从完整 URL 反推 OSS 对象键；不是本店 OSS 的地址返回 None。"""
+    bases = []
+    if cfg.get("oss_base_url"):
+        bases.append(cfg["oss_base_url"].rstrip("/"))
+    endpoint = (cfg.get("oss_endpoint") or "").replace("https://", "").replace("http://", "").rstrip("/")
+    if cfg.get("oss_bucket") and endpoint:
+        bases.append(f"https://{cfg['oss_bucket']}.{endpoint}")
+    for base in bases:
+        if url.startswith(base + "/"):
+            return url[len(base) + 1 :]
+    return None
+
+
 def _oss_public_url(cfg: dict, key: str) -> str:
     """优先用自定义域名/CDN（oss_base_url），否则用 bucket.endpoint 默认域名。"""
     base = (cfg.get("oss_base_url") or "").rstrip("/")

@@ -42,9 +42,8 @@ const PLAY_MODES: PlayMode[] = ['order', 'shuffle', 'pulse'];
 function isTrack(value: unknown): value is Track {
   if (!value || typeof value !== 'object') return false;
   const track = value as Partial<Track>;
-  return typeof track.id === 'number'
-    && typeof track.title === 'string'
-    && typeof track.audioUrl === 'string';
+  // 目录接口不下发音频地址（版权保护），不能再用 audioUrl 当判据
+  return typeof track.id === 'number' && typeof track.title === 'string';
 }
 
 export function toPersistedQueue(

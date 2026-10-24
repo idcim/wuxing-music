@@ -4,7 +4,8 @@ import audioService from '@/services/audio';
 import { USE_MOCK, MOCK_AUDIO_URL } from '@/constants/env';
 import { resolveUrl } from '@/utils/url';
 import { isPcWechat } from '@/utils/platform';
-import { request } from '@/services/api';
+import { request, ApiError } from '@/services/api';
+import { getPlayUrl } from '@/services/content';
 import { useUserStore } from './user';
 import Taro from '@tarojs/taro';
 import { storage, STORAGE_KEYS } from '@/services/storage';
@@ -45,6 +46,7 @@ interface PlayerStore {
   duration: number;          // 秒，来自音频实际时长（曲目元数据可能为 0）
   buffered: number;          // 已缓冲到第几秒（画二级进度条）
   previewEnded: boolean;     // 试听到点已断流，再次播放需重新加载
+  previewClip: boolean;      // 当前播放的是服务端试听剪辑（到点自然结束，转升级引导而非自动下一首）
   loadError: string;         // 加载失败/超时的可展示原因（空串表示无错）
   retry: () => void;         // 重新加载当前曲目
   timerVal: number | null;   // 睡眠定时分钟数
@@ -130,6 +132,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   duration: 0,
   buffered: 0,
   previewEnded: false,
+  previewClip: false,
   loadError: '',
   timerVal: null,
   showUpgrade: false,
@@ -137,31 +140,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   // 内部：真正加载并播放某曲目
   _start: (track: Track) => {
     loadedTrackId = track.id;
-    // 播放地址按端选副本：
-    // PC 微信只信 16-bit PCM WAV（WebAudio 无 MP3/AAC 解码器）；
-    // 其余端（手机小程序/H5）优先 AAC 副本省流量，回退 16-bit WAV，最后才是母版
-    const src = isPcWechat
-      ? track.playUrl || track.aacUrl || track.audioUrl
-      : track.aacUrl || track.playUrl || track.audioUrl;
-    const url = resolveUrl(src) || (USE_MOCK ? MOCK_AUDIO_URL : '');
-    if (!url) {
-      console.warn('[player] 曲目无音频地址', track.id);
-      clearLoadTimer();
-      audioService.release();
-      set({
-        currentTrack: track,
-        isLoading: false,
-        isPlaying: false,
-        progress: 0,
-        currentTime: 0,
-        buffered: 0,
-        previewEnded: false,
-        loadError: '该曲目暂无音频',
-        duration: track.durationSec || 0
-      });
-      persistPlayerQueue(get().queue, track, get().playMode);
-      return;
-    }
     clearLoadTimer();
     // 加载看门狗：迟迟等不到 canplay 就给用户一句话，
     // 而不是让 spinner 永远转下去（大文件 + 弱网时最容易发生）。
@@ -175,71 +153,74 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       }
     }, LOAD_TIMEOUT_MS);
 
-    audioService.load(
-      url,
-      { title: track.title, epname: track.tag, singer: track.hz },
-      {
-        onPlay: () => {
-          clearLoadTimer();
-          set({ isPlaying: true, isLoading: false, loadError: '' });
-        },
-        onPause: () => set({ isPlaying: false }),
-        onEnded: () => {
-          clearLoadTimer();
-          set({ isPlaying: false, progress: 100 });
-          // 自动续播下一首
-          get().next();
-        },
-        onWaiting: () => set({ isLoading: true }),
-        onCanplay: () => {
-          clearLoadTimer();
-          set({ isLoading: false, loadError: '' });
-        },
-        onError: (err) => {
-          console.error('[audio]', err);
-          clearLoadTimer();
-          // 之前只 console.error，用户面对的是一个永远转的 spinner。
-          // 记下错误让界面能提示并给出重试；微信侧的 errCode/errMsg 一并透出，
-          // 否则「播放不了」没有任何可定位的信息（尤其 PC 微信这类差异平台）。
-          const e = (err ?? {}) as { errCode?: number | string; errMsg?: string };
-          const parts = [
-            e.errCode != null && e.errCode !== '' ? `errCode:${e.errCode}` : '',
-            e.errMsg || ''
-          ].filter(Boolean).join(' ');
+    const callbacks = {
+      onPlay: () => {
+        clearLoadTimer();
+        set({ isPlaying: true, isLoading: false, loadError: '' });
+      },
+      onPause: () => set({ isPlaying: false }),
+      onEnded: () => {
+        clearLoadTimer();
+        set({ isPlaying: false, progress: 100 });
+        // 试听剪辑到点自然结束：转升级引导，不自动切下一首
+        if (get().previewClip) {
+          set({ previewEnded: true, showUpgrade: true });
+          return;
+        }
+        // 自动续播下一首
+        get().next();
+      },
+      onWaiting: () => set({ isLoading: true }),
+      onCanplay: () => {
+        clearLoadTimer();
+        set({ isLoading: false, loadError: '' });
+      },
+      onError: (err?: unknown) => {
+        console.error('[audio]', err);
+        clearLoadTimer();
+        // 之前只 console.error，用户面对的是一个永远转的 spinner。
+        // 记下错误让界面能提示并给出重试；微信侧的 errCode/errMsg 一并透出，
+        // 否则「播放不了」没有任何可定位的信息（尤其 PC 微信这类差异平台）。
+        const e = (err ?? {}) as { errCode?: number | string; errMsg?: string };
+        const parts = [
+          e.errCode != null && e.errCode !== '' ? `errCode:${e.errCode}` : '',
+          e.errMsg || ''
+        ].filter(Boolean).join(' ');
+        set({
+          isPlaying: false,
+          isLoading: false,
+          loadError: `音频加载失败${parts ? `（${parts}）` : ''}`
+        });
+      },
+      onProgress: (bufferedSec: number) => set({ buffered: bufferedSec }),
+      onTimeUpdate: (cur: number, dur: number) => {
+        // isPremium 必须每次实时取：若在 _start 时捕获进闭包，
+        // 用户听着听着开通了会员，仍会被卡在 30 秒试听，直到重新加载曲目。
+        const { isPremium } = useUserStore.getState();
+        const limit = track.previewSec ?? 30;
+        // 试听剪辑本身就是 previewSec 长，这条客户端截断只是双保险
+        if (!isPremium && track.isPremium && cur >= limit) {
+          // 必须 release 而不是 pause：暂停后底层仍会把整个文件缓冲完，
+          // 上百 MB 的 WAV 只听 30 秒试听却把整包拉下来，纯属烧用户流量。
+          audioService.release();
           set({
             isPlaying: false,
             isLoading: false,
-            loadError: `音频加载失败${parts ? `（${parts}）` : ''}`
+            previewEnded: true,
+            showUpgrade: true
           });
-        },
-        onProgress: (bufferedSec) => set({ buffered: bufferedSec }),
-        onTimeUpdate: (cur, dur) => {
-          // isPremium 必须每次实时取：若在 _start 时捕获进闭包，
-          // 用户听着听着开通了会员，仍会被卡在 30 秒试听，直到重新加载曲目。
-          const { isPremium } = useUserStore.getState();
-          const limit = track.previewSec ?? 30;
-          if (!isPremium && track.isPremium && cur >= limit) {
-            // 必须 release 而不是 pause：暂停后底层仍会把整个文件缓冲完，
-            // 上百 MB 的 WAV 只听 30 秒试听却把整包拉下来，纯属烧用户流量。
-            audioService.release();
-            set({
-              isPlaying: false,
-              isLoading: false,
-              previewEnded: true,
-              showUpgrade: true
-            });
-            return;
-          }
-          // duration 以音频实际值为准：聆听历史构造的 Track 其 durationSec 为 0，
-          // 只靠它会让进度条退化成 1 秒（拖一下就到底）。
-          set({
-            currentTime: cur,
-            duration: dur || get().duration,
-            progress: dur ? (cur / dur) * 100 : 0
-          });
+          return;
         }
+        // duration 以音频实际值为准：聆听历史构造的 Track 其 durationSec 为 0，
+        // 只靠它会让进度条退化成 1 秒（拖一下就到底）。
+        set({
+          currentTime: cur,
+          duration: dur || get().duration,
+          progress: dur ? (cur / dur) * 100 : 0
+        });
       }
-    );
+    };
+
     // isPlaying 先置 false：真正开播由 onPlay 事件置位。
     // 之前在这里乐观置 true，缓冲期间波形在跳、唱片在转，而按钮却是 spinner，自相矛盾。
     set({
@@ -250,6 +231,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       currentTime: 0,
       buffered: 0,
       previewEnded: false,
+      previewClip: false,
       loadError: '',
       duration: track.durationSec || 0
     });
@@ -262,6 +244,29 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         auth: true
       }).catch(() => {});
     }
+
+    const meta = { title: track.title, epname: track.tag, singer: track.hz };
+    if (USE_MOCK) {
+      audioService.load(resolveUrl(track.audioUrl || '') || MOCK_AUDIO_URL, meta, callbacks);
+      return;
+    }
+    // 版权保护：目录接口不含音频地址，播放前用曲目 id 换短时效签名地址。
+    // PC 微信只信 16-bit PCM（fmt=wav），其余端优先 AAC 副本。
+    getPlayUrl(track.id, isPcWechat ? 'wav' : 'aac')
+      .then((res) => {
+        // 换地址期间用户可能已经切歌/停止了，别覆盖别人的播放
+        if (loadedTrackId !== track.id) return;
+        set({ previewClip: res.preview });
+        audioService.load(resolveUrl(res.url), meta, callbacks);
+      })
+      .catch((err) => {
+        if (loadedTrackId !== track.id) return;
+        clearLoadTimer();
+        const msg = err instanceof ApiError ? err.message : '音频加载失败';
+        set({ isLoading: false, isPlaying: false, loadError: msg });
+        // 会员专属但没试听剪辑可发时：直接出升级引导
+        if (err instanceof ApiError && err.code === 403) set({ showUpgrade: true });
+      });
   },
 
   play: (track) => {
@@ -396,6 +401,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       duration: 0,
       buffered: 0,
       previewEnded: false,
+      previewClip: false,
       loadError: '',
       timerVal: null
     });

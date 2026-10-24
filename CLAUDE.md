@@ -401,6 +401,8 @@ const top = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
 
 ### 2. 音频播放 `services/audio/`（分端）
 
+- **版权保护（v1.12.0）**：目录接口不下发任何音频地址；播放前 `stores/player.ts::_start` 先调 `GET /api/mp/tracks/{id}/play-url` 换 10 分钟有效的 HMAC 签名 token，再经 `GET /api/mp/stream/{token}` 出流（OSS 302 签名地址 / 本地 Range 流式）。会员曲目对非会员只发 `preview_url` 试听剪辑（管线用 ffmpeg 按 `preview_sec` 生成）——完整文件字节不出服务器。token 即凭证（播放器带不了 Authorization 头）；能播就能被录是物理边界，这层防的是批量爬目录和链接传播。
+
 - 小程序：`Taro.getBackgroundAudioManager()`（**用 BackgroundAudioManager 才能后台/锁屏播放**，`app.config.ts` 已配 `requiredBackgroundModes: ['audio']`）。**PC 微信也走它**——PC 端 InnerAudioContext 是 WebAudio 实现，decodeAudioData 全量读进内存（数百 MB 曲目必炸），且那套 Chromium 不带 MP3/AAC 私有解码器、不支持 24-bit WAV（报 `Unable to decode audio data`），实测 MP3 也挂；BackgroundAudioManager 在 PC 是流式路径，官方标注支持 Windows/Mac。`onError` 的真实回调带 `{errCode, errMsg}`（Taro 类型没声明，用类型断言拿），必须透到 `loadError` 展示，否则平台差异类故障完全无法定位。
 - H5：`index.h5.ts` 对应实现；统一接口见 `types.ts`。
 - `MiniPlayer` 按当前页路由自动定位：四个 TabBar 页面用 `mini-player--tabbar` 保持导航上方，二级页（元素详情/聆听历史等）默认贴底部安全区，不要在页面里各自写死 bottom。
@@ -554,7 +556,9 @@ POST /api/mp/upload             # 用户头像上传（≤5MB）
 GET  /api/mp/membership         # 会员态（含 isPremium）
 POST /api/mp/bind-phone         # 绑定手机号
 POST /api/mp/quiz               # 提交测评（element + scores）
-GET  /api/mp/elements           # 五行 + 曲目（公开免登录）
+GET  /api/mp/elements           # 五行 + 曲目（公开免登录；**不含音频地址**——版权保护）
+GET  /api/mp/tracks/{id}/play-url?fmt=aac|wav  # 换短时效签名播放地址（10 分钟；会员曲目非会员→试听剪辑）
+GET  /api/mp/stream/{token}     # 按 token 出流（OSS 302 签名地址 / 本地 Range 流式）
 GET  /api/mp/plans              # 套餐（公开）
 POST /api/mp/cdkey/redeem       # 兑换码
 GET  /api/mp/pay/purchase-status # 会员售卖开关（公开，仅返回 enabled）
