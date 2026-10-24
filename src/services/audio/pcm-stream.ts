@@ -166,6 +166,8 @@ export function createPcmStreamService(): AudioService {
       const bytePos = wav.dataOffset + Math.floor(fromSec * wav.sampleRate) * frameBytes;
       headers.Range = `bytes=${bytePos}-`;
     }
+    // 防止任何一层给 WAV 加 gzip：压缩过的字节就不是 PCM 了
+    headers['Accept-Encoding'] = 'identity';
     eof = false;
     pending = new Uint8Array(0);
     if (fromSec === 0) {
@@ -191,7 +193,39 @@ export function createPcmStreamService(): AudioService {
         bound.onError?.(err);
       }
     });
-    task.onChunkReceived?.((res: any) => feed(new Uint8Array(res.data)));
+    task.onChunkReceived?.((res: any) => feed(normalizeChunk(res)));
+  }
+
+  // PC 端 onChunkReceived 的数据形态没文档：先记一眼真实形态再解析（实测踩坑位）
+  let chunkLogged = false;
+  function normalizeChunk(res: any): Uint8Array {
+    const data = res?.data ?? res;
+    if (!chunkLogged) {
+      chunkLogged = true;
+      const kind = Array.isArray(data) ? 'array' : typeof data;
+      const head =
+        typeof data === 'string'
+          ? data.slice(0, 32)
+          : data instanceof ArrayBuffer || ArrayBuffer.isView(data)
+            ? Array.from(new Uint8Array(data instanceof ArrayBuffer ? data : data.buffer, data instanceof ArrayBuffer ? 0 : data.byteOffset, 16))
+                .map((b) => b.toString(16).padStart(2, '0'))
+                .join(' ')
+            : '?';
+      logInfo('pcm', `首块形态 type=${kind}ctor=${data?.constructor?.name} len=${data?.byteLength ?? data?.length} head=${head}`);
+    }
+    if (typeof data === 'string') {
+      // 字符串形态按 base64 解（某些端会给 base64）
+      try {
+        return new Uint8Array((Taro as any).base64ToArrayBuffer(data));
+      } catch {
+        return new Uint8Array(0);
+      }
+    }
+    if (data instanceof ArrayBuffer) return new Uint8Array(data);
+    if (ArrayBuffer.isView(data)) {
+      return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+    }
+    return new Uint8Array(0);
   }
 
   function feed(chunk: Uint8Array): void {
