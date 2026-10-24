@@ -93,7 +93,22 @@ export default function Settings() {
       return;
     }
     setTestingAudio(true);
-    logInfo('test', '播放公共测试音频（SoundHelix mp3）');
+    // 直接打 BackgroundAudioManager，不经过分端服务（PC 上服务已换成 PCM 流式，
+    // 只认 WAV，测它测不出 BGM 死活）。诊断目标：这台设备的 BGM 通道是否活着。
+    logInfo('test', 'BGM 通道测试：播放公共测试音频（SoundHelix mp3）');
+    if (isWeapp) {
+      const mgr = Taro.getBackgroundAudioManager();
+      mgr.title = '公共测试音频';
+      mgr.onPlay(() => logInfo('test', 'BGM onPlay ✓'));
+      (mgr.onError as (fn: (res?: unknown) => void) => void)((e) => {
+        logError('test', 'BGM onError ✗', e);
+        setTestingAudio(false);
+      });
+      mgr.onEnded(() => setTestingAudio(false));
+      mgr.onStop(() => setTestingAudio(false));
+      mgr.src = TEST_AUDIO_URL;
+      return;
+    }
     audioService.load(TEST_AUDIO_URL, { title: '公共测试音频' }, {
       onPlay: () => logInfo('test', 'onPlay ✓ 这台设备能放远程音频'),
       onError: (e) => {

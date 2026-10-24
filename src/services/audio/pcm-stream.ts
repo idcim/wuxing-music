@@ -263,6 +263,7 @@ export function createPcmStreamService(): AudioService {
       startCtxTime = c.currentTime;
       nextScheduleTime = c.currentTime + 0.1;
       currentUrl = url;
+      chunkLogged = false;   // 每首重新记首块形态
       startTicker();
       logInfo('pcm', `load ${meta.title}`);
       openStream(url, 0);
