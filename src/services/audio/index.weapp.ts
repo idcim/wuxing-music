@@ -1,7 +1,7 @@
 import Taro from '@tarojs/taro';
 import type { AudioService, AudioCallbacks, AudioMeta } from './types';
 import { siteName } from '@/stores/site';
-import { logInfo, logError } from '@/utils/logger';
+import { logError } from '@/utils/logger';
 
 // BackgroundAudioManager 为全局单例，支持锁屏/后台继续播放。
 // 注意：title 必填，否则 src 赋值会报错。
@@ -25,10 +25,7 @@ function getMgr(): Taro.BackgroundAudioManager {
 function bindOnce(m: Taro.BackgroundAudioManager): void {
   if (listening) return;
   listening = true;
-  m.onPlay(() => {
-    logInfo('audio', 'onPlay');
-    bound.onPlay?.();
-  });
+  m.onPlay(() => bound.onPlay?.());
   m.onPause(() => bound.onPause?.());
   m.onStop(() => bound.onStop?.());
   m.onEnded(() => bound.onEnded?.());
@@ -54,9 +51,6 @@ const service: AudioService = {
     const m = getMgr();
     bound = callbacks;
     bindOnce(m);
-    // 只记域名不记签名参数（签名地址十分钟就过期，记全文没意义）
-    const host = url.startsWith('http') ? new URL(url).host : url.slice(0, 40);
-    logInfo('audio', `load ${meta.title} @ ${host}`);
 
     // title 必须先于 src 设置
     m.title = meta.title;

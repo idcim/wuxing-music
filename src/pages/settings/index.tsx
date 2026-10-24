@@ -6,8 +6,6 @@ import { APP_VERSION } from '@/constants/version';
 import { STORAGE_KEYS } from '@/services/storage';
 import { cancelAccount } from '@/services/user';
 import { logsToText } from '@/utils/logger';
-import audioService from '@/services/audio';
-import { logInfo, logError } from '@/utils/logger';
 import { usePlayerStore } from '@/stores/player';
 import { useUserStore } from '@/stores/user';
 import { isWeapp } from '@/utils/platform';
@@ -45,79 +43,10 @@ export default function Settings() {
   const [version, setVersion] = useState(APP_VERSION);
   const [cancelling, setCancelling] = useState(false);
   const [diagOpen, setDiagOpen] = useState(false);
-  const [testingAudio, setTestingAudio] = useState(false);
 
   const copyLogs = async () => {
     await Taro.setClipboardData({ data: logsToText() || '暂无日志' });
     Taro.showToast({ title: '已复制', icon: 'success' });
-  };
-
-  // 播放公认公共测试音频：确认「这台设备能不能放任何远程音频」，
-  // 与我们自己的文件/签名/格式完全解耦。直接用音频服务（会顶掉正在播的曲子，
-  // 下次点播放会重新绑定，无残留）。
-  const TEST_AUDIO_URL = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3';
-  // WebAudio 蜂鸣测试：纯合成音，不走网络、不走解码器、不走媒体组件。
-  // 它能响 = PC 端可以用「分块 PCM + WebAudio 调度」做不依赖 H5 的原生播放。
-  const onTestWebAudio = () => {
-    logInfo('test', 'WebAudio 振荡器测试（纯合成音，1 秒蜂鸣）');
-    try {
-      if (isWeapp) {
-        const ctx = (Taro as any).createWebAudioContext();
-        const osc = ctx.createOscillator();
-        osc.frequency.value = 440;
-        osc.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 1);
-        logInfo('test', `WebAudio 已启动 state=${ctx.state}（没听到声音=这条路也不通）`);
-      } else {
-        const w = window as any;
-        const Ctx = w.AudioContext || w.webkitAudioContext;
-        const ctx = new Ctx();
-        const osc = ctx.createOscillator();
-        osc.frequency.value = 440;
-        osc.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 1);
-        logInfo('test', `WebAudio 已启动 state=${ctx.state}`);
-      }
-    } catch (e) {
-      logError('test', 'WebAudio 不可用', e);
-    }
-  };
-
-  const onTestAudio = () => {
-    if (testingAudio) {
-      audioService.stop();
-      setTestingAudio(false);
-      logInfo('test', '手动停止测试音频');
-      return;
-    }
-    setTestingAudio(true);
-    // 直接打 BackgroundAudioManager，不经过分端服务（PC 上服务已换成 PCM 流式，
-    // 只认 WAV，测它测不出 BGM 死活）。诊断目标：这台设备的 BGM 通道是否活着。
-    logInfo('test', 'BGM 通道测试：播放公共测试音频（SoundHelix mp3）');
-    if (isWeapp) {
-      const mgr = Taro.getBackgroundAudioManager();
-      mgr.title = '公共测试音频';
-      mgr.onPlay(() => logInfo('test', 'BGM onPlay ✓'));
-      (mgr.onError as (fn: (res?: unknown) => void) => void)((e) => {
-        logError('test', 'BGM onError ✗', e);
-        setTestingAudio(false);
-      });
-      mgr.onEnded(() => setTestingAudio(false));
-      mgr.onStop(() => setTestingAudio(false));
-      mgr.src = TEST_AUDIO_URL;
-      return;
-    }
-    audioService.load(TEST_AUDIO_URL, { title: '公共测试音频' }, {
-      onPlay: () => logInfo('test', 'onPlay ✓ 这台设备能放远程音频'),
-      onError: (e) => {
-        logError('test', 'onError ✗ 连公共测试音频都放不了', e);
-        setTestingAudio(false);
-      },
-      onEnded: () => setTestingAudio(false),
-      onStop: () => setTestingAudio(false)
-    });
   };
 
   useDidShow(() => {
@@ -231,14 +160,6 @@ export default function Settings() {
             </ScrollView>
             <View className="settings__diag-copy" onClick={copyLogs}>
               <Text className="settings__diag-copy-text">复制全部</Text>
-            </View>
-            <View className="settings__diag-copy" onClick={onTestAudio}>
-              <Text className="settings__diag-copy-text">
-                {testingAudio ? '停止测试音频' : '播放测试音频（公共 MP3）'}
-              </Text>
-            </View>
-            <View className="settings__diag-copy" onClick={onTestWebAudio}>
-              <Text className="settings__diag-copy-text">WebAudio 蜂鸣测试</Text>
             </View>
           </View>
         </View>

@@ -32,22 +32,6 @@ const fmtRetried = new Map<number, 'aac' | 'wav'>();
 // 已真正开播过的曲目：之后的零星 error（缓冲抖动等）不再把界面打成失败，
 // 播放真停了会有 onStop/onPause 来接管状态（实测 PC 上 onPlay 后还会吐 10004）
 const playedTracks = new Set<number>();
-let envLogged = false;
-
-// 平台与基础库版本只记一次——PC 兼容性问题的第一嫌疑人就是它
-function logEnvOnce(): void {
-  if (envLogged) return;
-  envLogged = true;
-  try {
-    const info = Taro.getDeviceInfo ? Taro.getDeviceInfo() : Taro.getSystemInfoSync();
-    // 微信客户端版本在 getAppBaseInfo 里，getDeviceInfo 没有
-    const app = Taro.getAppBaseInfo ? Taro.getAppBaseInfo() : ({} as any);
-    logInfo(
-      'env',
-      `platform=${info.platform} 基础库=${(info as any).SDKVersion || '?'} 微信=${(app as any).version || '?'}`
-    );
-  } catch { /* 拿不到就算了 */ }
-}
 
 // 加载看门狗：超过这个时间还没 canplay，就认定为「慢/卡住」并提示用户
 const LOAD_TIMEOUT_MS = 15000;
@@ -306,16 +290,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     // 全端优先 AAC 副本（省流量；BGM 在 PC 微信实测可播 AAC/MP3）；
     // 解码失败时 onError 里自动换另一种格式重试一次，再失败 PC 落 H5 播放页。
     const fmt = fmtRetried.get(track.id) ?? 'aac';
-    logEnvOnce();
-    logInfo('play', `#${track.id} ${track.title} 签发请求 fmt=${fmt}`);
     getPlayUrl(track.id, fmt)
       .then((res) => {
         // 换地址期间用户可能已经切歌/停止了，别覆盖别人的播放
         if (loadedTrackId !== track.id) return;
         playFmtByTrack.set(track.id, { fmt, format: res.format });
-        // 签发结果只记形态不记地址本体（签名地址有时效，记了也没用）
-        const host = res.url.startsWith('http') ? new URL(res.url).host : 'local-token';
-        logInfo('play', `#${track.id} 签发 format=${res.format} preview=${res.preview} 地址=${host}`);
         set({ previewClip: res.preview });
         audioService.load(resolveUrl(res.url), meta, callbacks);
       })
