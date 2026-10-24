@@ -164,6 +164,40 @@ def _fix_commission_index() -> None:
             logger.warning("建立 commission.order_id 普通索引失败：%s", e)
 
 
+def _fix_cancelled_tombstones() -> None:
+    """已注销账号的合并墓碑行还占着原 openid，本人重新注册 INSERT 会撞唯一键
+    （线上实测 1062 ix_user_openid）。启动时把这类墓碑的 openid 释放掉。
+    幂等：释放过的行 openid 已是 deleted: 前缀，每次启动空转。"""
+    import uuid as _uuid
+
+    from app.models import User
+    from app.user_merge import resolve_user
+
+    db = SessionLocal()
+    try:
+        tombs = (
+            db.query(User)
+            .filter(User.merged_into.isnot(None), ~User.openid.startswith("deleted:"))
+            .all()
+        )
+        fixed = 0
+        for t in tombs:
+            keeper = db.query(User).filter(User.id == t.merged_into).first()
+            keeper = resolve_user(db, keeper)
+            # 存活链终点已注销（或行没了）：墓碑的 openid 再没有解析价值，释放
+            if keeper is None:
+                t.openid = f"deleted:{t.id}:{_uuid.uuid4().hex[:8]}"
+                fixed += 1
+        if fixed:
+            db.commit()
+            logger.info("迁移：释放已注销账号墓碑占用的 openid %s 条", fixed)
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        logger.warning("墓碑 openid 迁移失败（可忽略）：%s", e)
+    finally:
+        db.close()
+
+
 def _guard_jwt_secret() -> None:
     """JWT 密钥守卫：默认占位密钥可被伪造 token 接管全站。
     生产（debug=false）仍用默认值则拒绝启动；开发态仅告警。"""
@@ -198,6 +232,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     _auto_migrate()
     _fix_commission_index()   # 一单两条分成后，order_id 不能再是单列唯一
+    _fix_cancelled_tombstones()
     db = SessionLocal()
     try:
         seed(db)

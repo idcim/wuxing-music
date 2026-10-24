@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, Up
 from fastapi.responses import JSONResponse, RedirectResponse
 from jose import JWTError, jwt
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import agent_service, ratelimit, refund_service, sms, storage, streaming, wxpay
@@ -238,7 +239,16 @@ def mp_login(body: LoginIn, db: Session = Depends(get_db)):
             avatar=body.avatar,
         )
         db.add(user)
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            # openid 唯一键兜底：并发双击登录 / 历史墓碑残留等任何「查询没认出来
+            # 但库里已存在」的情况，回滚后重新解析一次而不是把 500 甩给用户
+            db.rollback()
+            logger.warning("注册撞 openid 唯一键，改为重新解析：%s", openid)
+            user = resolve_login(db, unionid, openid=openid)
+            if not user:
+                raise HTTPException(status_code=409, detail="账号状态异常，请联系客服处理")
         db.refresh(user)
     else:
         changed = False

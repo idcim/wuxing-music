@@ -42,6 +42,13 @@ def deactivate_user(db: Session, user: User) -> None:
     if agent and agent.status == "active":
         agent.status = "disabled"
 
+    # 并入本账号的墓碑行必须连坐释放 openid：墓碑刻意保留原 openid 供旧端登录解析，
+    # 但注销后本人重新注册会 INSERT 同一个 openid，撞上唯一键（线上实测 1062）。
+    # 注销意味着账号体系里此人已不存在，旧端解析没有保留意义。
+    for tomb in db.query(User).filter(User.merged_into == user.id).all():
+        if not tomb.openid.startswith("deleted:"):
+            tomb.openid = f"deleted:{tomb.id}:{uuid.uuid4().hex[:8]}"
+
     user.deleted_at = datetime.utcnow()
     user.openid = f"deleted:{user.id}:{uuid.uuid4().hex[:8]}"
     user.unionid = ""

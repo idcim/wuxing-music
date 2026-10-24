@@ -12,6 +12,9 @@
 
 **行不删除**：被合并的一方留在库里并打上 `merged_into` 指针，登录与鉴权时跟着
 指针走。删行会让历史订单指向一个不存在的 user_id，出了争议无从追溯。
+墓碑行保留原 openid 供旧端登录解析；但 keeper 一旦被注销，墓碑 openid 会连坐释放
+（`user_delete.deactivate_user`）——否则本人重新注册 INSERT 撞 openid 唯一键（1062）。
+存量墓碑由 `main.py::_fix_cancelled_tombstones` 启动时幂等清理。
 """
 
 import json
