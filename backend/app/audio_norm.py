@@ -199,9 +199,24 @@ def _convert_oss_stream(cfg: dict, oss_key: str, url: str) -> None:
 AAC_BITRATE = "192k"
 
 
+def _encode_wav16_ffmpeg(src_path: str, dst_path: str) -> None:
+    """非 WAV 母版（mp3/m4a）→ 16-bit PCM WAV。PC 微信的 WebAudio 只解得了 PCM，
+    MP3 母版的曲目也要有一条 PCM 副本才放得了。"""
+    import subprocess
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RuntimeError("no-ffmpeg")
+    r = subprocess.run(
+        [ffmpeg, "-y", "-i", src_path, "-f", "wav", "-acodec", "pcm_s16le", dst_path],
+        capture_output=True, timeout=1800,
+    )
+    if r.returncode != 0 or not os.path.exists(dst_path) or os.path.getsize(dst_path) == 0:
+        tail = r.stderr.decode("utf-8", "ignore")[-200:] if r.stderr else ""
+        raise RuntimeError(f"ffmpeg 转 PCM 失败：{tail}")
+
+
 def _encode_aac(src_path: str, dst_path: str, bitrate: str = AAC_BITRATE, clip_sec: int = 0) -> None:
-    """ffmpeg 转 AAC(m4a)，faststart 便于流式起播；clip_sec>0 时只取前 N 秒（试听剪辑）。
-    没有 ffmpeg 抛 no-ffmpeg（调用方降级跳过）。"""
     import subprocess
 
     ffmpeg = shutil.which("ffmpeg")
@@ -290,7 +305,9 @@ def process_track(db, cfg: dict, track: Track, dry: bool = False) -> str:
 
     is_wav = url.lower().endswith(".wav")
     key_noext = os.path.splitext(key)[0]
-    wav16_key = f"play/{key}"
+    # 非 WAV 母版（mp3/m4a）的 PCM 副本必须是 .wav 后缀（内容与后缀一致，
+    # Content-Type 才猜得对）
+    wav16_key = f"play/{key}" if is_wav else f"play/{key_noext}.wav"
     aac_key = f"aac/{key_noext}.m4a"
     preview_key = f"prev/{key_noext}.m4a"
 
@@ -304,6 +321,7 @@ def process_track(db, cfg: dict, track: Track, dry: bool = False) -> str:
     stages: list[str] = []
     if local_master and provider == "oss":
         stages.append("master")
+    ffmpeg_ok = bool(shutil.which("ffmpeg"))
     need_wav16 = False
     if is_wav and not track.play_url:
         # 头部探测：本地直读；OSS 只拉前 64KB
@@ -326,7 +344,13 @@ def process_track(db, cfg: dict, track: Track, dry: bool = False) -> str:
         need_wav16 = bool(info["format"] == 1 and info["bits"] == 24)
         if need_wav16:
             stages.append("wav16")
-    ffmpeg_ok = bool(shutil.which("ffmpeg"))
+        elif info["bits"] == 16 and not track.play_url:
+            # 母版本身就是 16-bit PCM（早期覆盖式转换那批）——无需再生成副本，
+            # 但要把 play_url 标成母版自己，否则列表/PC 选路永远当它没 PCM 版本
+            stages.append("pcm-mark")
+    # PC 微信只解得了 PCM：非 WAV 母版（mp3/m4a）也要出一条 wav16 副本
+    if not is_wav and not track.play_url and ffmpeg_ok:
+        stages.append("wav16")
     if not track.aac_url and ffmpeg_ok:
         stages.append("aac")
     # 会员曲目的试听剪辑：非会员只能拿到这一段（版权保护，见 app/streaming.py）
@@ -354,6 +378,11 @@ def process_track(db, cfg: dict, track: Track, dry: bool = False) -> str:
         except RuntimeError as e:
             return f"error:{e}"
 
+        # ── 母版已是 16-bit PCM：只打标，不产生新文件 ──
+        if "pcm-mark" in stages:
+            track.play_url = track.audio_url
+            done.append("pcm-mark")
+
         # 各阶段互相隔离：一个失败不影响其它的落库（实测 AAC 失败曾把
         # 已完成的 16-bit 副本标记回滚掉）
 
@@ -362,14 +391,22 @@ def process_track(db, cfg: dict, track: Track, dry: bool = False) -> str:
             try:
                 if provider == "oss":
                     out16 = os.path.join(tmpdir, "w16.wav")
-                    _convert_local_stream(src, out16)
+                    if is_wav:
+                        _convert_local_stream(src, out16)
+                    else:
+                        # MP3/M4A 母版：ffmpeg 解码出 PCM（PC 微信唯一可播的形态）
+                        _encode_wav16_ffmpeg(src, out16)
                     _upload_oss(cfg, wav16_key, out16)
                 else:
                     # 本地存储直接写目标目录（_convert_local_stream 内部同目录临时文件 +
                     # 原子改名，os.replace 跨挂载点会失败，不能先写 /tmp 再搬）
                     dest = _dest_path(wav16_key)
                     os.makedirs(os.path.dirname(dest), exist_ok=True)
-                    _convert_local_stream(src, dest)
+                    if is_wav:
+                        _convert_local_stream(src, dest)
+                    else:
+                        _encode_wav16_ffmpeg(src, dest + ".part")
+                        os.replace(dest + ".part", dest)
                 track.play_url = _dest_url(wav16_key)
                 done.append("wav16")
             except Exception as e:  # noqa: BLE001

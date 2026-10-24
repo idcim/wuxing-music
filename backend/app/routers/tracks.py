@@ -49,8 +49,9 @@ def _process_state(t: Track, norm: dict) -> str:
         return "processing"
     if not t.audio_url:
         return "pending"
-    is_wav = t.audio_url.lower().endswith(".wav")
-    needs = (is_wav and not t.play_url) or not t.aac_url or (t.is_premium and not t.preview_url)
+    # 就绪口径：AAC 副本 + （会员曲目的试听剪辑）+ PCM 版本（play_url；
+    # 母版本身是 16-bit 时管线会把 play_url 标成母版，见 audio_norm 的 pcm-mark 阶段）
+    needs = not t.aac_url or (t.is_premium and not t.preview_url) or not t.play_url
     return "pending" if needs else "ready"
 
 
