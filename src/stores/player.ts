@@ -303,9 +303,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       return;
     }
     // 版权保护：目录接口不含音频地址，播放前用曲目 id 换短时效签名地址。
-    // PC 微信走 InnerAudioContext + 只有 PCM 可解（fmt=wav，不回退 AAC）；
-    // 其余端优先 AAC 副本省流量；解码失败时 onError 里自动换另一种格式重试一次。
-    const fmt = fmtRetried.get(track.id) ?? (isPcWechat ? 'wav' : 'aac');
+    // 全端优先 AAC 副本（省流量；BGM 在 PC 微信实测可播 AAC/MP3）；
+    // 解码失败时 onError 里自动换另一种格式重试一次，再失败 PC 落 H5 播放页。
+    const fmt = fmtRetried.get(track.id) ?? 'aac';
     logEnvOnce();
     logInfo('play', `#${track.id} ${track.title} 签发请求 fmt=${fmt}`);
     getPlayUrl(track.id, fmt)
