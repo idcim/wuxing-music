@@ -18,7 +18,7 @@ def _enqueue_audio_pipeline(track: Track) -> None:
         audio_norm.enqueue(track.id)
 
 
-def _to_dict(t: Track) -> dict:
+def _to_dict(t: Track, norm: dict | None = None) -> dict:
     return {
         "id": t.id,
         "element_id": t.element_id,
@@ -35,8 +35,22 @@ def _to_dict(t: Track) -> dict:
         "is_premium": t.is_premium,
         "preview_sec": t.preview_sec,
         "is_online": t.is_online,
+        "process_state": _process_state(t, norm or {}),
         "sort": t.sort,
     }
+
+
+def _process_state(t: Track, norm: dict) -> str:
+    """处理状态（与上架状态正交）：
+    processing=在队列或处理中；pending=音频未传或副本未齐；ready=副本就绪。
+    「缺什么副本算没处理完」的口径与 audio_norm 管线一致。"""
+    if t.id in (norm.get("queuedIds") or []) or norm.get("currentId") == t.id:
+        return "processing"
+    if not t.audio_url:
+        return "pending"
+    is_wav = t.audio_url.lower().endswith(".wav")
+    needs = (is_wav and not t.play_url) or not t.aac_url or (t.is_premium and not t.preview_url)
+    return "pending" if needs else "ready"
 
 
 @router.get("")
@@ -57,7 +71,8 @@ def list_tracks(
         .limit(size)
         .all()
     )
-    return ok({"total": total, "items": [_to_dict(t) for t in rows]})
+    norm = audio_norm.status()
+    return ok({"total": total, "items": [_to_dict(t, norm) for t in rows]})
 
 
 @router.post("")

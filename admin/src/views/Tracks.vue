@@ -46,11 +46,12 @@
           >处理</el-button>
         </template>
       </el-table-column>
-      <el-table-column label="上架" width="80">
+      <el-table-column label="状态" width="90">
         <template #default="{ row }">
-          <el-tag :type="row.is_online ? 'success' : 'info'" size="small">
-            {{ row.is_online ? '上架' : '下架' }}
-          </el-tag>
+          <el-tag v-if="!row.is_online" type="info" size="small">下架</el-tag>
+          <el-tag v-else-if="row.process_state === 'processing'" type="warning" size="small">处理中</el-tag>
+          <el-tag v-else-if="row.process_state === 'pending'" size="small" effect="plain">待处理</el-tag>
+          <el-tag v-else type="success" size="small">已上架</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="160" fixed="right">

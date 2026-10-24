@@ -24,19 +24,22 @@
     <el-container>
       <el-header class="layout__header">
         <span class="layout__title">{{ route.meta.title || '' }}</span>
-        <el-dropdown @command="onCommand">
-          <span class="layout__user">
-            {{ auth.nickname || '管理员' }}
-            <el-tag v-if="auth.isSuper" size="small" type="danger" effect="plain">超管</el-tag>
-            <el-tag v-else-if="auth.roleName" size="small" effect="plain">{{ auth.roleName }}</el-tag>
-            <el-icon><ArrowDown /></el-icon>
-          </span>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="logout">退出登录</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <div class="layout__right">
+          <NotifyBell />
+          <el-dropdown @command="onCommand">
+            <span class="layout__user">
+              {{ auth.nickname || '管理员' }}
+              <el-tag v-if="auth.isSuper" size="small" type="danger" effect="plain">超管</el-tag>
+              <el-tag v-else-if="auth.roleName" size="small" effect="plain">{{ auth.roleName }}</el-tag>
+              <el-icon><ArrowDown /></el-icon>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
       </el-header>
       <el-main class="layout__main">
         <router-view />
@@ -51,6 +54,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useSiteStore } from '@/stores/site';
 import { NAV_MAIN, NAV_AGENT, NAV_SYSTEM } from '@/menu';
+import NotifyBell from '@/components/NotifyBell.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -101,6 +105,7 @@ function onCommand(cmd: string) {
   border-bottom: 1px solid #eee;
 }
 .layout__title { font-size: 16px; font-weight: 500; }
+.layout__right { display: flex; align-items: center; gap: 16px; }
 .layout__user { cursor: pointer; display: flex; align-items: center; gap: 4px; color: #555; }
 .layout__main { background: #f5f7fa; }
 </style>
