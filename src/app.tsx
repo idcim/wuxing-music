@@ -54,6 +54,12 @@ async function bootstrapAuth(): Promise<void> {
   }
 
   if (isH5 && isInWeChat && !getToken()) {
+    // web-view 内嵌的 H5 极简播放页不做静默授权：webview 里 UA 带 micromessenger
+    // 会被误判成公众号浏览器，而授权域名不在业务域名里会被直接拦死（实测）
+    if (typeof window !== 'undefined' && window.location.hash.includes('h5play')) {
+      await useUserStore.getState().initFromCache();
+      return;
+    }
     try {
       const { user, devGuest } = await useUserStore.getState().loginByWechatH5();
       // user 为 null 表示正在跳转授权页，页面即将卸载，无需继续

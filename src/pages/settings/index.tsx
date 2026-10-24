@@ -56,6 +56,35 @@ export default function Settings() {
   // 与我们自己的文件/签名/格式完全解耦。直接用音频服务（会顶掉正在播的曲子，
   // 下次点播放会重新绑定，无残留）。
   const TEST_AUDIO_URL = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3';
+  // WebAudio 蜂鸣测试：纯合成音，不走网络、不走解码器、不走媒体组件。
+  // 它能响 = PC 端可以用「分块 PCM + WebAudio 调度」做不依赖 H5 的原生播放。
+  const onTestWebAudio = () => {
+    logInfo('test', 'WebAudio 振荡器测试（纯合成音，1 秒蜂鸣）');
+    try {
+      if (isWeapp) {
+        const ctx = (Taro as any).createWebAudioContext();
+        const osc = ctx.createOscillator();
+        osc.frequency.value = 440;
+        osc.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 1);
+        logInfo('test', `WebAudio 已启动 state=${ctx.state}（没听到声音=这条路也不通）`);
+      } else {
+        const w = window as any;
+        const Ctx = w.AudioContext || w.webkitAudioContext;
+        const ctx = new Ctx();
+        const osc = ctx.createOscillator();
+        osc.frequency.value = 440;
+        osc.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 1);
+        logInfo('test', `WebAudio 已启动 state=${ctx.state}`);
+      }
+    } catch (e) {
+      logError('test', 'WebAudio 不可用', e);
+    }
+  };
+
   const onTestAudio = () => {
     if (testingAudio) {
       audioService.stop();
@@ -192,6 +221,9 @@ export default function Settings() {
               <Text className="settings__diag-copy-text">
                 {testingAudio ? '停止测试音频' : '播放测试音频（公共 MP3）'}
               </Text>
+            </View>
+            <View className="settings__diag-copy" onClick={onTestWebAudio}>
+              <Text className="settings__diag-copy-text">WebAudio 蜂鸣测试</Text>
             </View>
           </View>
         </View>
