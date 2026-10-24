@@ -1087,21 +1087,21 @@ def mp_play_url(track_id: int, request: Request, fmt: str = "aac", db: Session =
         actual = "aac"
     else:
         actual = "master"
-    # OSS 对象直接回签名地址，不再经过 /stream 的 302 跳转——PC 微信的媒体栈对
-    # 302 跟随支持存疑（实测跳转后报 Format error），少一跳最稳。签名地址本身
-    # 就带 10 分钟过期，保护水位不变。本地存储（无签名能力）才走 token 路径。
+    if not resolved:
+        raise HTTPException(status_code=404, detail="音频不存在")
+    # OSS 对象直接回原始地址。曾经先 302 跳签名地址、再改直签——PC 微信的媒体栈
+    # 对超长签名 URL 也会报 Format error（社区有同病例），而当前桶是公共可读，
+    # 签名并没有实际增益；版权保护由「目录不下发地址」承担。桶改私有时必须改回
+    # sign_url 直签并回归验证 PC 播放。本地存储走 /stream token 路径。
     if resolved.startswith("http"):
         cfg = storage.get_storage_cfg(db)
-        key = storage.oss_key_from_url(cfg, resolved)
-        if not key:
+        if not storage.oss_key_from_url(cfg, resolved):
             raise HTTPException(status_code=404, detail="音频地址无效")
-        bucket = storage._oss_bucket(cfg)
-        signed = bucket.sign_url("GET", key, streaming.TOKEN_TTL, slash_safe=True)
         return ok({
-            "url": signed,
+            "url": resolved,
             "preview": rendition == streaming.RENDITION_PREVIEW,
             "format": actual,
-            "expiresIn": streaming.TOKEN_TTL,
+            "expiresIn": 0,
         })
 
     token = streaming.sign_stream_token(track.id, rendition, chosen, uid=str(user.id) if user else "")

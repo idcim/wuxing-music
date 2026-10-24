@@ -27,7 +27,7 @@ let loadedTrackId: number | null = null;
 // 解码失败时据此换另一种格式重试
 const playFmtByTrack = new Map<number, { fmt: string; format?: string }>();
 // 每曲目每会话只自动换格式重试一次（防死循环）；值为下次要用的 fmt
-const fmtRetried = new Map<number, string>();
+const fmtRetried = new Map<number, 'aac' | 'wav'>();
 // 已真正开播过的曲目：之后的零星 error（缓冲抖动等）不再把界面打成失败，
 // 播放真停了会有 onStop/onPause 来接管状态（实测 PC 上 onPlay 后还会吐 10004）
 const playedTracks = new Set<number>();
@@ -209,7 +209,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         // AAC 在 PC 微信的 BGM 上实测可播，与 wav16 互为备份
         const info = playFmtByTrack.get(track.id);
         if (!fmtRetried.has(track.id)) {
-          const next = info?.fmt === 'aac' ? 'wav' : 'aac';
+          const next: 'aac' | 'wav' = info?.fmt === 'aac' ? 'wav' : 'aac';
           fmtRetried.set(track.id, next);
           logInfo('play', `#${track.id} ${info?.format || info?.fmt} 失败，换 ${next} 重试`);
           get()._start(track);
