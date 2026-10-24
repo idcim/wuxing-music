@@ -4,6 +4,8 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from pydantic import BaseModel
+
 from app import refund_service, wxpay
 from app.database import get_db
 from app.models import Admin, Order, Setting, User
@@ -207,3 +209,38 @@ def sync_refund(
         return ok({**_to_dict(o), "refund_state": "PROCESSING"})
     # ABNORMAL / CLOSED / 其它
     raise HTTPException(status_code=400, detail=f"微信退款状态为 {state}，请到商户平台核查")
+
+
+# ── 无效订单清理 ──
+class CleanupIn(BaseModel):
+    confirm: bool = False
+
+
+# 只有从未成交的订单才允许清掉；已支付/退款中/已退款是财务凭证，受监管要保留
+_CLEANABLE = ("pending", "failed", "closed")
+
+
+@router.post("/cleanup")
+def cleanup_orders(
+    body: CleanupIn,
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(require_perm("orders:delete")),
+):
+    """清理无效订单（预检 + 确认两段式，与清理测试账号同构）。
+    只清从未付款的 pending/failed/closed——已支付与已退款订单一律保留。"""
+    rows = db.query(Order).filter(Order.status.in_(_CLEANABLE)).order_by(Order.id).all()
+    sample = [
+        {"id": o.id, "order_no": o.order_no, "plan_name": o.plan_name,
+         "amount": o.amount, "status": o.status,
+         "created_at": o.created_at.isoformat() if o.created_at else None}
+        for o in rows[:10]
+    ]
+    if not body.confirm:
+        return ok({"candidates": len(rows), "sample": sample, "deleted": 0})
+    n = 0
+    for o in rows:
+        db.delete(o)
+        n += 1
+    db.commit()
+    logger.info("清理无效订单：admin=%s deleted=%s", admin.username, n)
+    return ok({"candidates": len(rows), "sample": sample, "deleted": n})

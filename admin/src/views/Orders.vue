@@ -10,6 +10,7 @@
         <el-option label="已关闭" value="closed" />
       </el-select>
       <el-button :icon="Search" @click="reload">查询</el-button>
+      <el-button v-if="canCleanup" plain type="warning" @click="onCleanup">清理无效订单</el-button>
     </div>
 
     <el-table :data="rows" v-loading="loading" border>
@@ -111,10 +112,15 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { onMounted, computed, reactive, ref } from 'vue';
 import { Search } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { listOrders, refundOrder, confirmRefund, syncRefund, getOrder } from '@/api';
+import { listOrders, refundOrder, confirmRefund, syncRefund, getOrder, cleanupOrders } from '@/api';
+import { useAuthStore } from '@/stores/auth';
+
+const auth = useAuthStore();
+// 清理无效订单是删除动作，单独授权（与退款分开）
+const canCleanup = computed(() => auth.can('orders:delete'));
 
 const rows = ref<any[]>([]);
 const total = ref(0);
@@ -155,6 +161,31 @@ async function copyTxid() {
   } catch {
     ElMessage.warning('复制失败，请手动选择复制');
   }
+}
+
+// 清理无效订单（预检 → 确认），只清从未付款的；已支付/已退款是财务凭证不动
+async function onCleanup() {
+  const preview = await cleanupOrders(false);
+  if (!preview.candidates) {
+    ElMessage.info('没有可清理的无效订单');
+    return;
+  }
+  const sample = preview.sample
+    .map((o: any) => `${o.order_no} · ${o.plan_name} · ¥${o.amount} · ${statusText(o.status)}`)
+    .join('\n');
+  try {
+    await ElMessageBox.confirm(
+      `发现 ${preview.candidates} 笔从未付款的订单（待支付/失败/已关闭），将物理删除。\n` +
+      `已支付和已退款的订单不受影响。\n\n样例：\n${sample}`,
+      '清理无效订单',
+      { type: 'warning', confirmButtonText: '确认清理', confirmButtonClass: 'el-button--danger' }
+    );
+  } catch {
+    return;
+  }
+  const res = await cleanupOrders(true);
+  ElMessage.success(`已清理 ${res.deleted} 笔无效订单`);
+  load();
 }
 
 async function load() {

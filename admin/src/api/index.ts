@@ -36,6 +36,8 @@ export const getOrder = (id: number) => req.get(`/api/admin/orders/${id}`);
 export const refundOrder = (id: number, data: any) => req.post(`/api/admin/orders/${id}/refund`, data);
 export const confirmRefund = (id: number) => req.post(`/api/admin/orders/${id}/refund/confirm`);
 export const syncRefund = (id: number) => req.post(`/api/admin/orders/${id}/refund/sync`);
+// 无效订单清理：confirm=false 预检，true 才删（只清未付款的 pending/failed/closed）
+export const cleanupOrders = (confirm: boolean) => req.post('/api/admin/orders/cleanup', { confirm });
 
 // 音频兼容归一：全量扫描 / 单曲目处理（后台线程执行，GET 轮询进度）
 export const normalizeAudio = () => req.post('/api/admin/tracks/normalize-audio');

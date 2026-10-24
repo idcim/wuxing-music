@@ -62,6 +62,7 @@ PERMISSION_GROUPS: list[dict] = [
         "items": [
             {"key": "orders:view", "label": "查看"},
             {"key": "orders:refund", "label": "发起 / 确认退款"},
+            {"key": "orders:delete", "label": "清理无效订单"},
         ],
     },
     {
