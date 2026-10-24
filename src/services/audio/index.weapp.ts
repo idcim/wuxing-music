@@ -2,32 +2,15 @@ import Taro from '@tarojs/taro';
 import type { AudioService, AudioCallbacks, AudioMeta } from './types';
 import { siteName } from '@/stores/site';
 import { logInfo, logError } from '@/utils/logger';
-import { createPcmStreamService } from './pcm-stream';
 
-// 端选择：
-// - 手机（iOS/Android）：BackgroundAudioManager（后台/锁屏播放靠它）
-// - PC 微信（Windows/Mac）：流式 PCM 播放器（pcm-stream.ts）。PC 的 BGM/媒体元素
-//   实测坏死（假 onPlay + 10004，连公共测试 MP3 都起不来），InnerAudioContext 走
-//   decodeAudioData 整文件解码也撑不住大文件；PCM 流式这条路不碰任何坏组件、
-//   不需要解码器、边下边播（实测该端 WebAudio 蜂鸣可用）。
-//   个别老基础库没有 createWebAudioContext 时退回 InnerAudioContext，并由
-//   stores/player.ts 再退到 web-view 内嵌 H5。
-const IS_PC = (() => {
-  try {
-    const info = Taro.getDeviceInfo ? Taro.getDeviceInfo() : Taro.getSystemInfoSync();
-    return info.platform === 'windows' || info.platform === 'mac';
-  } catch {
-    return false;
-  }
-})();
-
-// PC 流式 PCM 依赖 createWebAudioContext；个别老基础库没有它就退回 InnerAudioContext
-const PCM_SUPPORTED = typeof (Taro as any).createWebAudioContext === 'function';
-export const PCM_STREAM_SUPPORTED = IS_PC && PCM_SUPPORTED;
-
-// ── BackgroundAudioManager（手机）──
 // BackgroundAudioManager 为全局单例，支持锁屏/后台继续播放。
 // 注意：title 必填，否则 src 赋值会报错。
+//
+// PC 微信曾经表现为「假 onPlay + 10004 Format error」，根因是 OSS 防盗链 referer
+// 白名单缺 servicewechat.com——所有请求拿到的都是 403 XML 错误页，什么播放器都白搭。
+// 修白名单后 BGM 在 PC 复活（实测）。期间曾尝试过 InnerAudioContext / 流式 PCM
+// 播放器（git 历史里有），均因该端运行时的其它缺陷废弃；最后的兜底是
+// web-view 内嵌 H5 播放页（stores/player.ts 的 onError 尽头跳转）。
 let mgr: Taro.BackgroundAudioManager | null = null;
 // 回调经这一层间接分发：on* 在部分基础库没有配套的 off*，每次 load 都重新 on
 // 会让旧曲目的回调一直挂在全局单例上越积越多。改成只注册一次、内容随 bound 变化。
@@ -66,7 +49,7 @@ function bindOnce(m: Taro.BackgroundAudioManager): void {
   });
 }
 
-const bgmService: AudioService = {
+const service: AudioService = {
   load(url, meta: AudioMeta, callbacks: AudioCallbacks = {}) {
     const m = getMgr();
     bound = callbacks;
@@ -111,78 +94,5 @@ const bgmService: AudioService = {
     listening = false;
   }
 };
-
-// ── InnerAudioContext（PC 微信）──
-// 每个实例绑定一套监听，release/切歌时 destroy 旧实例（同时终止下载），
-// 下次 load 重建——InnerAudioContext 本就不是单例，没有 BackgroundAudioManager
-// 那套「回调越积越多」的问题。
-function createInnerService(): AudioService {
-  let ctx: Taro.InnerAudioContext | null = null;
-  let boundCb: AudioCallbacks = {};
-
-  function bind(c: Taro.InnerAudioContext): void {
-    c.onPlay(() => {
-      logInfo('audio', 'onPlay(inner)');
-      boundCb.onPlay?.();
-    });
-    c.onPause(() => boundCb.onPause?.());
-    c.onStop(() => boundCb.onStop?.());
-    c.onEnded(() => boundCb.onEnded?.());
-    c.onError((res) => {
-      logError('audio', 'onError(inner)', res);
-      boundCb.onError?.(res);
-    });
-    c.onWaiting(() => boundCb.onWaiting?.());
-    c.onCanplay(() => boundCb.onCanplay?.());
-    c.onTimeUpdate(() => {
-      boundCb.onTimeUpdate?.(c.currentTime, c.duration);
-      const b = c.buffered;
-      if (typeof b === 'number') boundCb.onProgress?.(b, c.duration);
-    });
-  }
-
-  return {
-    load(url, meta, callbacks: AudioCallbacks = {}) {
-      boundCb = callbacks;
-      ctx?.destroy();
-      const c = Taro.createInnerAudioContext();
-      ctx = c;
-      bind(c);
-      const host = url.startsWith('http') ? new URL(url).host : url.slice(0, 40);
-      logInfo('audio', `load(inner) ${meta.title} @ ${host}`);
-      c.src = url;
-      // InnerAudioContext 设置 src 不自动播放（除非 autoplay），显式 play 语义更清晰
-      c.play();
-    },
-    play() {
-      ctx?.play();
-    },
-    pause() {
-      ctx?.pause();
-    },
-    stop() {
-      ctx?.stop();
-    },
-    seek(sec) {
-      ctx?.seek(sec);
-    },
-    release() {
-      boundCb = {};
-      ctx?.destroy();
-      ctx = null;
-    },
-    destroy() {
-      ctx?.destroy();
-      ctx = null;
-      boundCb = {};
-    }
-  };
-}
-
-const service: AudioService = PCM_STREAM_SUPPORTED
-  ? createPcmStreamService()
-  : IS_PC
-    ? createInnerService()
-    : bgmService;
 
 export default service;

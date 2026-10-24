@@ -4,7 +4,6 @@ import audioService from '@/services/audio';
 import { USE_MOCK, MOCK_AUDIO_URL, H5_BASE } from '@/constants/env';
 import { resolveUrl } from '@/utils/url';
 import { isPcWechat } from '@/utils/platform';
-import { PCM_STREAM_SUPPORTED } from '@/services/audio';
 import { request, ApiError } from '@/services/api';
 import { getPlayUrl } from '@/services/content';
 import { logInfo, logError } from '@/utils/logger';
@@ -165,23 +164,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   // 内部：真正加载并播放某曲目
   _start: (track: Track) => {
-    // PC 微信小程序的原生音频运行时不可用（BGM/媒体元素实测坏死），
-    // 优先走流式 PCM 播放器（不碰坏组件）；个别老基础库没有
-    // createWebAudioContext 时退到 web-view 内嵌 H5 播放页。
-    if (isPcWechat && !PCM_STREAM_SUPPORTED) {
-      if (H5_BASE) {
-        Taro.navigateTo({
-          url: `/pages/webview/index?url=${encodeURIComponent(`${H5_BASE}/#/pages/h5play/index?id=${track.id}`)}`
-        });
-      } else {
-        Taro.showModal({
-          title: 'PC 端暂不支持播放',
-          content: 'PC 微信的小程序音频组件不可用，请用手机微信收听',
-          showCancel: false
-        });
-      }
-      return;
-    }
     loadedTrackId = track.id;
     clearLoadTimer();
     // 加载看门狗：迟迟等不到 canplay 就给用户一句话，
@@ -237,6 +219,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           fmtRetried.set(track.id, next);
           logInfo('play', `#${track.id} ${info?.format || info?.fmt} 失败，换 ${next} 重试`);
           get()._start(track);
+          return;
+        }
+        // PC 微信两种格式都失败 → 最后兜底：web-view 内嵌 H5 播放页
+        if (isPcWechat && H5_BASE) {
+          logError('play', `#${track.id} 两种格式都失败，转 H5 播放页`);
+          Taro.navigateTo({
+            url: `/pages/webview/index?url=${encodeURIComponent(`${H5_BASE}/#/pages/h5play/index?id=${track.id}`)}`
+          });
+          set({ isPlaying: false, isLoading: false });
           return;
         }
         // 之前只 console.error，用户面对的是一个永远转的 spinner。
