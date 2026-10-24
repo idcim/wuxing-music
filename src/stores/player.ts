@@ -26,8 +26,8 @@ let loadedTrackId: number | null = null;
 // 本次播放请求的格式上下文（trackId → 请求的 fmt 与实际命中的 format），
 // 解码失败时据此换另一种格式重试
 const playFmtByTrack = new Map<number, { fmt: string; format?: string }>();
-// 每曲目每会话只自动换格式重试一次（防死循环）
-const fmtRetried = new Set<number>();
+// 每曲目每会话只自动换格式重试一次（防死循环）；值为下次要用的 fmt
+const fmtRetried = new Map<number, string>();
 // 已真正开播过的曲目：之后的零星 error（缓冲抖动等）不再把界面打成失败，
 // 播放真停了会有 onStop/onPause 来接管状态（实测 PC 上 onPlay 后还会吐 10004）
 const playedTracks = new Set<number>();
