@@ -29,6 +29,7 @@ def _to_dict(o: Order) -> dict:
         "plan_name": o.plan_name,
         "amount": o.amount,
         "status": o.status,
+        "transaction_id": o.transaction_id,   # 微信支付单号（商户平台按它查账）
         "paid_at": o.paid_at.isoformat() if o.paid_at else None,
         "created_at": o.created_at.isoformat() if o.created_at else None,
         "refund_amount": o.refund_amount,
@@ -69,7 +70,8 @@ def list_orders(
     if status:
         q = q.filter(Order.status == status)
     if order_no:
-        q = q.filter(Order.order_no.contains(order_no))
+        # 同一个框同时支持商户订单号与微信支付单号（交易号是纯数字且更长）
+        q = q.filter(Order.order_no.contains(order_no) | Order.transaction_id.contains(order_no))
     total = q.count()
     rows = q.order_by(Order.id.desc()).offset((page - 1) * size).limit(size).all()
     return ok({"total": total, "items": [_to_dict(o) for o in rows]})

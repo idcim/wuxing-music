@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="toolbar">
-      <el-input v-model="orderNo" placeholder="订单号" clearable style="width: 200px" @keyup.enter="reload" />
+      <el-input v-model="orderNo" placeholder="订单号 / 微信支付单号" clearable style="width: 220px" @keyup.enter="reload" />
       <el-select v-model="filterStatus" placeholder="按状态筛选" clearable style="width: 150px" @change="reload">
         <el-option label="待支付" value="pending" />
         <el-option label="已支付" value="paid" />
@@ -13,7 +13,12 @@
     </div>
 
     <el-table :data="rows" v-loading="loading" border>
-      <el-table-column prop="order_no" label="订单号" min-width="190" />
+      <el-table-column label="订单号 / 微信支付单号" min-width="230">
+        <template #default="{ row }">
+          <div>{{ row.order_no }}</div>
+          <div v-if="row.transaction_id" class="txid">{{ row.transaction_id }}</div>
+        </template>
+      </el-table-column>
       <el-table-column prop="plan_name" label="套餐" width="90" />
       <el-table-column label="金额" width="90">
         <template #default="{ row }">¥{{ row.amount }}</template>
@@ -51,6 +56,10 @@
     <el-dialog v-model="detailDialog" title="订单详情" width="520px">
       <el-descriptions :column="1" border title="订单信息">
         <el-descriptions-item label="订单号">{{ detail.order_no }}</el-descriptions-item>
+        <el-descriptions-item label="微信支付单号">
+          <span>{{ detail.transaction_id || '-' }}</span>
+          <el-button v-if="detail.transaction_id" size="small" text type="primary" @click="copyTxid">复制</el-button>
+        </el-descriptions-item>
         <el-descriptions-item label="套餐">{{ detail.plan_name }}（{{ detail.plan_id }}）</el-descriptions-item>
         <el-descriptions-item label="金额">¥{{ detail.amount }}</el-descriptions-item>
         <el-descriptions-item label="状态">
@@ -138,6 +147,16 @@ function fmt(s?: string) {
   return s ? new Date(s).toLocaleString('zh-CN') : '-';
 }
 
+// 复制微信支付单号，去商户平台查账用
+async function copyTxid() {
+  try {
+    await navigator.clipboard.writeText(detail.value.transaction_id);
+    ElMessage.success('已复制');
+  } catch {
+    ElMessage.warning('复制失败，请手动选择复制');
+  }
+}
+
 async function load() {
   loading.value = true;
   try {
@@ -201,4 +220,5 @@ onMounted(load);
 .toolbar { margin-bottom: 16px; display: flex; gap: 12px; }
 .pager { margin-top: 16px; justify-content: flex-end; }
 .reason { color: #999; }
+.txid { font-size: 12px; color: #909399; }
 </style>
