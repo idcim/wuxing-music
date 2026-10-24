@@ -1051,9 +1051,10 @@ def _optional_user(db: Session, request: Request) -> User | None:
 
 
 def _full_url_for_fmt(track: Track, fmt: str) -> str:
-    """完整版的实际文件：按 fmt 偏好回退。"""
+    """完整版的实际文件：按 fmt 偏好回退。
+    wav16 不回退 AAC——要 PCM 的是 PC 端 WebAudio 管线，AAC 它没有解码器。"""
     if fmt == "wav16":
-        return track.play_url or track.aac_url or track.audio_url
+        return track.play_url or track.audio_url
     return track.aac_url or track.play_url or track.audio_url
 
 

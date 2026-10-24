@@ -3,6 +3,7 @@ import type { Track } from '@/types';
 import audioService from '@/services/audio';
 import { USE_MOCK, MOCK_AUDIO_URL } from '@/constants/env';
 import { resolveUrl } from '@/utils/url';
+import { isPcWechat } from '@/utils/platform';
 import { request, ApiError } from '@/services/api';
 import { getPlayUrl } from '@/services/content';
 import { logInfo, logError } from '@/utils/logger';
@@ -293,9 +294,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       return;
     }
     // 版权保护：目录接口不含音频地址，播放前用曲目 id 换短时效签名地址。
-    // 全端优先 AAC 副本（省流量；PC 微信 BGM 实测可播 AAC）；
-    // 解码失败时 onError 里自动换另一种格式重试一次。
-    const fmt = fmtRetried.get(track.id) ?? 'aac';
+    // PC 微信走 InnerAudioContext + 只有 PCM 可解（fmt=wav，不回退 AAC）；
+    // 其余端优先 AAC 副本省流量；解码失败时 onError 里自动换另一种格式重试一次。
+    const fmt = fmtRetried.get(track.id) ?? (isPcWechat ? 'wav' : 'aac');
     logEnvOnce();
     logInfo('play', `#${track.id} ${track.title} 签发请求 fmt=${fmt}`);
     getPlayUrl(track.id, fmt)

@@ -3,14 +3,25 @@ import type { AudioService, AudioCallbacks, AudioMeta } from './types';
 import { siteName } from '@/stores/site';
 import { logInfo, logError } from '@/utils/logger';
 
+// 端选择：
+// - 手机（iOS/Android）：BackgroundAudioManager（后台/锁屏播放靠它）
+// - PC 微信（Windows/Mac）：InnerAudioContext。PC 的 BGM 是媒体元素实现，
+//   实测「onPlay 假动作 + 立刻 10004 Format error」，连公共测试 MP3 都起不来；
+//   InnerAudioContext 在 PC 上走 WebAudio decodeAudioData——是另一条管线，
+//   不需要任何私有解码器，16-bit PCM WAV 是纯数据可解（24-bit/MP3/AAC 不行）。
+//   注意它是整文件下载后解码：大文件首播慢、占内存，只作 PC 端的退路。
+const IS_PC = (() => {
+  try {
+    const info = Taro.getDeviceInfo ? Taro.getDeviceInfo() : Taro.getSystemInfoSync();
+    return info.platform === 'windows' || info.platform === 'mac';
+  } catch {
+    return false;
+  }
+})();
+
+// ── BackgroundAudioManager（手机）──
 // BackgroundAudioManager 为全局单例，支持锁屏/后台继续播放。
 // 注意：title 必填，否则 src 赋值会报错。
-//
-// 为什么 PC 微信（Windows/Mac）也用它而不是 InnerAudioContext：
-// PC 端的 InnerAudioContext 是 WebAudio 实现——decodeAudioData 要把整个文件
-// 读进内存解码（本项目曲目可达数百 MB，必炸），且那套 Chromium 不带 MP3/AAC
-// 私有解码器、也不支持 24-bit WAV（报 Unable to decode audio data）。
-// BackgroundAudioManager 在 PC 是流式原生路径，官方文档标注支持 Windows/Mac。
 let mgr: Taro.BackgroundAudioManager | null = null;
 // 回调经这一层间接分发：on* 在部分基础库没有配套的 off*，每次 load 都重新 on
 // 会让旧曲目的回调一直挂在全局单例上越积越多。改成只注册一次、内容随 bound 变化。
@@ -49,7 +60,7 @@ function bindOnce(m: Taro.BackgroundAudioManager): void {
   });
 }
 
-const service: AudioService = {
+const bgmService: AudioService = {
   load(url, meta: AudioMeta, callbacks: AudioCallbacks = {}) {
     const m = getMgr();
     bound = callbacks;
@@ -94,5 +105,74 @@ const service: AudioService = {
     listening = false;
   }
 };
+
+// ── InnerAudioContext（PC 微信）──
+// 每个实例绑定一套监听，release/切歌时 destroy 旧实例（同时终止下载），
+// 下次 load 重建——InnerAudioContext 本就不是单例，没有 BackgroundAudioManager
+// 那套「回调越积越多」的问题。
+function createInnerService(): AudioService {
+  let ctx: Taro.InnerAudioContext | null = null;
+  let boundCb: AudioCallbacks = {};
+
+  function bind(c: Taro.InnerAudioContext): void {
+    c.onPlay(() => {
+      logInfo('audio', 'onPlay(inner)');
+      boundCb.onPlay?.();
+    });
+    c.onPause(() => boundCb.onPause?.());
+    c.onStop(() => boundCb.onStop?.());
+    c.onEnded(() => boundCb.onEnded?.());
+    c.onError((res) => {
+      logError('audio', 'onError(inner)', res);
+      boundCb.onError?.(res);
+    });
+    c.onWaiting(() => boundCb.onWaiting?.());
+    c.onCanplay(() => boundCb.onCanplay?.());
+    c.onTimeUpdate(() => {
+      boundCb.onTimeUpdate?.(c.currentTime, c.duration);
+      const b = c.buffered;
+      if (typeof b === 'number') boundCb.onProgress?.(b, c.duration);
+    });
+  }
+
+  return {
+    load(url, meta, callbacks: AudioCallbacks = {}) {
+      boundCb = callbacks;
+      ctx?.destroy();
+      const c = Taro.createInnerAudioContext();
+      ctx = c;
+      bind(c);
+      const host = url.startsWith('http') ? new URL(url).host : url.slice(0, 40);
+      logInfo('audio', `load(inner) ${meta.title} @ ${host}`);
+      c.src = url;
+      // InnerAudioContext 设置 src 不自动播放（除非 autoplay），显式 play 语义更清晰
+      c.play();
+    },
+    play() {
+      ctx?.play();
+    },
+    pause() {
+      ctx?.pause();
+    },
+    stop() {
+      ctx?.stop();
+    },
+    seek(sec) {
+      ctx?.seek(sec);
+    },
+    release() {
+      boundCb = {};
+      ctx?.destroy();
+      ctx = null;
+    },
+    destroy() {
+      ctx?.destroy();
+      ctx = null;
+      boundCb = {};
+    }
+  };
+}
+
+const service: AudioService = IS_PC ? createInnerService() : bgmService;
 
 export default service;
