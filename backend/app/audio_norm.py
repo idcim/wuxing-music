@@ -1,15 +1,17 @@
 """曲库音频管线的后台自动归一（多版本播放副本）。
 
-起因：PC 微信解不了 24-bit WAV（Unable to decode audio data），16-bit PCM 是全端公分母；
-AAC 副本给手机/H5 省一个数量级的流量。
-
 每条曲目的流水线（幂等，缺啥补啥）：
 1. 母版暂存在服务端本地且存储是 OSS → 母版推 OSS、改写 audio_url、删本地暂存；
-2. WAV 是 24-bit 且无 play_url → 生成 16-bit PCM 播放副本（play/ 前缀）；
-3. 有 ffmpeg 且无 aac_url → 生成 AAC 192k 副本（aac/ 前缀，.m4a）。
+2. 有 ffmpeg 且无 aac_url → 生成 AAC 192k 副本（aac/ 前缀，.m4a）——
+   全端播放走它，比母版省约 90% 流量；
+3. 会员曲目且无 preview_url → 生成 preview_sec 秒的试听剪辑（prev/ 前缀）——
+   版权保护链路里非会员只能拿到这一段（见 app/streaming.py）。
+
+（16-bit PCM 副本已退役：它本是给「PC 只能解 PCM」准备的，PC 根因是 OSS
+referer 白名单，修好后 BGM 在 PC 直接能播 AAC，PCM 副本不再需要。）
 
 两个触发口：
-- 后台「曲目 → 音频兼容修复」按钮 → 全量扫描；
+- 后台「曲目 → 全部处理」按钮 → 全量扫描；
 - 曲目保存（新建/编辑且有音频地址）→ 自动排队单条；音频上传接口先落服务端暂存，
   保存曲目时管线就把母版+副本一起推 OSS——上传者不必在场等。
 
@@ -28,12 +30,10 @@ import httpx
 from app import storage
 from app.database import SessionLocal
 from app.models import Track
-from app.wav_compat import Wav24To16Streamer, needs_pcm16_downmix, read_wav_info
 
 logger = logging.getLogger("uvicorn.error")
 
 CHUNK = 1024 * 1024
-_HEAD_BYTES = 64 * 1024  # 判定位深只需文件头
 
 _lock = threading.Lock()
 _queue: list[int | None] = []   # None = 全量扫描（worker 展开成具体 id）
@@ -92,128 +92,7 @@ def _download(url: str, dst: str, limit: int | None = None, retries: int = 4) ->
             time.sleep(2 * (attempt + 1))
 
 
-def _stream_with_resume(url: str, retries: int = 4):
-    """流式下载（生成器）。中断后按已产出字节发 Range 续传；
-    流式转换状态下无法从头重来，对方不认 Range 时直接报错。"""
-    import time
-
-    produced = 0
-    for attempt in range(retries):
-        try:
-            headers = {"Range": f"bytes={produced}-"} if produced else {}
-            with httpx.stream(
-                "GET", url, timeout=httpx.Timeout(60, read=300),
-                follow_redirects=True, headers=headers,
-            ) as resp:
-                resp.raise_for_status()
-                if produced and resp.status_code == 200:
-                    raise RuntimeError("对端不支持 Range，流式转换中途无法重下")
-                for chunk in resp.iter_bytes(256 * 1024):
-                    produced += len(chunk)
-                    yield chunk
-            return
-        except (httpx.HTTPError, OSError) as e:
-            logger.warning("流式下载中断（已产出 %s 字节）：%s；第 %s 次重试", produced, e, attempt + 1)
-            if attempt == retries - 1:
-                raise RuntimeError(f"下载失败（重试 {retries} 次后放弃）：{e}") from e
-            time.sleep(2 * (attempt + 1))
-
-
-def _convert_local_stream(local_path: str, out_path: str) -> None:
-    """本地文件流式转换：先写到同目录临时文件（os.replace 不能跨挂载点），
-    完成后原子改名到衍生路径；母版原样保留。"""
-    tmp = out_path + ".part"
-    conv = Wav24To16Streamer()
-    try:
-        with open(local_path, "rb") as fin, open(tmp, "wb") as fout:
-            while True:
-                chunk = fin.read(CHUNK)
-                if not chunk:
-                    break
-                fout.write(conv.feed(chunk))
-            fout.write(conv.finish())
-        os.replace(tmp, out_path)
-    finally:
-        try:
-            os.remove(tmp)
-        except OSError:
-            pass
-
-
-def _convert_oss_stream(cfg: dict, oss_key: str, url: str) -> None:
-    """OSS 流式转换：下载母版 → 转换 → 分片上传到衍生键（play/ 前缀），
-    全程不落盘（磁盘零占用）。分片缓存在内存里凑够 5MB 才传一片；
-    上传完成前衍生对象不可见，任一步失败会 abort 掉这次分片上传。
-    母版对象全程不受影响。"""
-    import time
-
-    import oss2
-
-    bucket = storage._oss_bucket(cfg)
-    conv = Wav24To16Streamer()
-    part_buf = bytearray()
-    parts: list = []
-    part_no = 1
-    upload_id = None
-    PART = 5 * 1024 * 1024  # OSS 要求除末片外每片 ≥100KB，取 5MB
-
-    def upload_piece(piece: bytes) -> None:
-        nonlocal part_no
-        for attempt in range(3):
-            try:
-                r = bucket.upload_part(oss_key, upload_id, part_no, piece)
-                parts.append(oss2.models.PartInfo(part_no, r.etag))
-                part_no += 1
-                return
-            except Exception as e:  # noqa: BLE001
-                logger.warning("分片 %s 上传失败：%s；第 %s 次重试", part_no, e, attempt + 1)
-                if attempt == 2:
-                    raise
-                time.sleep(2 * (attempt + 1))
-
-    try:
-        # Content-Type 必须在 init 时给（分片上传的特性），否则对象是
-        # application/octet-stream，PC 微信媒体元素会报 Format error
-        upload_id = bucket.init_multipart_upload(
-            oss_key, headers={"Content-Type": "audio/wav"}
-        ).upload_id
-        for chunk in _stream_with_resume(url):
-            part_buf += conv.feed(chunk)
-            while len(part_buf) >= PART:
-                piece = bytes(part_buf[:PART])
-                del part_buf[:PART]
-                upload_piece(piece)
-        part_buf += conv.finish()
-        if part_buf:
-            upload_piece(bytes(part_buf))
-        bucket.complete_multipart_upload(oss_key, upload_id, parts)
-    except Exception:
-        if upload_id:
-            try:
-                bucket.abort_multipart_upload(oss_key, upload_id)
-            except Exception:  # noqa: BLE001
-                pass
-        raise
-
-
 AAC_BITRATE = "192k"
-
-
-def _encode_wav16_ffmpeg(src_path: str, dst_path: str) -> None:
-    """非 WAV 母版（mp3/m4a）→ 16-bit PCM WAV。PC 微信的 WebAudio 只解得了 PCM，
-    MP3 母版的曲目也要有一条 PCM 副本才放得了。"""
-    import subprocess
-
-    ffmpeg = shutil.which("ffmpeg")
-    if not ffmpeg:
-        raise RuntimeError("no-ffmpeg")
-    r = subprocess.run(
-        [ffmpeg, "-y", "-i", src_path, "-f", "wav", "-acodec", "pcm_s16le", dst_path],
-        capture_output=True, timeout=1800,
-    )
-    if r.returncode != 0 or not os.path.exists(dst_path) or os.path.getsize(dst_path) == 0:
-        tail = r.stderr.decode("utf-8", "ignore")[-200:] if r.stderr else ""
-        raise RuntimeError(f"ffmpeg 转 PCM 失败：{tail}")
 
 
 def _encode_aac(src_path: str, dst_path: str, bitrate: str = AAC_BITRATE, clip_sec: int = 0) -> None:
@@ -256,11 +135,6 @@ def _probe_audio(src_path: str) -> None:
     size = os.path.getsize(src_path)
     if size < 1024:
         raise RuntimeError(f"源文件只有 {size} 字节，不是有效音频（可能上传中断或传错文件）")
-    if src_path.lower().endswith(".wav"):
-        if read_wav_info(src_path):
-            return
-        head = open(src_path, "rb").read(16).hex()
-        raise RuntimeError(f"源文件不是有效 WAV（头部 {head}），可能传错文件类型")
     ffprobe = shutil.which("ffprobe")
     if not ffprobe:
         return  # 没有 ffprobe 时不挡路，交给 ffmpeg 自己判断
@@ -303,11 +177,7 @@ def process_track(db, cfg: dict, track: Track, dry: bool = False) -> str:
     else:
         return "skip:地址形态未知"
 
-    is_wav = url.lower().endswith(".wav")
     key_noext = os.path.splitext(key)[0]
-    # 非 WAV 母版（mp3/m4a）的 PCM 副本必须是 .wav 后缀（内容与后缀一致，
-    # Content-Type 才猜得对）
-    wav16_key = f"play/{key}" if is_wav else f"play/{key_noext}.wav"
     aac_key = f"aac/{key_noext}.m4a"
     preview_key = f"prev/{key_noext}.m4a"
 
@@ -322,35 +192,6 @@ def process_track(db, cfg: dict, track: Track, dry: bool = False) -> str:
     if local_master and provider == "oss":
         stages.append("master")
     ffmpeg_ok = bool(shutil.which("ffmpeg"))
-    need_wav16 = False
-    if is_wav and not track.play_url:
-        # 头部探测：本地直读；OSS 只拉前 64KB
-        if local_master:
-            info = read_wav_info(local_master)
-        else:
-            tmp_head = tempfile.mkdtemp(prefix="wav16-head-")
-            try:
-                head = os.path.join(tmp_head, "h.wav")
-                _download(url, head, limit=_HEAD_BYTES)
-                info = read_wav_info(head)
-            finally:
-                try:
-                    os.remove(head)
-                    os.rmdir(tmp_head)
-                except OSError:
-                    pass
-        if not info:
-            return "error:不是有效 WAV"
-        need_wav16 = bool(info["format"] == 1 and info["bits"] == 24)
-        if need_wav16:
-            stages.append("wav16")
-        elif info["bits"] == 16 and not track.play_url:
-            # 母版本身就是 16-bit PCM（早期覆盖式转换那批）——无需再生成副本，
-            # 但要把 play_url 标成母版自己，否则列表/PC 选路永远当它没 PCM 版本
-            stages.append("pcm-mark")
-    # PC 微信只解得了 PCM：非 WAV 母版（mp3/m4a）也要出一条 wav16 副本
-    if not is_wav and not track.play_url and ffmpeg_ok:
-        stages.append("wav16")
     if not track.aac_url and ffmpeg_ok:
         stages.append("aac")
     # 会员曲目的试听剪辑：非会员只能拿到这一段（版权保护，见 app/streaming.py）
@@ -378,39 +219,7 @@ def process_track(db, cfg: dict, track: Track, dry: bool = False) -> str:
         except RuntimeError as e:
             return f"error:{e}"
 
-        # ── 母版已是 16-bit PCM：只打标，不产生新文件 ──
-        if "pcm-mark" in stages:
-            track.play_url = track.audio_url
-            done.append("pcm-mark")
-
-        # 各阶段互相隔离：一个失败不影响其它的落库（实测 AAC 失败曾把
-        # 已完成的 16-bit 副本标记回滚掉）
-
-        # ── wav16 副本 ──
-        if "wav16" in stages:
-            try:
-                if provider == "oss":
-                    out16 = os.path.join(tmpdir, "w16.wav")
-                    if is_wav:
-                        _convert_local_stream(src, out16)
-                    else:
-                        # MP3/M4A 母版：ffmpeg 解码出 PCM（PC 微信唯一可播的形态）
-                        _encode_wav16_ffmpeg(src, out16)
-                    _upload_oss(cfg, wav16_key, out16)
-                else:
-                    # 本地存储直接写目标目录（_convert_local_stream 内部同目录临时文件 +
-                    # 原子改名，os.replace 跨挂载点会失败，不能先写 /tmp 再搬）
-                    dest = _dest_path(wav16_key)
-                    os.makedirs(os.path.dirname(dest), exist_ok=True)
-                    if is_wav:
-                        _convert_local_stream(src, dest)
-                    else:
-                        _encode_wav16_ffmpeg(src, dest + ".part")
-                        os.replace(dest + ".part", dest)
-                track.play_url = _dest_url(wav16_key)
-                done.append("wav16")
-            except Exception as e:  # noqa: BLE001
-                failed.append(f"wav16: {e}")
+        # 各阶段互相隔离：一个失败不影响其它的落库
 
         # ── AAC 副本 ──
         if "aac" in stages:
