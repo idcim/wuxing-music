@@ -81,6 +81,7 @@ export function createPcmStreamService(): AudioService {
   let headerBuf: Uint8Array = new Uint8Array(0);
   let pending: Uint8Array = new Uint8Array(0);
   let eof = false;
+  let dead = false;   // 头部解析失败的死亡标记，防后续块重复报错
   let playing = false;
   let endedFired = false;
 
@@ -169,6 +170,7 @@ export function createPcmStreamService(): AudioService {
     // 防止任何一层给 WAV 加 gzip：压缩过的字节就不是 PCM 了
     headers['Accept-Encoding'] = 'identity';
     eof = false;
+    dead = false;
     pending = new Uint8Array(0);
     if (fromSec === 0) {
       wav = null;
@@ -229,6 +231,7 @@ export function createPcmStreamService(): AudioService {
   }
 
   function feed(chunk: Uint8Array): void {
+    if (dead) return;
     if (!wav) {
       headerBuf = concat(headerBuf, chunk);
       try {
@@ -241,8 +244,17 @@ export function createPcmStreamService(): AudioService {
         logInfo('pcm', `WAV 头：${info.sampleRate}Hz ${info.channels}ch ${durationSec.toFixed(0)}s`);
         bound.onCanplay?.();
       } catch (e) {
-        logError('pcm', '头部解析失败', e);
-        bound.onError?.(e);
+        // 把实际拿到的首字节打出来（hex），一眼看出是 XML 错误页 / gzip / 分块帧头
+        const head = Array.from(headerBuf.slice(0, 32))
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join(' ');
+        logError('pcm', '头部解析失败，首块字节:', head, '错误:', e);
+        // 别每个后续块都重复炸：标记死亡并中止下载，只报一次
+        if (!dead) {
+          dead = true;
+          task?.abort();
+          bound.onError?.(e);
+        }
       }
       return;
     }
@@ -259,6 +271,7 @@ export function createPcmStreamService(): AudioService {
       playedBefore = 0;
       durationSec = 0;
       playing = true;
+      dead = false;
       if (c.state === 'suspended') c.resume();
       startCtxTime = c.currentTime;
       nextScheduleTime = c.currentTime + 0.1;
