@@ -31,6 +31,7 @@ def _to_dict(t: Track, norm: dict | None = None) -> dict:
         "audio_url": t.audio_url,
         "play_url": t.play_url,
         "aac_url": t.aac_url,
+        "preview_url": t.preview_url,
         "cover_url": t.cover_url,
         "is_premium": t.is_premium,
         "preview_sec": t.preview_sec,

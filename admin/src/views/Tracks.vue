@@ -46,6 +46,7 @@
             :disabled="normQueuedIds.includes(row.id) || normCurrentId === row.id"
             @click="onProcessOne(row)"
           >处理</el-button>
+          <el-button size="small" text @click="openVersions(row)">版本</el-button>
         </template>
       </el-table-column>
       <el-table-column label="状态" width="90" prop="is_online" sortable="custom">
@@ -146,6 +147,19 @@
         <el-button @click="dialog = false">取消</el-button>
         <el-button type="primary" @click="onSave">保存</el-button>
       </template>
+    </el-dialog>
+
+    <!-- 版本详情：母版与各播放副本的地址 + 试听 -->
+    <el-dialog v-model="versionsDialog" :title="`音频版本 · ${versionsRow?.title || ''}`" width="640px">
+      <div v-for="v in versionList" :key="v.label" class="ver">
+        <div class="ver__head">
+          <el-tag size="small" :type="v.tagType">{{ v.label }}</el-tag>
+          <span class="ver__url">{{ v.url }}</span>
+          <el-button size="small" text type="primary" @click="copyUrl(v.url)">复制</el-button>
+        </div>
+        <audio :src="v.url" controls preload="none" class="ver__audio" />
+      </div>
+      <el-empty v-if="!versionList.length" description="该曲目还没有音频地址" />
     </el-dialog>
   </div>
 </template>
@@ -334,6 +348,35 @@ async function onDelete(row: any) {
   load();
 }
 
+// ── 版本详情（地址 + 试听）──
+const versionsDialog = ref(false);
+const versionsRow = ref<any>(null);
+
+const versionList = computed(() => {
+  const r = versionsRow.value;
+  if (!r) return [];
+  const list: { label: string; url: string; tagType: string }[] = [];
+  if (r.audio_url) list.push({ label: '母版（原始上传）', url: r.audio_url, tagType: 'info' });
+  if (r.play_url) list.push({ label: '16-bit 副本（PC 兼容）', url: r.play_url, tagType: 'success' });
+  if (r.aac_url) list.push({ label: 'AAC 副本（省流量）', url: r.aac_url, tagType: 'warning' });
+  if (r.preview_url) list.push({ label: `试听剪辑（${r.preview_sec || 30} 秒）`, url: r.preview_url, tagType: 'danger' });
+  return list;
+});
+
+function openVersions(row: any) {
+  versionsRow.value = row;
+  versionsDialog.value = true;
+}
+
+async function copyUrl(url: string) {
+  try {
+    await navigator.clipboard.writeText(url);
+    ElMessage.success('已复制');
+  } catch {
+    ElMessage.warning('复制失败，请手动选择复制');
+  }
+}
+
 // ── 音频归一（后台线程跑，页面轮询进度；支持全量与单曲目）──
 const normRunning = ref(false);
 const normText = ref('');
@@ -460,4 +503,8 @@ onMounted(async () => {
   font-size: 12px;
 }
 .up-cover-pct { font-size: 12px; }
+.ver { margin-bottom: 14px; }
+.ver__head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.ver__url { flex: 1; font-size: 12px; color: #909399; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ver__audio { width: 100%; height: 36px; }
 </style>
