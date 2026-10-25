@@ -87,7 +87,7 @@ docker compose logs -f
 之后**只要 `git push` 到 GitHub `master`，1 分钟内服务器自动拉取重建**。
 日志在 `/var/log/wuxing-deploy.log`。可覆盖的环境变量（分支 `WUXING_BRANCH`、健康地址 `WUXING_HEALTH_URL`、是否回滚 `WUXING_ROLLBACK` 等）见脚本头部注释。
 
-课程商城 2.0 使用可选 `commerce` profile，首次启用前需完成备份、结构 v4 迁移（含课件播放版本列、物流缓存与限频表）及业务验收，具体顺序见 [2.0 部署记录](V2-COMMERCE.md)。交易 `commerce-worker` 与旧媒体任务兼容进程 `commerce-media-worker` 独立运行，均有数据库心跳健康检查。自动发布默认 `WUXING_COMMERCE=auto`，已有任务服务会随 API 一起更新并检查健康；未启用时不自动开启。首次显式启用可设为 `1`，但不会代为运行数据库迁移。任务服务离线或积压可在后台“课件与任务”查看，部署平台应监控容器 unhealthy 状态。
+课程商城 2.0 的首次初始化已纳入 Compose 和自动部署：临时配置 → MySQL 单库备份与校验 → v4 幂等迁移 → 两个 Worker 健康 → API／后台／H5。无需额外填写数据库账号，复用服务器已有 `backend/.env`。备份默认在 `/var/backups/wuxing-music`（700/600 权限），可用 `WUXING_BACKUP_DIR` 改为受控目录；失败则阻止迁移和新应用启动，回滚仅恢复应用、不覆盖数据库。Worker 已纳入默认服务，售卖仍由后台关闭；详细恢复与检查说明见 [2.0 部署顺序](V2-COMMERCE.md#自动部署顺序)。自动部署在发布成功后记录标记，失败且代码已拉取时仍会重试。请监控容器 unhealthy 与备份容量。
 
 ### 2.0 本地 MySQL 备份恢复演练
 

@@ -8,11 +8,67 @@
 #   mysql+pymysql://用户名:密码@<MySQL容器名>:3306/wuxing?charset=utf8mb4
 
 services:
+  database-prepare:
+    build: ./backend
+    image: wuxing-backend:latest
+    restart: "no"
+    env_file:
+      - ./backend/.env
+    environment:
+      - GIT_COMMIT=${GIT_COMMIT:-manual}
+      - BUILT_AT=${BUILT_AT:-manual}
+    command: [python, -m, app.deploy_database, prepare]
+    volumes:
+      - deploy_database_credentials:/run/deploy-database
+    networks:
+      - onepanel
+
+  database-backup:
+    image: mysql:8.0
+    restart: "no"
+    environment:
+      - GIT_COMMIT=${GIT_COMMIT:-manual}
+      - BUILT_AT=${BUILT_AT:-manual}
+    entrypoint: [bash, /opt/backup-database.sh]
+    depends_on:
+      database-prepare:
+        condition: service_completed_successfully
+    volumes:
+      - deploy_database_credentials:/run/deploy-database
+      - ${WUXING_BACKUP_DIR:-/var/backups/wuxing-music}:/backups
+      - ./scripts/backup-database.sh:/opt/backup-database.sh:ro
+    networks:
+      - onepanel
+
+  commerce-init:
+    image: wuxing-backend:latest
+    restart: "no"
+    env_file:
+      - ./backend/.env
+    environment:
+      - GIT_COMMIT=${GIT_COMMIT:-manual}
+      - BUILT_AT=${BUILT_AT:-manual}
+    command: [python, -m, app.deploy_database, migrate]
+    depends_on:
+      database-backup:
+        condition: service_completed_successfully
+    volumes:
+      - deploy_database_credentials:/run/deploy-database
+    networks:
+      - onepanel
+
   api:
     build: ./backend
     image: wuxing-backend:latest
     container_name: wuxing-backend
     restart: unless-stopped
+    depends_on:
+      commerce-init:
+        condition: service_completed_successfully
+      commerce-worker:
+        condition: service_healthy
+      commerce-media-worker:
+        condition: service_healthy
     env_file:
       - ./backend/.env
     environment:
@@ -36,10 +92,12 @@ services:
       - onepanel          # 接入 1Panel 网络以访问 MySQL
 
   commerce-worker:
-    profiles: [commerce]
     build: ./backend
     image: wuxing-backend:latest
     restart: unless-stopped
+    depends_on:
+      commerce-init:
+        condition: service_completed_successfully
     env_file:
       - ./backend/.env
     command: [python, -m, app.commerce.worker, --queue, transactions]
@@ -59,9 +117,11 @@ services:
       - onepanel
 
   commerce-media-worker:
-    profiles: [commerce]
     image: wuxing-backend:latest
     restart: unless-stopped
+    depends_on:
+      commerce-init:
+        condition: service_completed_successfully
     env_file:
       - ./backend/.env
     command: [python, -m, app.commerce.worker, --queue, media]
@@ -107,6 +167,7 @@ services:
       - default
 
 volumes:
+  deploy_database_credentials:
   uploads_data:
   commerce_private_data:
 
