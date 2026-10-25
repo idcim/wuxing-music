@@ -1,14 +1,13 @@
 <template>
-  <div>
-    <el-row :gutter="20">
-      <el-col :span="8" v-for="card in cards" :key="card.label">
-        <el-card class="stat" shadow="hover">
+  <BusinessPage :card="false">
+      <div class="stats-grid">
+        <BusinessCard v-for="card in cards" :key="card.label" class="stat">
           <div class="stat__label">{{ card.label }}</div>
           <div class="stat__value">{{ card.value }}</div>
-        </el-card>
-      </el-col>
-    </el-row>
-  </div>
+        </BusinessCard>
+      </div>
+
+  </BusinessPage>
 </template>
 
 <script setup lang="ts">
@@ -33,7 +32,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.stat { margin-bottom: 20px; }
-.stat__label { font-size: 14px; color: #999; }
-.stat__value { font-size: 32px; font-weight: 600; margin-top: 12px; color: #1a1a1a; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
+.stat__label { font-size: 14px; color: var(--el-text-color-secondary); }
+.stat__value { font-size: 32px; font-weight: 600; margin-top: 12px; color: var(--el-text-color-primary); }
 </style>

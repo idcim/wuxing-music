@@ -1,9 +1,9 @@
 <template>
-  <el-card style="max-width: 680px" v-loading="loading">
+  <BusinessCard class="settings-panel" v-loading="loading">
     <template #header>小程序配置</template>
     <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px"
       title="AppID/AppSecret 用于后端 wx.login code 换取 openid/unionid。前端的 AppID 另需在根目录 .env.local 的 TARO_APP_ID 配置。" />
-    <el-form :model="form" label-width="120px">
+    <BusinessForm :model="form" label-width="120px">
       <el-form-item label="AppID">
         <el-input v-model="form.app_id" placeholder="wx 开头的小程序 AppID" />
       </el-form-item>
@@ -30,8 +30,8 @@
       <el-form-item>
         <el-button type="primary" :loading="saving" @click="onSave">保存</el-button>
       </el-form-item>
-    </el-form>
-  </el-card>
+    </BusinessForm>
+  </BusinessCard>
 </template>
 
 <script setup lang="ts">

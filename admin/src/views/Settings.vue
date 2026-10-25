@@ -1,8 +1,8 @@
 <template>
   <div>
-    <el-card style="max-width: 680px">
+    <BusinessCard class="settings-panel">
       <template #header>微信支付参数</template>
-      <el-form :model="form" label-width="130px" v-loading="loading">
+      <BusinessForm :model="form" label-width="130px" v-loading="loading">
         <el-divider content-position="left">会员售卖</el-divider>
         <el-form-item label="开启会员购买">
           <el-switch v-model="form.purchase_enabled" />
@@ -62,8 +62,8 @@
         <el-form-item>
           <el-button type="primary" :loading="saving" @click="onSave">保存</el-button>
         </el-form-item>
-      </el-form>
-    </el-card>
+      </BusinessForm>
+    </BusinessCard>
   </div>
 </template>
 
@@ -135,5 +135,5 @@ onMounted(load);
 </script>
 
 <style scoped>
-.hint { margin-top: 4px; color: #999; font-size: 12px; line-height: 1.6; }
+.hint { margin-top: 4px; color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.6; }
 </style>

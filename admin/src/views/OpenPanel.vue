@@ -1,5 +1,5 @@
 <template>
-  <el-card style="max-width: 680px" v-loading="loading">
+  <BusinessCard class="settings-panel" v-loading="loading">
     <template #header>微信开放平台</template>
     <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px"
       title="这里填的是开放平台下「网站应用」的 AppID / AppSecret，用于微信外浏览器（Safari / Chrome）的扫码登录。"
@@ -9,7 +9,7 @@
       description="跨端认成同一个人靠的是 unionid，那是把小程序与公众号绑到开放平台之后微信自动下发的，与这里填不填无关。所以就算不做扫码登录，绑定该做还是要做。绑定步骤与验收清单见 docs/OPEN-PLATFORM.md。" />
     <el-alert v-if="!bothBound" type="info" :closable="false" show-icon style="margin-bottom: 16px"
       title="务必先上线账号合并逻辑（v1.9.0）再去绑定：绑定后微信才开始下发 unionid，若合并逻辑没上线，同一个人在两端的两条账号会被认到其中一条上，另一条（很可能是买过会员的小程序那条）就此搁浅。" />
-    <el-form :model="form" label-width="130px">
+    <BusinessForm :model="form" label-width="130px">
       <el-form-item label="网站应用 AppID">
         <el-input v-model="form.app_id" placeholder="开放平台「网站应用」的 AppID" />
         <div class="hint">
@@ -35,8 +35,8 @@
       <el-form-item>
         <el-button type="primary" :loading="saving" @click="onSave">保存</el-button>
       </el-form-item>
-    </el-form>
-  </el-card>
+    </BusinessForm>
+  </BusinessCard>
 </template>
 
 <script setup lang="ts">
@@ -83,5 +83,5 @@ onMounted(load);
 </script>
 
 <style scoped>
-.hint { margin-top: 4px; color: #999; font-size: 12px; line-height: 1.6; }
+.hint { margin-top: 4px; color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.6; }
 </style>

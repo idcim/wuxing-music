@@ -1,98 +1,101 @@
 <template>
-  <div>
-    <div class="toolbar">
-      <el-input v-model="keyword" placeholder="按账号搜索" clearable style="width: 200px" @keyup.enter="reload" />
-      <el-button :icon="Search" @click="reload">搜索</el-button>
-      <el-button type="primary" :icon="Plus" @click="openCreate">新建管理员</el-button>
+  <BusinessPage>
+    <div>
+      <div class="toolbar">
+        <el-input v-model="keyword" placeholder="按账号搜索" clearable style="width: 200px" @keyup.enter="reload" />
+        <el-button :icon="Search" @click="reload">搜索</el-button>
+        <el-button type="primary" :icon="Plus" @click="openCreate">新建管理员</el-button>
+      </div>
+
+      <BusinessTable :data="rows" v-loading="loading" border>
+        <el-table-column prop="id" label="ID" width="70" />
+        <el-table-column prop="username" label="账号" min-width="120">
+          <template #default="{ row }">
+            {{ row.username }}
+            <el-tag v-if="isSelf(row)" size="small" type="info" class="tag">我</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="nickname" label="昵称" min-width="110" />
+        <el-table-column label="角色" min-width="130">
+          <template #default="{ row }">
+            <el-tag v-if="row.is_super" type="danger" size="small">超级管理员</el-tag>
+            <el-tag v-else-if="row.role_name" size="small">{{ row.role_name }}</el-tag>
+            <span v-else class="muted">未分配</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="90">
+          <template #default="{ row }">
+            <el-tag :type="row.is_active ? 'success' : 'info'" size="small">
+              {{ row.is_active ? '启用' : '停用' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="创建时间" width="170">
+          <template #default="{ row }">{{ fmt(row.created_at) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="290" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" @click="openEdit(row)">编辑</el-button>
+            <el-button size="small" @click="openPassword(row)">改密</el-button>
+            <el-button size="small" :disabled="isSelf(row)" @click="toggleActive(row)">
+              {{ row.is_active ? '停用' : '启用' }}
+            </el-button>
+            <el-button size="small" type="danger" :disabled="isSelf(row)" @click="remove(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </BusinessTable>
+
+      <BusinessPagination class="pager" layout="total, prev, pager, next" :total="total"
+        :page-size="size" :current-page="page" @current-change="onPage" />
+
+      <!-- 新建 / 编辑 -->
+      <BusinessModal v-model="dialog" :title="form.id ? '编辑管理员' : '新建管理员'" width="460px">
+        <BusinessForm :model="form" label-width="90px">
+          <el-form-item label="账号">
+            <el-input v-model="form.username" :disabled="!!form.id" placeholder="登录用账号，创建后不可改" />
+          </el-form-item>
+          <el-form-item v-if="!form.id" label="密码">
+            <el-input v-model="form.password" type="password" show-password placeholder="至少 6 位" />
+          </el-form-item>
+          <el-form-item label="昵称">
+            <el-input v-model="form.nickname" placeholder="显示名" />
+          </el-form-item>
+          <el-form-item label="角色">
+            <el-select v-model="form.role_id" clearable placeholder="选择角色" style="width: 100%"
+              :disabled="form.is_super">
+              <el-option v-for="r in roles" :key="r.id" :label="r.name" :value="r.id" />
+            </el-select>
+            <div class="hint">超级管理员拥有全部权限，无需再选角色。</div>
+          </el-form-item>
+          <el-form-item label="超级管理员">
+            <el-switch v-model="form.is_super" :disabled="form.id && isSelfId(form.id)" />
+            <div class="hint">开启后绕过一切权限校验，并可管理管理员与角色。</div>
+          </el-form-item>
+        </BusinessForm>
+        <template #footer>
+          <el-button @click="dialog = false">取消</el-button>
+          <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+        </template>
+      </BusinessModal>
+
+      <!-- 重置密码 -->
+      <BusinessModal v-model="pwdDialog" title="重置密码" width="400px">
+        <BusinessForm label-width="80px">
+          <el-form-item label="账号">
+            <span>{{ pwdTarget.username }}</span>
+          </el-form-item>
+          <el-form-item label="新密码">
+            <el-input v-model="newPassword" type="password" show-password placeholder="至少 6 位" />
+          </el-form-item>
+        </BusinessForm>
+        <template #footer>
+          <el-button @click="pwdDialog = false">取消</el-button>
+          <el-button type="primary" :loading="saving" @click="savePassword">保存</el-button>
+        </template>
+      </BusinessModal>
     </div>
 
-    <el-table :data="rows" v-loading="loading" border>
-      <el-table-column prop="id" label="ID" width="70" />
-      <el-table-column prop="username" label="账号" min-width="120">
-        <template #default="{ row }">
-          {{ row.username }}
-          <el-tag v-if="isSelf(row)" size="small" type="info" class="tag">我</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="nickname" label="昵称" min-width="110" />
-      <el-table-column label="角色" min-width="130">
-        <template #default="{ row }">
-          <el-tag v-if="row.is_super" type="danger" size="small">超级管理员</el-tag>
-          <el-tag v-else-if="row.role_name" size="small">{{ row.role_name }}</el-tag>
-          <span v-else class="muted">未分配</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="状态" width="90">
-        <template #default="{ row }">
-          <el-tag :type="row.is_active ? 'success' : 'info'" size="small">
-            {{ row.is_active ? '启用' : '停用' }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="创建时间" width="170">
-        <template #default="{ row }">{{ fmt(row.created_at) }}</template>
-      </el-table-column>
-      <el-table-column label="操作" width="290" fixed="right">
-        <template #default="{ row }">
-          <el-button size="small" @click="openEdit(row)">编辑</el-button>
-          <el-button size="small" @click="openPassword(row)">改密</el-button>
-          <el-button size="small" :disabled="isSelf(row)" @click="toggleActive(row)">
-            {{ row.is_active ? '停用' : '启用' }}
-          </el-button>
-          <el-button size="small" type="danger" :disabled="isSelf(row)" @click="remove(row)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-
-    <el-pagination class="pager" layout="total, prev, pager, next" :total="total"
-      :page-size="size" :current-page="page" @current-change="onPage" />
-
-    <!-- 新建 / 编辑 -->
-    <el-dialog v-model="dialog" :title="form.id ? '编辑管理员' : '新建管理员'" width="460px">
-      <el-form :model="form" label-width="90px">
-        <el-form-item label="账号">
-          <el-input v-model="form.username" :disabled="!!form.id" placeholder="登录用账号，创建后不可改" />
-        </el-form-item>
-        <el-form-item v-if="!form.id" label="密码">
-          <el-input v-model="form.password" type="password" show-password placeholder="至少 6 位" />
-        </el-form-item>
-        <el-form-item label="昵称">
-          <el-input v-model="form.nickname" placeholder="显示名" />
-        </el-form-item>
-        <el-form-item label="角色">
-          <el-select v-model="form.role_id" clearable placeholder="选择角色" style="width: 100%"
-            :disabled="form.is_super">
-            <el-option v-for="r in roles" :key="r.id" :label="r.name" :value="r.id" />
-          </el-select>
-          <div class="hint">超级管理员拥有全部权限，无需再选角色。</div>
-        </el-form-item>
-        <el-form-item label="超级管理员">
-          <el-switch v-model="form.is_super" :disabled="form.id && isSelfId(form.id)" />
-          <div class="hint">开启后绕过一切权限校验，并可管理管理员与角色。</div>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialog = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 重置密码 -->
-    <el-dialog v-model="pwdDialog" title="重置密码" width="400px">
-      <el-form label-width="80px">
-        <el-form-item label="账号">
-          <span>{{ pwdTarget.username }}</span>
-        </el-form-item>
-        <el-form-item label="新密码">
-          <el-input v-model="newPassword" type="password" show-password placeholder="至少 6 位" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="pwdDialog = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="savePassword">保存</el-button>
-      </template>
-    </el-dialog>
-  </div>
+  </BusinessPage>
 </template>
 
 <script setup lang="ts">
@@ -227,9 +230,9 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
-.pager { margin-top: 12px; justify-content: flex-end; }
+
+
 .tag { margin-left: 6px; }
-.muted { color: #999; }
-.hint { color: #999; font-size: 12px; line-height: 1.5; }
+.muted { color: var(--el-text-color-secondary); }
+.hint { color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.5; }
 </style>

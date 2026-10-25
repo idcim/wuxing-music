@@ -2,7 +2,9 @@
 
 管理员 Web 界面，连接 `backend/` 的 FastAPI 接口。
 
-使用官方 Vben 5.7.0 的布局、菜单、偏好设置和设计系统，业务页沿用 Element Plus。
+使用官方 Vben 5.7.0 的布局、菜单、偏好设置、Page、Card、Modal 与 Drawer。
+现有业务页通过 `src/components/business/` 统一接入；表格、表单、分页及输入控件采用 Element Plus 适配 Vben 主题。
+组件约定和验收说明见 [`docs/ADMIN-VBEN.md`](../docs/ADMIN-VBEN.md)。
 Vben workspace 源码与 MIT 许可证在 `vendor/`，通过 npm workspaces 安装，来源与升级方式见
 [`vendor/README.md`](vendor/README.md)。菜单、路由和后端权限点仍遵守本项目的权限及模块开关。
 

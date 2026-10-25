@@ -1,0 +1,108 @@
+/* Vben 是业务页的主题来源；Element Plus 作为官方 web-ele 方案的控件适配。 */
+:root, html.dark {
+  --el-color-primary: hsl(var(--primary));
+  --el-color-primary-light-3: color-mix(in srgb, hsl(var(--primary)) 70%, hsl(var(--card)));
+  --el-color-primary-light-5: color-mix(in srgb, hsl(var(--primary)) 50%, hsl(var(--card)));
+  --el-color-primary-light-7: color-mix(in srgb, hsl(var(--primary)) 30%, hsl(var(--card)));
+  --el-color-primary-light-8: color-mix(in srgb, hsl(var(--primary)) 20%, hsl(var(--card)));
+  --el-color-primary-light-9: color-mix(in srgb, hsl(var(--primary)) 10%, hsl(var(--card)));
+  --el-color-primary-dark-2: color-mix(in srgb, hsl(var(--primary)) 80%, black);
+  --el-color-success: hsl(var(--success));
+  --el-color-warning: hsl(var(--warning));
+  --el-color-danger: hsl(var(--destructive));
+  --el-color-error: hsl(var(--destructive));
+  --el-bg-color: hsl(var(--card));
+  --el-bg-color-page: hsl(var(--background-deep));
+  --el-bg-color-overlay: hsl(var(--popover));
+  --el-text-color-primary: hsl(var(--foreground));
+  --el-text-color-regular: hsl(var(--foreground) / .85);
+  --el-text-color-secondary: hsl(var(--muted-foreground));
+  --el-text-color-placeholder: hsl(var(--muted-foreground) / .8);
+  --el-text-color-disabled: hsl(var(--muted-foreground) / .5);
+  --el-border-color: hsl(var(--border));
+  --el-border-color-light: hsl(var(--border) / .8);
+  --el-border-color-lighter: hsl(var(--border) / .65);
+  --el-border-color-extra-light: hsl(var(--border) / .45);
+  --el-fill-color: hsl(var(--muted));
+  --el-fill-color-light: hsl(var(--muted) / .65);
+  --el-fill-color-lighter: hsl(var(--muted) / .4);
+  --el-fill-color-extra-light: hsl(var(--muted) / .25);
+  --el-fill-color-blank: hsl(var(--card));
+  --el-mask-color: hsl(var(--card) / .85);
+  --el-mask-color-extra-light: hsl(var(--card) / .5);
+  --el-border-radius-base: var(--radius);
+  --el-font-size-base: 14px;
+  --el-component-size: 36px;
+  --el-component-size-small: 28px;
+  --el-component-size-large: 42px;
+}
+.business-page { min-width: 0; color: hsl(var(--foreground)); }
+.business-page__header { gap: 20px; min-height: 100px; }
+.business-page__content { min-width: 0; padding: 24px; }
+.business-card { min-width: 0; overflow: hidden; box-shadow: 0 1px 3px hsl(var(--foreground) / .025); }
+.business-card__header { display: block; padding: 18px 24px; border-bottom: 1px solid hsl(var(--border)); font-size: 15px; font-weight: 600; }
+.business-card__body { padding: 24px; }
+.business-page .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 20px; }
+.business-page .toolbar .el-button + .el-button { margin-left: 0; }
+.business-page .hint, .business-popup__content .hint { margin-left: 0; line-height: 1.65; color: hsl(var(--muted-foreground)); }
+.business-form .el-form-item { margin-bottom: 22px; }
+.business-form .el-form-item__label { height: auto; margin-bottom: 7px; line-height: 1.6; font-weight: 500; color: hsl(var(--foreground)); }
+.business-form .el-form-item__content { min-width: 0; gap: 8px; }
+.business-form .el-input, .business-form .el-select, .business-form .el-textarea { max-width: 100%; }
+.business-form .el-form-item__content > .hint { flex-basis: 100%; }
+.business-form .el-switch { --el-switch-on-color: hsl(var(--primary)); }
+.business-table { width: 100%; --el-table-header-bg-color: color-mix(in srgb, hsl(var(--muted)) 55%, hsl(var(--card))); --el-table-row-hover-bg-color: hsl(var(--muted) / .45); --el-table-header-text-color: hsl(var(--muted-foreground)); --el-table-border-color: hsl(var(--border)); }
+.business-table th.el-table__cell { padding: 12px 0; font-weight: 500; }
+.business-table td.el-table__cell { padding: 13px 0; }
+.business-table .cell { line-height: 1.65; }
+.business-table .el-button--small { border-radius: calc(var(--radius) - 2px); }
+.business-table .el-table__empty-block { min-height: 160px; }
+.business-pagination { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.business-modal { top: 24px; max-width: calc(100vw - 32px); max-height: calc(100dvh - 48px); }
+.business-drawer { max-width: 100vw; }
+.business-popup__content { padding: 24px; min-width: 0; color: hsl(var(--foreground)); }
+.business-popup__footer { gap: 8px; padding: 16px 24px; }
+.business-popup__footer .el-button + .el-button { margin-left: 0; }
+.business-popup__content .business-card__body { padding: 18px; }
+.settings-tabs { min-width: 0; }
+.settings-tabs > .el-tabs__header { margin: 0; padding: 0 24px; background: hsl(var(--card)); }
+.settings-tabs .el-tabs__nav-wrap::after { height: 1px; }
+.settings-tabs .el-tabs__item { height: 48px; }
+.settings-tabs .el-tabs__content { overflow: visible; padding-top: 20px; }
+.settings-tabs .business-card { width: 100%; max-width: 960px; }
+.business-page .el-descriptions { --el-descriptions-table-border: 1px solid hsl(var(--border)); }
+.business-popup__content .el-descriptions__cell { overflow-wrap: anywhere; }
+.business-page .el-alert, .business-popup__content .el-alert { border-radius: var(--radius); }
+@media (max-width: 767px) {
+  .business-page__header { padding: 20px 16px; flex-wrap: wrap; gap: 12px; }
+  .business-page__content { padding: 16px; }
+  .business-card__body, .business-card__header { padding: 16px; }
+  .business-page .toolbar > .el-input, .business-page .toolbar > .el-select { width: 100% !important; }
+  .business-page .toolbar > .hint { width: 100%; }
+  .business-popup__content { padding: 18px 16px; }
+  .business-popup__footer { padding: 12px 16px; flex-wrap: wrap; }
+  .business-modal { width: calc(100vw - 24px) !important; max-width: calc(100vw - 24px); }
+  .business-drawer { width: 100vw !important; }
+  .business-pagination { justify-content: flex-start; overflow-x: auto; }
+  .settings-tabs > .el-tabs__header { padding: 0 12px; }
+}
+
+.business-notifications { max-width: calc(100vw - 24px); }
+
+.business-table .el-scrollbar__wrap { scrollbar-width: thin; scrollbar-color: hsl(var(--border)) transparent; }
+
+/* 状态文字在浅色卡片与暗色卡片上都保持可读。 */
+.el-tag.el-tag--success { --el-tag-text-color: color-mix(in srgb, hsl(var(--success)) 65%, hsl(var(--foreground))); }
+.el-tag.el-tag--warning { --el-tag-text-color: color-mix(in srgb, hsl(var(--warning)) 60%, hsl(var(--foreground))); }
+.el-tag.el-tag--info { --el-tag-text-color: hsl(var(--muted-foreground)); }
+html.dark { --el-color-primary: color-mix(in srgb, hsl(var(--primary)) 75%, white); }
+
+.el-alert--warning.is-light { --el-color-warning: color-mix(in srgb, hsl(var(--warning)) 55%, hsl(var(--foreground))); }
+.el-alert--success.is-light { --el-color-success: color-mix(in srgb, hsl(var(--success)) 65%, hsl(var(--foreground))); }
+
+@media (max-width: 767px) {
+  .business-table.el-table .el-table__cell.el-table-fixed-column--right { position: static !important; }
+  .business-table.el-table .el-table__cell.el-table-fixed-column--right::before { display: none; }
+}
+
+.settings-panel { width: 100%; max-width: 960px; }

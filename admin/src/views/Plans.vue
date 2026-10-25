@@ -1,55 +1,58 @@
 <template>
-  <div>
-    <div class="toolbar">
-      <el-button type="primary" :icon="Plus" @click="openEdit()">新增套餐</el-button>
-    </div>
-    <el-table :data="rows" v-loading="loading" border>
-      <el-table-column prop="id" label="ID" width="90" />
-      <el-table-column prop="name" label="名称" width="100" />
-      <el-table-column prop="price" label="价格" width="90">
-        <template #default="{ row }">¥{{ row.price }}</template>
-      </el-table-column>
-      <el-table-column prop="duration_days" label="时长(天)" width="100" />
-      <el-table-column label="特性">
-        <template #default="{ row }">
-          <el-tag v-for="f in row.features" :key="f" size="small" class="tag">{{ f }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="featured" label="推荐" width="80">
-        <template #default="{ row }">
-          <el-tag v-if="row.featured" type="warning" size="small">推荐</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="160" fixed="right">
-        <template #default="{ row }">
-          <el-button size="small" @click="openEdit(row)">编辑</el-button>
-          <el-button size="small" type="danger" @click="onDelete(row)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+  <BusinessPage>
+    <div>
+      <div class="toolbar">
+        <el-button type="primary" :icon="Plus" @click="openEdit()">新增套餐</el-button>
+      </div>
+      <BusinessTable :data="rows" v-loading="loading" border>
+        <el-table-column prop="id" label="ID" width="90" />
+        <el-table-column prop="name" label="名称" width="100" />
+        <el-table-column prop="price" label="价格" width="90">
+          <template #default="{ row }">¥{{ row.price }}</template>
+        </el-table-column>
+        <el-table-column prop="duration_days" label="时长(天)" width="100" />
+        <el-table-column label="特性">
+          <template #default="{ row }">
+            <el-tag v-for="f in row.features" :key="f" size="small" class="tag">{{ f }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="featured" label="推荐" width="80">
+          <template #default="{ row }">
+            <el-tag v-if="row.featured" type="warning" size="small">推荐</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="160" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" @click="openEdit(row)">编辑</el-button>
+            <el-button size="small" type="danger" @click="onDelete(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </BusinessTable>
 
-    <el-dialog v-model="dialog" :title="form.id ? '编辑套餐' : '新增套餐'" width="520px">
-      <el-form :model="form" label-width="90px">
-        <el-form-item label="ID"><el-input v-model="form.id" :disabled="isEdit" placeholder="free/month/year/trial" /></el-form-item>
-        <el-form-item label="名称"><el-input v-model="form.name" /></el-form-item>
-        <el-form-item label="英文名"><el-input v-model="form.en" /></el-form-item>
-        <el-form-item label="价格"><el-input-number v-model="form.price" :min="0" /></el-form-item>
-        <el-form-item label="原价"><el-input v-model="form.original" /></el-form-item>
-        <el-form-item label="单位"><el-input v-model="form.unit" placeholder="/ 月" /></el-form-item>
-        <el-form-item label="角标"><el-input v-model="form.badge" placeholder="热门" /></el-form-item>
-        <el-form-item label="时长(天)"><el-input-number v-model="form.duration_days" :min="0" /></el-form-item>
-        <el-form-item label="特性">
-          <el-input v-model="featuresText" type="textarea" :rows="4" placeholder="每行一条特性" />
-        </el-form-item>
-        <el-form-item label="推荐"><el-switch v-model="form.featured" /></el-form-item>
-        <el-form-item label="排序"><el-input-number v-model="form.sort" :min="0" /></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialog = false">取消</el-button>
-        <el-button type="primary" @click="onSave">保存</el-button>
-      </template>
-    </el-dialog>
-  </div>
+      <BusinessModal v-model="dialog" :title="form.id ? '编辑套餐' : '新增套餐'" width="520px">
+        <BusinessForm :model="form" label-width="90px">
+          <el-form-item label="ID"><el-input v-model="form.id" :disabled="isEdit" placeholder="free/month/year/trial" /></el-form-item>
+          <el-form-item label="名称"><el-input v-model="form.name" /></el-form-item>
+          <el-form-item label="英文名"><el-input v-model="form.en" /></el-form-item>
+          <el-form-item label="价格"><el-input-number v-model="form.price" :min="0" /></el-form-item>
+          <el-form-item label="原价"><el-input v-model="form.original" /></el-form-item>
+          <el-form-item label="单位"><el-input v-model="form.unit" placeholder="/ 月" /></el-form-item>
+          <el-form-item label="角标"><el-input v-model="form.badge" placeholder="热门" /></el-form-item>
+          <el-form-item label="时长(天)"><el-input-number v-model="form.duration_days" :min="0" /></el-form-item>
+          <el-form-item label="特性">
+            <el-input v-model="featuresText" type="textarea" :rows="4" placeholder="每行一条特性" />
+          </el-form-item>
+          <el-form-item label="推荐"><el-switch v-model="form.featured" /></el-form-item>
+          <el-form-item label="排序"><el-input-number v-model="form.sort" :min="0" /></el-form-item>
+        </BusinessForm>
+        <template #footer>
+          <el-button @click="dialog = false">取消</el-button>
+          <el-button type="primary" @click="onSave">保存</el-button>
+        </template>
+      </BusinessModal>
+    </div>
+
+  </BusinessPage>
 </template>
 
 <script setup lang="ts">
@@ -109,6 +112,6 @@ onMounted(load);
 </script>
 
 <style scoped>
-.toolbar { margin-bottom: 16px; }
+
 .tag { margin: 2px 4px 2px 0; }
 </style>

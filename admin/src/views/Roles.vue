@@ -1,69 +1,72 @@
 <template>
-  <div>
-    <div class="toolbar">
-      <el-button type="primary" :icon="Plus" @click="openCreate">新建角色</el-button>
-      <span class="hint">权限只控制后台功能；内置「超级管理员」拥有全部权限且不可修改。</span>
-    </div>
+  <BusinessPage>
+    <div>
+      <div class="toolbar">
+        <el-button type="primary" :icon="Plus" @click="openCreate">新建角色</el-button>
+        <span class="hint">权限只控制后台功能；内置「超级管理员」拥有全部权限且不可修改。</span>
+      </div>
 
-    <el-table :data="rows" v-loading="loading" border>
-      <el-table-column prop="id" label="ID" width="70" />
-      <el-table-column prop="name" label="角色名" min-width="140">
-        <template #default="{ row }">
-          {{ row.name }}
-          <el-tag v-if="row.is_builtin" size="small" type="danger" class="tag">内置</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="remark" label="说明" min-width="180">
-        <template #default="{ row }">{{ row.remark || '-' }}</template>
-      </el-table-column>
-      <el-table-column label="权限" min-width="90">
-        <template #default="{ row }">{{ row.permissions.length }} 项</template>
-      </el-table-column>
-      <el-table-column label="使用中" width="90">
-        <template #default="{ row }">{{ row.admin_count }} 人</template>
-      </el-table-column>
-      <el-table-column label="操作" width="180" fixed="right">
-        <template #default="{ row }">
-          <el-button size="small" @click="openEdit(row)">{{ row.is_builtin ? '查看' : '编辑' }}</el-button>
-          <el-button size="small" type="danger" :disabled="row.is_builtin || row.admin_count > 0"
-            @click="remove(row)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+      <BusinessTable :data="rows" v-loading="loading" border>
+        <el-table-column prop="id" label="ID" width="70" />
+        <el-table-column prop="name" label="角色名" min-width="140">
+          <template #default="{ row }">
+            {{ row.name }}
+            <el-tag v-if="row.is_builtin" size="small" type="danger" class="tag">内置</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="remark" label="说明" min-width="180">
+          <template #default="{ row }">{{ row.remark || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="权限" min-width="90">
+          <template #default="{ row }">{{ row.permissions.length }} 项</template>
+        </el-table-column>
+        <el-table-column label="使用中" width="90">
+          <template #default="{ row }">{{ row.admin_count }} 人</template>
+        </el-table-column>
+        <el-table-column label="操作" width="180" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" @click="openEdit(row)">{{ row.is_builtin ? '查看' : '编辑' }}</el-button>
+            <el-button size="small" type="danger" :disabled="row.is_builtin || row.admin_count > 0"
+              @click="remove(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </BusinessTable>
 
-    <el-dialog v-model="dialog" :title="dialogTitle" width="640px">
-      <el-form :model="form" label-width="80px">
-        <el-form-item label="角色名">
-          <el-input v-model="form.name" :disabled="form.is_builtin" placeholder="如：运营、客服" />
-        </el-form-item>
-        <el-form-item label="说明">
-          <el-input v-model="form.remark" :disabled="form.is_builtin" placeholder="可选" />
-        </el-form-item>
-        <el-form-item label="权限">
-          <div class="perms">
-            <div v-for="g in groups" :key="g.module" class="perm-group">
-              <div class="perm-group-head">
-                <el-checkbox :model-value="allChecked(g)" :indeterminate="someChecked(g)"
-                  :disabled="form.is_builtin" @change="(v: any) => toggleGroup(g, v)">
-                  {{ g.label }}
-                </el-checkbox>
-              </div>
-              <div class="perm-items">
-                <el-checkbox v-for="it in g.items" :key="it.key" v-model="checked[it.key]"
-                  :disabled="form.is_builtin" @change="onItemChange(g, it)">
-                  {{ it.label }}
-                </el-checkbox>
+      <BusinessModal v-model="dialog" :title="dialogTitle" width="640px">
+        <BusinessForm :model="form" label-width="80px">
+          <el-form-item label="角色名">
+            <el-input v-model="form.name" :disabled="form.is_builtin" placeholder="如：运营、客服" />
+          </el-form-item>
+          <el-form-item label="说明">
+            <el-input v-model="form.remark" :disabled="form.is_builtin" placeholder="可选" />
+          </el-form-item>
+          <el-form-item label="权限">
+            <div class="perms">
+              <div v-for="g in groups" :key="g.module" class="perm-group">
+                <div class="perm-group-head">
+                  <el-checkbox :model-value="allChecked(g)" :indeterminate="someChecked(g)"
+                    :disabled="form.is_builtin" @change="(v: any) => toggleGroup(g, v)">
+                    {{ g.label }}
+                  </el-checkbox>
+                </div>
+                <div class="perm-items">
+                  <el-checkbox v-for="it in g.items" :key="it.key" v-model="checked[it.key]"
+                    :disabled="form.is_builtin" @change="onItemChange(g, it)">
+                    {{ it.label }}
+                  </el-checkbox>
+                </div>
               </div>
             </div>
-          </div>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialog = false">{{ form.is_builtin ? '关闭' : '取消' }}</el-button>
-        <el-button v-if="!form.is_builtin" type="primary" :loading="saving" @click="save">保存</el-button>
-      </template>
-    </el-dialog>
-  </div>
+          </el-form-item>
+        </BusinessForm>
+        <template #footer>
+          <el-button @click="dialog = false">{{ form.is_builtin ? '关闭' : '取消' }}</el-button>
+          <el-button v-if="!form.is_builtin" type="primary" :loading="saving" @click="save">保存</el-button>
+        </template>
+      </BusinessModal>
+    </div>
+
+  </BusinessPage>
 </template>
 
 <script setup lang="ts">
@@ -168,11 +171,11 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+
 .tag { margin-left: 6px; }
-.hint { color: #999; font-size: 12px; }
+.hint { color: var(--el-text-color-secondary); font-size: 12px; }
 .perms { width: 100%; }
-.perm-group { border: 1px solid #ebeef5; border-radius: 4px; padding: 8px 12px; margin-bottom: 8px; }
-.perm-group-head { border-bottom: 1px dashed #ebeef5; padding-bottom: 4px; margin-bottom: 4px; }
+.perm-group { border: 1px solid var(--el-border-color-lighter); border-radius: 4px; padding: 8px 12px; margin-bottom: 8px; }
+.perm-group-head { border-bottom: 1px dashed var(--el-border-color-lighter); padding-bottom: 4px; margin-bottom: 4px; }
 .perm-items { display: flex; flex-wrap: wrap; gap: 16px; padding-left: 22px; }
 </style>

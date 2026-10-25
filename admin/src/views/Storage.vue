@@ -1,8 +1,8 @@
 <template>
   <div>
-    <el-card style="max-width: 680px" v-loading="loading">
+    <BusinessCard class="settings-panel" v-loading="loading">
       <template #header>文件存储设置</template>
-      <el-form :model="form" label-width="130px">
+      <BusinessForm :model="form" label-width="130px">
         <el-form-item label="存储方式">
           <el-radio-group v-model="form.provider">
             <el-radio value="local">本地存储</el-radio>
@@ -44,7 +44,7 @@
         <el-form-item>
           <el-button type="primary" :loading="saving" @click="onSave">保存</el-button>
         </el-form-item>
-      </el-form>
+      </BusinessForm>
 
       <template v-if="form.provider === 'oss'">
         <el-divider />
@@ -68,7 +68,7 @@
           />
         </div>
       </template>
-    </el-card>
+    </BusinessCard>
   </div>
 </template>
 
@@ -139,6 +139,6 @@ onMounted(load);
 
 <style scoped>
 .migrate-title { font-weight: 600; margin-bottom: 6px; }
-.migrate-hint { color: #909399; font-size: 13px; line-height: 1.6; }
-.migrate-hint code { background: #f5f7fa; padding: 0 4px; border-radius: 3px; }
+.migrate-hint { color: var(--el-text-color-secondary); font-size: 13px; line-height: 1.6; }
+.migrate-hint code { background: var(--el-fill-color-light); padding: 0 4px; border-radius: 3px; }
 </style>

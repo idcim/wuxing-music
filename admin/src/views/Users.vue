@@ -1,277 +1,280 @@
 <template>
-  <div>
-    <div class="toolbar">
-      <el-input v-model="keyword" placeholder="按昵称搜索" clearable style="width: 200px" @keyup.enter="reload" />
-      <el-button :icon="Search" @click="reload">搜索</el-button>
-      <el-button :icon="CopyDocument" @click="openDup">重复账号</el-button>
-      <el-button plain @click="openMigration">迁移确认</el-button>
-      <el-button v-if="canDelete" type="warning" plain @click="onCleanupTest">清理测试账号</el-button>
-      <span class="hint">
-        同一人在小程序与公众号各有一条账号时，接入微信开放平台后会按 unionid 自动并成一条；
-        这里列出还没并掉的（同手机号的不自动并，需人工确认）。
-      </span>
-    </div>
-    <el-table :data="rows" v-loading="loading" border>
-      <el-table-column prop="id" label="ID" width="70" />
-      <el-table-column label="头像" width="72">
-        <template #default="{ row }">
-          <el-avatar :size="40" :src="row.avatar || undefined">
-            {{ (row.nickname || '律').slice(0, 1) }}
-          </el-avatar>
-        </template>
-      </el-table-column>
-      <el-table-column label="昵称" min-width="140">
-        <template #default="{ row }">
-          {{ row.nickname }}
-          <el-tag v-if="row.agent" size="small" type="success" effect="plain" class="src">
-            代理 {{ row.agent.code }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="phone" label="手机号" width="130">
-        <template #default="{ row }">{{ row.phone || '-' }}</template>
-      </el-table-column>
-      <el-table-column prop="element" label="五行" width="70" />
-      <el-table-column label="会员" width="140">
-        <template #default="{ row }">
-          <el-tag :type="row.membership_type === 'free' ? 'info' : 'warning'" size="small">
-            {{ row.membership_name }}
-          </el-tag>
-          <el-tag v-if="row.membership_source === 'gift'" type="success" size="small" class="src">赠送</el-tag>
-          <el-tag v-else-if="row.membership_source === 'cdkey'" size="small" class="src">兑换</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="到期" width="170">
-        <template #default="{ row }">{{ fmt(row.membership_expire_at) }}</template>
-      </el-table-column>
-      <el-table-column label="注册时间" width="170">
-        <template #default="{ row }">{{ fmt(row.created_at) }}</template>
-      </el-table-column>
-      <el-table-column label="操作" width="350" fixed="right">
-        <template #default="{ row }">
-          <el-button size="small" @click="openDetail(row)">详情</el-button>
-          <el-button size="small" type="primary" @click="openGrant(row)">开通会员</el-button>
-          <el-button v-if="agentEnabled && !row.agent" size="small" type="success"
-            @click="openSetAgent(row)">设为代理</el-button>
-          <el-button v-else-if="agentEnabled" size="small" @click="$router.push('/agents')">
-            查看代理
-          </el-button>
-          <el-button v-if="canDelete" size="small" type="danger" plain @click="onDelete(row)">
-            删除
-          </el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-    <el-pagination class="pager" layout="total, prev, pager, next" :total="total"
-      :page-size="size" :current-page="page" @current-change="onPage" />
-
-    <!-- 用户详情 -->
-    <el-dialog v-model="detailDialog" title="用户详情" width="560px">
-      <div class="detail-head">
-        <el-avatar :size="64" :src="detail.avatar || undefined">
-          {{ (detail.nickname || '律').slice(0, 1) }}
-        </el-avatar>
-        <div class="detail-head-info">
-          <div class="detail-head-name">{{ detail.nickname }}</div>
-          <div class="detail-head-sub">ID {{ detail.id }}</div>
-        </div>
+  <BusinessPage>
+    <div>
+      <div class="toolbar">
+        <el-input v-model="keyword" placeholder="按昵称搜索" clearable style="width: 200px" @keyup.enter="reload" />
+        <el-button :icon="Search" @click="reload">搜索</el-button>
+        <el-button :icon="CopyDocument" @click="openDup">重复账号</el-button>
+        <el-button plain @click="openMigration">迁移确认</el-button>
+        <el-button v-if="canDelete" type="warning" plain @click="onCleanupTest">清理测试账号</el-button>
+        <span class="hint">
+          同一人在小程序与公众号各有一条账号时，接入微信开放平台后会按 unionid 自动并成一条；
+          这里列出还没并掉的（同手机号的不自动并，需人工确认）。
+        </span>
       </div>
-      <el-descriptions :column="2" border>
-        <el-descriptions-item label="昵称">{{ detail.nickname }}</el-descriptions-item>
-        <el-descriptions-item label="ID">{{ detail.id }}</el-descriptions-item>
-        <el-descriptions-item label="手机号">{{ detail.phone || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="测评体质">{{ detail.element || '未测评' }}</el-descriptions-item>
-        <el-descriptions-item label="生日">{{ birthText(detail) }}</el-descriptions-item>
-        <el-descriptions-item label="本命五行">{{ lunarText(detail.lunar) }}</el-descriptions-item>
-        <el-descriptions-item label="代理身份">
-          <el-tag v-if="detail.agent" size="small" type="success">
-            {{ detail.agent.name }} · {{ detail.agent.code }}
-          </el-tag>
-          <span v-else>-</span>
-        </el-descriptions-item>
-        <el-descriptions-item label="推广来源">
-          {{ detail.referrer ? detail.referrer.name : '-' }}
-        </el-descriptions-item>
-        <el-descriptions-item label="会员">{{ detail.membership_name }}</el-descriptions-item>
-        <el-descriptions-item label="来源">{{ srcText(detail.membership_source) }}</el-descriptions-item>
-        <el-descriptions-item label="到期">{{ fmt(detail.membership_expire_at) }}</el-descriptions-item>
-        <el-descriptions-item label="注册">{{ fmt(detail.created_at) }}</el-descriptions-item>
-        <el-descriptions-item label="openid" :span="2">{{ detail.openid }}</el-descriptions-item>
-        <el-descriptions-item v-if="detail.unionid" label="unionid" :span="2">{{ detail.unionid }}</el-descriptions-item>
-      </el-descriptions>
-
-      <div v-if="scoreList.length" class="detail-block">
-        <div class="detail-title">五行测评分布</div>
-        <el-tag v-for="s in scoreList" :key="s.k" class="score-tag">{{ s.k }} {{ s.v }}</el-tag>
-      </div>
-
-      <div class="detail-block">
-        <div class="detail-title">订单（{{ (detail.orders || []).length }}）</div>
-        <el-table v-if="detail.orders && detail.orders.length" :data="detail.orders" size="small" border>
-          <el-table-column prop="order_no" label="订单号" min-width="160" />
-          <el-table-column prop="plan_name" label="套餐" width="80" />
-          <el-table-column label="金额" width="80">
-            <template #default="{ row }">¥{{ row.amount }}</template>
-          </el-table-column>
-          <el-table-column label="状态" width="90">
-            <template #default="{ row }">{{ statusText(row.status) }}</template>
-          </el-table-column>
-        </el-table>
-        <el-empty v-else description="暂无订单" :image-size="60" />
-      </div>
-      <template #footer>
-        <el-button type="primary" @click="detailDialog = false">关闭</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 设为代理 -->
-    <el-dialog v-model="agentDialog" title="设为代理" width="460px">
-      <el-form label-width="90px">
-        <el-form-item label="用户">{{ current.nickname }}（ID {{ current.id }}）</el-form-item>
-        <el-form-item label="代理名称">
-          <el-input v-model="agentForm.name" :placeholder="current.nickname || '不填则用昵称'" />
-        </el-form-item>
-        <el-form-item label="类型">
-          <el-radio-group v-model="agentForm.type">
-            <el-radio label="promoter">网络推手</el-radio>
-            <el-radio label="store">实体店</el-radio>
-          </el-radio-group>
-        </el-form-item>
-      </el-form>
-      <el-alert type="info" :closable="false" show-icon>
-        <template #title>
-          系统会自动生成推广码。
-          <template v-if="current.referrer">
-            该用户是<b>「{{ current.referrer.name }}」</b>推广来的，
-            将<b>自动成为其下级</b>；他成交时对方可额外拿一份加成，
-            <b>由平台支出，不影响他自己的分成</b>。
+      <BusinessTable :data="rows" v-loading="loading" border>
+        <el-table-column prop="id" label="ID" width="70" />
+        <el-table-column label="头像" width="72">
+          <template #default="{ row }">
+            <el-avatar :size="40" :src="row.avatar || undefined">
+              {{ (row.nickname || '律').slice(0, 1) }}
+            </el-avatar>
           </template>
-          <template v-else>该用户没有推荐人，将作为独立代理（无上级）。</template>
-          <b>上下级关系一旦确定不可更改。</b>
-        </template>
-      </el-alert>
-      <template #footer>
-        <el-button @click="agentDialog = false">取消</el-button>
-        <el-button type="success" :loading="submitting" @click="onSetAgent">确认设为代理</el-button>
-      </template>
-    </el-dialog>
+        </el-table-column>
+        <el-table-column label="昵称" min-width="140">
+          <template #default="{ row }">
+            {{ row.nickname }}
+            <el-tag v-if="row.agent" size="small" type="success" effect="plain" class="src">
+              代理 {{ row.agent.code }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="phone" label="手机号" width="130">
+          <template #default="{ row }">{{ row.phone || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="element" label="五行" width="70" />
+        <el-table-column label="会员" width="140">
+          <template #default="{ row }">
+            <el-tag :type="row.membership_type === 'free' ? 'info' : 'warning'" size="small">
+              {{ row.membership_name }}
+            </el-tag>
+            <el-tag v-if="row.membership_source === 'gift'" type="success" size="small" class="src">赠送</el-tag>
+            <el-tag v-else-if="row.membership_source === 'cdkey'" size="small" class="src">兑换</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="到期" width="170">
+          <template #default="{ row }">{{ fmt(row.membership_expire_at) }}</template>
+        </el-table-column>
+        <el-table-column label="注册时间" width="170">
+          <template #default="{ row }">{{ fmt(row.created_at) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="350" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" @click="openDetail(row)">详情</el-button>
+            <el-button size="small" type="primary" @click="openGrant(row)">开通会员</el-button>
+            <el-button v-if="agentEnabled && !row.agent" size="small" type="success"
+              @click="openSetAgent(row)">设为代理</el-button>
+            <el-button v-else-if="agentEnabled" size="small" @click="$router.push('/agents')">
+              查看代理
+            </el-button>
+            <el-button v-if="canDelete" size="small" type="danger" plain @click="onDelete(row)">
+              删除
+            </el-button>
+          </template>
+        </el-table-column>
+      </BusinessTable>
+      <BusinessPagination class="pager" layout="total, prev, pager, next" :total="total"
+        :page-size="size" :current-page="page" @current-change="onPage" />
 
-    <el-dialog v-model="grantDialog" title="开通 / 赠送会员" width="440px">
-      <el-form label-width="90px">
-        <el-form-item label="用户">{{ current.nickname }}（ID {{ current.id }}）</el-form-item>
-        <el-form-item label="当前会员">{{ current.membership_name }}</el-form-item>
-        <el-form-item label="套餐">
-          <el-select v-model="grantForm.plan_id" @change="onPlanChange">
-            <el-option label="听闻（取消会员）" value="free" />
-            <el-option v-for="p in payPlans" :key="p.id" :label="`${p.name}（${p.duration_days}天）`" :value="p.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="grantForm.plan_id !== 'free'" label="开通天数">
-          <el-input-number v-model="grantForm.days" :min="1" />
-          <span class="hint">默认按套餐时长，可自定义</span>
-        </el-form-item>
-      </el-form>
-      <el-alert type="info" :closable="false" show-icon
-        title="后台开通不走支付，记为赠送(gift)。若会员仍有效，将在剩余期上叠加。" />
-      <template #footer>
-        <el-button @click="grantDialog = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="onGrant">确认开通</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 重复账号排查与人工合并 -->
-    <el-drawer v-model="dupDrawer" title="重复账号" size="60%">
-      <el-alert type="warning" :closable="false" show-icon class="dup-tip">
-        合并**不可逆**：被并入的一方，其订单、聆听历史、兑换记录都会改指向保留方；
-        会员取两者中到期更晚的那一组。同手机号未必是同一个人（家人共用），请先核对再合并。
-      </el-alert>
-      <el-empty v-if="!dupLoading && !dupGroups.length" description="没有发现重复账号" />
-      <div v-for="(g, gi) in dupGroups" :key="gi" v-loading="dupLoading" class="dup-group">
-        <div class="dup-head">
-          按 <b>{{ g.by === 'phone' ? '手机号' : 'unionid' }}</b> 匹配：
-          <code>{{ g.value }}</code> 共 {{ g.count }} 条
-          <el-tag v-if="g.by === 'unionid'" type="danger" size="small">
-            理应已自动合并，出现在这里说明有异常
-          </el-tag>
-        </div>
-        <el-table :data="g.users" border size="small">
-          <el-table-column prop="id" label="ID" width="70" />
-          <el-table-column prop="nickname" label="昵称" min-width="120" />
-          <el-table-column label="会员" width="150">
-            <template #default="{ row }">
-              {{ row.membership }}
-              <span class="dup-exp">{{ row.expireAt ? fmt(row.expireAt) : '' }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="标识" min-width="200">
-            <template #default="{ row }">
-              <div class="dup-id">openid: {{ row.openid || '-' }}</div>
-              <div class="dup-id">oa: {{ row.oaOpenid || '-' }}</div>
-            </template>
-          </el-table-column>
-          <el-table-column prop="createdAt" label="注册" width="170">
-            <template #default="{ row }">{{ fmt(row.createdAt) }}</template>
-          </el-table-column>
-          <el-table-column label="操作" width="150" fixed="right">
-            <template #default="{ row }">
-              <el-button size="small" type="danger" plain
-                :disabled="g.users.length !== 2"
-                @click="onMerge(g, row)">
-                并入另一条
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-        <div v-if="g.users.length !== 2" class="dup-warn">
-          超过两条时不提供一键合并，请先人工判断后逐对处理。
-        </div>
-      </div>
-    </el-drawer>
-
-    <!-- 旧平台账号迁移确认 -->
-    <el-dialog v-model="migDialog" title="旧平台账号迁移确认" width="720px">
-      <template v-if="mig">
-        <el-alert type="info" :closable="false" show-icon style="margin-bottom: 12px">
-          换过小程序 AppID / 绑开放平台之前生成的老账号，其 openid 是旧 AppID 签发的。
-          能不能在新端认回老数据，取决于老账号有没有 unionid。
-          注意：无 unionid 的老账号在合并前<b>无法在新端完成支付</b>（微信校验下单 AppID 与 openid 归属）。
-        </el-alert>
-        <el-descriptions :column="2" border size="small" style="margin-bottom: 12px">
-          <el-descriptions-item label="存活用户总数">{{ mig.total }}</el-descriptions-item>
-          <el-descriptions-item label="有 unionid（登录自动合并，无需处理）">{{ mig.autoMerge }}</el-descriptions-item>
-          <el-descriptions-item label="无 unionid（孤儿风险）">{{ mig.orphan }}</el-descriptions-item>
-          <el-descriptions-item label="其中绑过手机号（可人工合并找回）">{{ mig.orphanWithPhone }}</el-descriptions-item>
-          <el-descriptions-item label="其中无手机号（无法认回，可清理）">{{ mig.orphanNoPhone }}</el-descriptions-item>
-          <el-descriptions-item label="其中会员仍有效（优先处理）">{{ mig.orphanPremium }}</el-descriptions-item>
-          <el-descriptions-item label="其中有订单记录">{{ mig.orphanWithOrders }}</el-descriptions-item>
-          <el-descriptions-item label="处理路径">手机号组 → 重复账号里人工合并</el-descriptions-item>
-        </el-descriptions>
-        <template v-if="mig.samples?.length">
-          <div class="hint" style="margin-bottom: 8px">
-            无 unionid 账号样例（会员有效的排最前，最多 50 条）：
+      <!-- 用户详情 -->
+      <BusinessModal v-model="detailDialog" title="用户详情" width="560px">
+        <div class="detail-head">
+          <el-avatar :size="64" :src="detail.avatar || undefined">
+            {{ (detail.nickname || '律').slice(0, 1) }}
+          </el-avatar>
+          <div class="detail-head-info">
+            <div class="detail-head-name">{{ detail.nickname }}</div>
+            <div class="detail-head-sub">ID {{ detail.id }}</div>
           </div>
-          <el-table :data="mig.samples" border size="small" max-height="320">
+        </div>
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="昵称">{{ detail.nickname }}</el-descriptions-item>
+          <el-descriptions-item label="ID">{{ detail.id }}</el-descriptions-item>
+          <el-descriptions-item label="手机号">{{ detail.phone || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="测评体质">{{ detail.element || '未测评' }}</el-descriptions-item>
+          <el-descriptions-item label="生日">{{ birthText(detail) }}</el-descriptions-item>
+          <el-descriptions-item label="本命五行">{{ lunarText(detail.lunar) }}</el-descriptions-item>
+          <el-descriptions-item label="代理身份">
+            <el-tag v-if="detail.agent" size="small" type="success">
+              {{ detail.agent.name }} · {{ detail.agent.code }}
+            </el-tag>
+            <span v-else>-</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="推广来源">
+            {{ detail.referrer ? detail.referrer.name : '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="会员">{{ detail.membership_name }}</el-descriptions-item>
+          <el-descriptions-item label="来源">{{ srcText(detail.membership_source) }}</el-descriptions-item>
+          <el-descriptions-item label="到期">{{ fmt(detail.membership_expire_at) }}</el-descriptions-item>
+          <el-descriptions-item label="注册">{{ fmt(detail.created_at) }}</el-descriptions-item>
+          <el-descriptions-item label="openid" :span="2">{{ detail.openid }}</el-descriptions-item>
+          <el-descriptions-item v-if="detail.unionid" label="unionid" :span="2">{{ detail.unionid }}</el-descriptions-item>
+        </el-descriptions>
+
+        <div v-if="scoreList.length" class="detail-block">
+          <div class="detail-title">五行测评分布</div>
+          <el-tag v-for="s in scoreList" :key="s.k" class="score-tag">{{ s.k }} {{ s.v }}</el-tag>
+        </div>
+
+        <div class="detail-block">
+          <div class="detail-title">订单（{{ (detail.orders || []).length }}）</div>
+          <BusinessTable v-if="detail.orders && detail.orders.length" :data="detail.orders" size="small" border>
+            <el-table-column prop="order_no" label="订单号" min-width="160" />
+            <el-table-column prop="plan_name" label="套餐" width="80" />
+            <el-table-column label="金额" width="80">
+              <template #default="{ row }">¥{{ row.amount }}</template>
+            </el-table-column>
+            <el-table-column label="状态" width="90">
+              <template #default="{ row }">{{ statusText(row.status) }}</template>
+            </el-table-column>
+          </BusinessTable>
+          <el-empty v-else description="暂无订单" :image-size="60" />
+        </div>
+        <template #footer>
+          <el-button type="primary" @click="detailDialog = false">关闭</el-button>
+        </template>
+      </BusinessModal>
+
+      <!-- 设为代理 -->
+      <BusinessModal v-model="agentDialog" title="设为代理" width="460px">
+        <BusinessForm label-width="90px">
+          <el-form-item label="用户">{{ current.nickname }}（ID {{ current.id }}）</el-form-item>
+          <el-form-item label="代理名称">
+            <el-input v-model="agentForm.name" :placeholder="current.nickname || '不填则用昵称'" />
+          </el-form-item>
+          <el-form-item label="类型">
+            <el-radio-group v-model="agentForm.type">
+              <el-radio label="promoter">网络推手</el-radio>
+              <el-radio label="store">实体店</el-radio>
+            </el-radio-group>
+          </el-form-item>
+        </BusinessForm>
+        <el-alert type="info" :closable="false" show-icon>
+          <template #title>
+            系统会自动生成推广码。
+            <template v-if="current.referrer">
+              该用户是<b>「{{ current.referrer.name }}」</b>推广来的，
+              将<b>自动成为其下级</b>；他成交时对方可额外拿一份加成，
+              <b>由平台支出，不影响他自己的分成</b>。
+            </template>
+            <template v-else>该用户没有推荐人，将作为独立代理（无上级）。</template>
+            <b>上下级关系一旦确定不可更改。</b>
+          </template>
+        </el-alert>
+        <template #footer>
+          <el-button @click="agentDialog = false">取消</el-button>
+          <el-button type="success" :loading="submitting" @click="onSetAgent">确认设为代理</el-button>
+        </template>
+      </BusinessModal>
+
+      <BusinessModal v-model="grantDialog" title="开通 / 赠送会员" width="440px">
+        <BusinessForm label-width="90px">
+          <el-form-item label="用户">{{ current.nickname }}（ID {{ current.id }}）</el-form-item>
+          <el-form-item label="当前会员">{{ current.membership_name }}</el-form-item>
+          <el-form-item label="套餐">
+            <el-select v-model="grantForm.plan_id" @change="onPlanChange">
+              <el-option label="听闻（取消会员）" value="free" />
+              <el-option v-for="p in payPlans" :key="p.id" :label="`${p.name}（${p.duration_days}天）`" :value="p.id" />
+            </el-select>
+          </el-form-item>
+          <el-form-item v-if="grantForm.plan_id !== 'free'" label="开通天数">
+            <el-input-number v-model="grantForm.days" :min="1" />
+            <span class="hint">默认按套餐时长，可自定义</span>
+          </el-form-item>
+        </BusinessForm>
+        <el-alert type="info" :closable="false" show-icon
+          title="后台开通不走支付，记为赠送(gift)。若会员仍有效，将在剩余期上叠加。" />
+        <template #footer>
+          <el-button @click="grantDialog = false">取消</el-button>
+          <el-button type="primary" :loading="submitting" @click="onGrant">确认开通</el-button>
+        </template>
+      </BusinessModal>
+
+      <!-- 重复账号排查与人工合并 -->
+      <BusinessDrawer v-model="dupDrawer" title="重复账号" size="60%">
+        <el-alert type="warning" :closable="false" show-icon class="dup-tip">
+          合并**不可逆**：被并入的一方，其订单、聆听历史、兑换记录都会改指向保留方；
+          会员取两者中到期更晚的那一组。同手机号未必是同一个人（家人共用），请先核对再合并。
+        </el-alert>
+        <el-empty v-if="!dupLoading && !dupGroups.length" description="没有发现重复账号" />
+        <div v-for="(g, gi) in dupGroups" :key="gi" v-loading="dupLoading" class="dup-group">
+          <div class="dup-head">
+            按 <b>{{ g.by === 'phone' ? '手机号' : 'unionid' }}</b> 匹配：
+            <code>{{ g.value }}</code> 共 {{ g.count }} 条
+            <el-tag v-if="g.by === 'unionid'" type="danger" size="small">
+              理应已自动合并，出现在这里说明有异常
+            </el-tag>
+          </div>
+          <BusinessTable :data="g.users" border size="small">
             <el-table-column prop="id" label="ID" width="70" />
             <el-table-column prop="nickname" label="昵称" min-width="120" />
-            <el-table-column prop="phone" label="手机号" width="130">
-              <template #default="{ row }">{{ row.phone || '-' }}</template>
-            </el-table-column>
             <el-table-column label="会员" width="150">
               <template #default="{ row }">
                 {{ row.membership }}
                 <span class="dup-exp">{{ row.expireAt ? fmt(row.expireAt) : '' }}</span>
               </template>
             </el-table-column>
+            <el-table-column label="标识" min-width="200">
+              <template #default="{ row }">
+                <div class="dup-id">openid: {{ row.openid || '-' }}</div>
+                <div class="dup-id">oa: {{ row.oaOpenid || '-' }}</div>
+              </template>
+            </el-table-column>
             <el-table-column prop="createdAt" label="注册" width="170">
               <template #default="{ row }">{{ fmt(row.createdAt) }}</template>
             </el-table-column>
-          </el-table>
+            <el-table-column label="操作" width="150" fixed="right">
+              <template #default="{ row }">
+                <el-button size="small" type="danger" plain
+                  :disabled="g.users.length !== 2"
+                  @click="onMerge(g, row)">
+                  并入另一条
+                </el-button>
+              </template>
+            </el-table-column>
+          </BusinessTable>
+          <div v-if="g.users.length !== 2" class="dup-warn">
+            超过两条时不提供一键合并，请先人工判断后逐对处理。
+          </div>
+        </div>
+      </BusinessDrawer>
+
+      <!-- 旧平台账号迁移确认 -->
+      <BusinessModal v-model="migDialog" title="旧平台账号迁移确认" width="720px">
+        <template v-if="mig">
+          <el-alert type="info" :closable="false" show-icon style="margin-bottom: 12px">
+            换过小程序 AppID / 绑开放平台之前生成的老账号，其 openid 是旧 AppID 签发的。
+            能不能在新端认回老数据，取决于老账号有没有 unionid。
+            注意：无 unionid 的老账号在合并前<b>无法在新端完成支付</b>（微信校验下单 AppID 与 openid 归属）。
+          </el-alert>
+          <el-descriptions :column="2" border size="small" style="margin-bottom: 12px">
+            <el-descriptions-item label="存活用户总数">{{ mig.total }}</el-descriptions-item>
+            <el-descriptions-item label="有 unionid（登录自动合并，无需处理）">{{ mig.autoMerge }}</el-descriptions-item>
+            <el-descriptions-item label="无 unionid（孤儿风险）">{{ mig.orphan }}</el-descriptions-item>
+            <el-descriptions-item label="其中绑过手机号（可人工合并找回）">{{ mig.orphanWithPhone }}</el-descriptions-item>
+            <el-descriptions-item label="其中无手机号（无法认回，可清理）">{{ mig.orphanNoPhone }}</el-descriptions-item>
+            <el-descriptions-item label="其中会员仍有效（优先处理）">{{ mig.orphanPremium }}</el-descriptions-item>
+            <el-descriptions-item label="其中有订单记录">{{ mig.orphanWithOrders }}</el-descriptions-item>
+            <el-descriptions-item label="处理路径">手机号组 → 重复账号里人工合并</el-descriptions-item>
+          </el-descriptions>
+          <template v-if="mig.samples?.length">
+            <div class="hint" style="margin-bottom: 8px">
+              无 unionid 账号样例（会员有效的排最前，最多 50 条）：
+            </div>
+            <BusinessTable :data="mig.samples" border size="small" max-height="320">
+              <el-table-column prop="id" label="ID" width="70" />
+              <el-table-column prop="nickname" label="昵称" min-width="120" />
+              <el-table-column prop="phone" label="手机号" width="130">
+                <template #default="{ row }">{{ row.phone || '-' }}</template>
+              </el-table-column>
+              <el-table-column label="会员" width="150">
+                <template #default="{ row }">
+                  {{ row.membership }}
+                  <span class="dup-exp">{{ row.expireAt ? fmt(row.expireAt) : '' }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="createdAt" label="注册" width="170">
+                <template #default="{ row }">{{ fmt(row.createdAt) }}</template>
+              </el-table-column>
+            </BusinessTable>
+          </template>
+          <el-empty v-else description="所有存活账号都有 unionid，登录时会自动合并，无需人工迁移" />
         </template>
-        <el-empty v-else description="所有存活账号都有 unionid，登录时会自动合并，无需人工迁移" />
-      </template>
-      <div v-else v-loading="true" style="height: 200px" />
-    </el-dialog>
-  </div>
+        <div v-else v-loading="true" style="height: 200px" />
+      </BusinessModal>
+    </div>
+
+  </BusinessPage>
 </template>
 
 <script setup lang="ts">
@@ -506,20 +509,20 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.toolbar { margin-bottom: 16px; display: flex; gap: 12px; align-items: center; }
+
 .dup-tip { margin-bottom: 16px; }
 .dup-group { margin-bottom: 24px; }
-.dup-head { margin-bottom: 8px; font-size: 13px; color: #606266; }
-.dup-head code { background: #f4f4f5; padding: 1px 6px; border-radius: 3px; }
-.dup-id { font-size: 12px; color: #909399; line-height: 1.5; word-break: break-all; }
-.dup-exp { display: block; font-size: 12px; color: #909399; }
-.dup-warn { margin-top: 6px; font-size: 12px; color: #e6a23c; }
-.pager { margin-top: 16px; justify-content: flex-end; }
+.dup-head { margin-bottom: 8px; font-size: 13px; color: var(--el-text-color-regular); }
+.dup-head code { background: var(--el-fill-color-light); padding: 1px 6px; border-radius: 3px; }
+.dup-id { font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.5; word-break: break-all; }
+.dup-exp { display: block; font-size: 12px; color: var(--el-text-color-secondary); }
+.dup-warn { margin-top: 6px; font-size: 12px; color: var(--el-color-warning); }
+
 .src { margin-left: 4px; }
-.hint { margin-left: 10px; color: #999; font-size: 12px; }
+.hint { margin-left: 10px; color: var(--el-text-color-secondary); font-size: 12px; }
 .detail-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
 .detail-head-name { font-size: 16px; font-weight: 600; }
-.detail-head-sub { font-size: 12px; color: #999; margin-top: 2px; }
+.detail-head-sub { font-size: 12px; color: var(--el-text-color-secondary); margin-top: 2px; }
 .detail-block { margin-top: 16px; }
 .detail-title { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
 .score-tag { margin: 0 8px 8px 0; }

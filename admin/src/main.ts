@@ -6,6 +6,7 @@ import '@vben-core/design';
 import 'element-plus/dist/index.css';
 import 'element-plus/theme-chalk/dark/css-vars.css';
 import './styles/global.css';
+import './styles/business.css';
 import * as ElementPlusIconsVue from '@element-plus/icons-vue';
 
 import App from './App.vue';
@@ -14,6 +15,7 @@ import { useSiteStore } from './stores/site';
 import { initPreferences } from '@vben/preferences';
 import { addCollection } from '@iconify/vue';
 import { icons as lucideIcons } from '@iconify-json/lucide';
+import { installBusinessComponents } from './components/business';
 
 async function bootstrap() {
   await initPreferences({
@@ -34,6 +36,7 @@ async function bootstrap() {
   app.use(createPinia());
   app.use(router);
   app.use(ElementPlus, { locale: zhCn });
+  installBusinessComponents(app);
   app.mount('#app');
 
   // 站点品牌名（侧边栏 / 登录页 / 页签）：挂载后拉一次，公开接口，无需登录态

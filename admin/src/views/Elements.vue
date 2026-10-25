@@ -1,67 +1,70 @@
 <template>
-  <div>
-    <div class="toolbar">
-      <el-button type="primary" :icon="Plus" @click="openEdit()">新增五行</el-button>
-    </div>
-    <el-table :data="rows" v-loading="loading" border>
-      <el-table-column prop="id" label="元素" width="70" />
-      <el-table-column prop="en" label="英文" width="90" />
-      <el-table-column prop="note" label="五音" width="70" />
-      <el-table-column prop="organ" label="脏腑" width="90" />
-      <el-table-column prop="season" label="季节" width="80" />
-      <el-table-column prop="quality" label="特性" width="90" />
-      <el-table-column prop="desc" label="一句话描述" min-width="160" />
-      <el-table-column label="文化维度" width="100">
-        <template #default="{ row }">
-          <el-tag :type="metaCount(row.meta) ? 'success' : 'info'" size="small">
-            {{ metaCount(row.meta) ? `${metaCount(row.meta)} 项` : '未填' }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="主色" width="90">
-        <template #default="{ row }">
-          <span class="swatch" :style="{ background: row.primary }" />{{ row.primary }}
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="160" fixed="right">
-        <template #default="{ row }">
-          <el-button size="small" @click="openEdit(row)">编辑</el-button>
-          <el-button size="small" type="danger" @click="onDelete(row)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+  <BusinessPage>
+    <div>
+      <div class="toolbar">
+        <el-button type="primary" :icon="Plus" @click="openEdit()">新增五行</el-button>
+      </div>
+      <BusinessTable :data="rows" v-loading="loading" border>
+        <el-table-column prop="id" label="元素" width="70" />
+        <el-table-column prop="en" label="英文" width="90" />
+        <el-table-column prop="note" label="五音" width="70" />
+        <el-table-column prop="organ" label="脏腑" width="90" />
+        <el-table-column prop="season" label="季节" width="80" />
+        <el-table-column prop="quality" label="特性" width="90" />
+        <el-table-column prop="desc" label="一句话描述" min-width="160" />
+        <el-table-column label="文化维度" width="100">
+          <template #default="{ row }">
+            <el-tag :type="metaCount(row.meta) ? 'success' : 'info'" size="small">
+              {{ metaCount(row.meta) ? `${metaCount(row.meta)} 项` : '未填' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="主色" width="90">
+          <template #default="{ row }">
+            <span class="swatch" :style="{ background: row.primary }" />{{ row.primary }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="160" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" @click="openEdit(row)">编辑</el-button>
+            <el-button size="small" type="danger" @click="onDelete(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </BusinessTable>
 
-    <el-dialog v-model="dialog" :title="isEdit ? '编辑五行' : '新增五行'" width="560px">
-      <el-form :model="form" label-width="90px">
-        <el-form-item label="元素"><el-input v-model="form.id" :disabled="isEdit" placeholder="木/火/土/金/水" /></el-form-item>
-        <el-form-item label="英文"><el-input v-model="form.en" /></el-form-item>
-        <el-form-item label="图标名"><el-input v-model="form.icon" placeholder="sprout/flame..." /></el-form-item>
-        <el-form-item label="五音"><el-input v-model="form.note" /></el-form-item>
-        <el-form-item label="拼音"><el-input v-model="form.note_pinyin" /></el-form-item>
-        <el-form-item label="脏腑"><el-input v-model="form.organ" /></el-form-item>
-        <el-form-item label="季节"><el-input v-model="form.season" /></el-form-item>
-        <el-form-item label="特性"><el-input v-model="form.quality" /></el-form-item>
-        <el-form-item label="主色"><el-color-picker v-model="form.primary" /></el-form-item>
-        <el-form-item label="高亮色"><el-color-picker v-model="form.accent" /></el-form-item>
-        <el-form-item label="光晕"><el-input v-model="form.glow" /></el-form-item>
-        <el-form-item label="背景"><el-input v-model="form.bg" type="textarea" :rows="2" /></el-form-item>
-        <el-form-item label="一句话描述"><el-input v-model="form.desc" placeholder="清新生发 · 舒展流动" /></el-form-item>
-        <el-form-item label="引导文案"><el-input v-model="form.sleep_tip" type="textarea" :rows="2" placeholder="角音像春天的风，让人慢慢舒展开。" /></el-form-item>
-        <el-form-item label="文化维度">
-          <el-input v-model="metaText" type="textarea" :rows="10" placeholder="{}" />
-          <div class="meta-hint">
-            五志/五神/简谱/调式/时间感等对照维度，JSON 对象。
-            内容基准见仓库 <code>docs/WUXING-REFERENCE.md</code>，键名见该文档 5.2 节。
-          </div>
-        </el-form-item>
-        <el-form-item label="排序"><el-input-number v-model="form.sort" :min="0" /></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialog = false">取消</el-button>
-        <el-button type="primary" @click="onSave">保存</el-button>
-      </template>
-    </el-dialog>
-  </div>
+      <BusinessModal v-model="dialog" :title="isEdit ? '编辑五行' : '新增五行'" width="560px">
+        <BusinessForm :model="form" label-width="90px">
+          <el-form-item label="元素"><el-input v-model="form.id" :disabled="isEdit" placeholder="木/火/土/金/水" /></el-form-item>
+          <el-form-item label="英文"><el-input v-model="form.en" /></el-form-item>
+          <el-form-item label="图标名"><el-input v-model="form.icon" placeholder="sprout/flame..." /></el-form-item>
+          <el-form-item label="五音"><el-input v-model="form.note" /></el-form-item>
+          <el-form-item label="拼音"><el-input v-model="form.note_pinyin" /></el-form-item>
+          <el-form-item label="脏腑"><el-input v-model="form.organ" /></el-form-item>
+          <el-form-item label="季节"><el-input v-model="form.season" /></el-form-item>
+          <el-form-item label="特性"><el-input v-model="form.quality" /></el-form-item>
+          <el-form-item label="主色"><el-color-picker v-model="form.primary" /></el-form-item>
+          <el-form-item label="高亮色"><el-color-picker v-model="form.accent" /></el-form-item>
+          <el-form-item label="光晕"><el-input v-model="form.glow" /></el-form-item>
+          <el-form-item label="背景"><el-input v-model="form.bg" type="textarea" :rows="2" /></el-form-item>
+          <el-form-item label="一句话描述"><el-input v-model="form.desc" placeholder="清新生发 · 舒展流动" /></el-form-item>
+          <el-form-item label="引导文案"><el-input v-model="form.sleep_tip" type="textarea" :rows="2" placeholder="角音像春天的风，让人慢慢舒展开。" /></el-form-item>
+          <el-form-item label="文化维度">
+            <el-input v-model="metaText" type="textarea" :rows="10" placeholder="{}" />
+            <div class="meta-hint">
+              五志/五神/简谱/调式/时间感等对照维度，JSON 对象。
+              内容基准见仓库 <code>docs/WUXING-REFERENCE.md</code>，键名见该文档 5.2 节。
+            </div>
+          </el-form-item>
+          <el-form-item label="排序"><el-input-number v-model="form.sort" :min="0" /></el-form-item>
+        </BusinessForm>
+        <template #footer>
+          <el-button @click="dialog = false">取消</el-button>
+          <el-button type="primary" @click="onSave">保存</el-button>
+        </template>
+      </BusinessModal>
+    </div>
+
+  </BusinessPage>
 </template>
 
 <script setup lang="ts">
@@ -143,8 +146,8 @@ onMounted(load);
 </script>
 
 <style scoped>
-.toolbar { margin-bottom: 16px; }
+
 .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; margin-right: 6px; vertical-align: middle; }
-.meta-hint { color: #999; font-size: 12px; line-height: 1.6; margin-top: 4px; }
-.meta-hint code { background: #f4f4f5; padding: 0 4px; border-radius: 3px; }
+.meta-hint { color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.6; margin-top: 4px; }
+.meta-hint code { background: var(--el-fill-color-light); padding: 0 4px; border-radius: 3px; }
 </style>

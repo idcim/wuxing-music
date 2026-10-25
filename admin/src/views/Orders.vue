@@ -1,114 +1,117 @@
 <template>
-  <div>
-    <div class="toolbar">
-      <el-input v-model="orderNo" placeholder="订单号 / 微信支付单号" clearable style="width: 220px" @keyup.enter="reload" />
-      <el-select v-model="filterStatus" placeholder="按状态筛选" clearable style="width: 150px" @change="reload">
-        <el-option label="待支付" value="pending" />
-        <el-option label="已支付" value="paid" />
-        <el-option label="退款中" value="refunding" />
-        <el-option label="已退款" value="refunded" />
-        <el-option label="已关闭" value="closed" />
-      </el-select>
-      <el-button :icon="Search" @click="reload">查询</el-button>
-      <el-button v-if="canCleanup" plain type="warning" @click="onCleanup">清理无效订单</el-button>
+  <BusinessPage>
+    <div>
+      <div class="toolbar">
+        <el-input v-model="orderNo" placeholder="订单号 / 微信支付单号" clearable style="width: 220px" @keyup.enter="reload" />
+        <el-select v-model="filterStatus" placeholder="按状态筛选" clearable style="width: 150px" @change="reload">
+          <el-option label="待支付" value="pending" />
+          <el-option label="已支付" value="paid" />
+          <el-option label="退款中" value="refunding" />
+          <el-option label="已退款" value="refunded" />
+          <el-option label="已关闭" value="closed" />
+        </el-select>
+        <el-button :icon="Search" @click="reload">查询</el-button>
+        <el-button v-if="canCleanup" plain type="warning" @click="onCleanup">清理无效订单</el-button>
+      </div>
+
+      <BusinessTable :data="rows" v-loading="loading" border>
+        <el-table-column label="订单号 / 微信支付单号" min-width="230">
+          <template #default="{ row }">
+            <div>{{ row.order_no }}</div>
+            <div v-if="row.transaction_id" class="txid">{{ row.transaction_id }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="plan_name" label="套餐" width="90" />
+        <el-table-column label="金额" width="90">
+          <template #default="{ row }">¥{{ row.amount }}</template>
+        </el-table-column>
+        <el-table-column prop="user_id" label="用户ID" width="90" />
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="statusType(row.status)" size="small">{{ statusText(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="退款" width="160">
+          <template #default="{ row }">
+            <span v-if="row.refund_amount">¥{{ row.refund_amount }}<span v-if="row.refund_reason" class="reason"> · {{ row.refund_reason }}</span></span>
+          </template>
+        </el-table-column>
+        <el-table-column label="支付时间" width="170">
+          <template #default="{ row }">{{ fmt(row.paid_at) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="290" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" @click="openDetail(row)">详情</el-button>
+            <el-button v-if="row.status === 'paid'" size="small" type="warning" @click="openRefund(row)">退款</el-button>
+            <template v-else-if="row.status === 'refunding'">
+              <el-button size="small" type="danger" @click="onConfirm(row)">确认退款</el-button>
+              <el-button size="small" @click="onSyncRefund(row)">同步状态</el-button>
+            </template>
+          </template>
+        </el-table-column>
+      </BusinessTable>
+
+      <BusinessPagination class="pager" layout="total, prev, pager, next" :total="total"
+        :page-size="size" :current-page="page" @current-change="onPage" />
+
+      <!-- 订单详情 -->
+      <BusinessModal v-model="detailDialog" title="订单详情" width="520px">
+        <el-descriptions :column="1" border title="订单信息">
+          <el-descriptions-item label="订单号">{{ detail.order_no }}</el-descriptions-item>
+          <el-descriptions-item label="微信支付单号">
+            <span>{{ detail.transaction_id || '-' }}</span>
+            <el-button v-if="detail.transaction_id" size="small" text type="primary" @click="copyTxid">复制</el-button>
+          </el-descriptions-item>
+          <el-descriptions-item label="套餐">{{ detail.plan_name }}（{{ detail.plan_id }}）</el-descriptions-item>
+          <el-descriptions-item label="金额">¥{{ detail.amount }}</el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="statusType(detail.status)" size="small">{{ statusText(detail.status) }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="下单时间">{{ fmt(detail.created_at) }}</el-descriptions-item>
+          <el-descriptions-item label="支付时间">{{ fmt(detail.paid_at) }}</el-descriptions-item>
+          <el-descriptions-item v-if="detail.refund_amount" label="退款">
+            ¥{{ detail.refund_amount }} · {{ detail.refund_reason || '无原因' }}（{{ fmt(detail.refund_at) }}，{{ detail.refund_by }}）
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <el-descriptions v-if="detail.user" :column="1" border title="用户信息" style="margin-top: 16px">
+          <el-descriptions-item label="用户">
+            {{ detail.user.nickname }}（ID {{ detail.user.id }}）
+          </el-descriptions-item>
+          <el-descriptions-item label="手机号">{{ detail.user.phone || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="体质">{{ detail.user.element || '未测评' }}</el-descriptions-item>
+          <el-descriptions-item label="会员">
+            {{ detail.user.membership_name }}
+            <span v-if="detail.user.membership_expire_at">（{{ fmt(detail.user.membership_expire_at) }} 到期）</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="openid">{{ detail.user.openid }}</el-descriptions-item>
+        </el-descriptions>
+        <template #footer>
+          <el-button type="primary" @click="detailDialog = false">关闭</el-button>
+        </template>
+      </BusinessModal>
+
+      <BusinessModal v-model="refundDialog" title="发起退款" width="460px">
+        <BusinessForm label-width="90px">
+          <el-form-item label="订单号">{{ current.order_no }}</el-form-item>
+          <el-form-item label="订单金额">¥{{ current.amount }}</el-form-item>
+          <el-form-item label="退款金额">
+            <el-input-number v-model="refundForm.amount" :min="0.01" :max="current.amount" :precision="2" />
+          </el-form-item>
+          <el-form-item label="退款原因">
+            <el-input v-model="refundForm.reason" type="textarea" :rows="3" placeholder="选填" />
+          </el-form-item>
+        </BusinessForm>
+        <el-alert type="info" :closable="false" show-icon
+          title="发起后订单转为「退款中」，确认退款后将回收该用户会员权益。" />
+        <template #footer>
+          <el-button @click="refundDialog = false">取消</el-button>
+          <el-button type="warning" :loading="submitting" @click="onRefund">发起退款</el-button>
+        </template>
+      </BusinessModal>
     </div>
 
-    <el-table :data="rows" v-loading="loading" border>
-      <el-table-column label="订单号 / 微信支付单号" min-width="230">
-        <template #default="{ row }">
-          <div>{{ row.order_no }}</div>
-          <div v-if="row.transaction_id" class="txid">{{ row.transaction_id }}</div>
-        </template>
-      </el-table-column>
-      <el-table-column prop="plan_name" label="套餐" width="90" />
-      <el-table-column label="金额" width="90">
-        <template #default="{ row }">¥{{ row.amount }}</template>
-      </el-table-column>
-      <el-table-column prop="user_id" label="用户ID" width="90" />
-      <el-table-column label="状态" width="100">
-        <template #default="{ row }">
-          <el-tag :type="statusType(row.status)" size="small">{{ statusText(row.status) }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="退款" width="160">
-        <template #default="{ row }">
-          <span v-if="row.refund_amount">¥{{ row.refund_amount }}<span v-if="row.refund_reason" class="reason"> · {{ row.refund_reason }}</span></span>
-        </template>
-      </el-table-column>
-      <el-table-column label="支付时间" width="170">
-        <template #default="{ row }">{{ fmt(row.paid_at) }}</template>
-      </el-table-column>
-      <el-table-column label="操作" width="290" fixed="right">
-        <template #default="{ row }">
-          <el-button size="small" @click="openDetail(row)">详情</el-button>
-          <el-button v-if="row.status === 'paid'" size="small" type="warning" @click="openRefund(row)">退款</el-button>
-          <template v-else-if="row.status === 'refunding'">
-            <el-button size="small" type="danger" @click="onConfirm(row)">确认退款</el-button>
-            <el-button size="small" @click="onSyncRefund(row)">同步状态</el-button>
-          </template>
-        </template>
-      </el-table-column>
-    </el-table>
-
-    <el-pagination class="pager" layout="total, prev, pager, next" :total="total"
-      :page-size="size" :current-page="page" @current-change="onPage" />
-
-    <!-- 订单详情 -->
-    <el-dialog v-model="detailDialog" title="订单详情" width="520px">
-      <el-descriptions :column="1" border title="订单信息">
-        <el-descriptions-item label="订单号">{{ detail.order_no }}</el-descriptions-item>
-        <el-descriptions-item label="微信支付单号">
-          <span>{{ detail.transaction_id || '-' }}</span>
-          <el-button v-if="detail.transaction_id" size="small" text type="primary" @click="copyTxid">复制</el-button>
-        </el-descriptions-item>
-        <el-descriptions-item label="套餐">{{ detail.plan_name }}（{{ detail.plan_id }}）</el-descriptions-item>
-        <el-descriptions-item label="金额">¥{{ detail.amount }}</el-descriptions-item>
-        <el-descriptions-item label="状态">
-          <el-tag :type="statusType(detail.status)" size="small">{{ statusText(detail.status) }}</el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="下单时间">{{ fmt(detail.created_at) }}</el-descriptions-item>
-        <el-descriptions-item label="支付时间">{{ fmt(detail.paid_at) }}</el-descriptions-item>
-        <el-descriptions-item v-if="detail.refund_amount" label="退款">
-          ¥{{ detail.refund_amount }} · {{ detail.refund_reason || '无原因' }}（{{ fmt(detail.refund_at) }}，{{ detail.refund_by }}）
-        </el-descriptions-item>
-      </el-descriptions>
-
-      <el-descriptions v-if="detail.user" :column="1" border title="用户信息" style="margin-top: 16px">
-        <el-descriptions-item label="用户">
-          {{ detail.user.nickname }}（ID {{ detail.user.id }}）
-        </el-descriptions-item>
-        <el-descriptions-item label="手机号">{{ detail.user.phone || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="体质">{{ detail.user.element || '未测评' }}</el-descriptions-item>
-        <el-descriptions-item label="会员">
-          {{ detail.user.membership_name }}
-          <span v-if="detail.user.membership_expire_at">（{{ fmt(detail.user.membership_expire_at) }} 到期）</span>
-        </el-descriptions-item>
-        <el-descriptions-item label="openid">{{ detail.user.openid }}</el-descriptions-item>
-      </el-descriptions>
-      <template #footer>
-        <el-button type="primary" @click="detailDialog = false">关闭</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="refundDialog" title="发起退款" width="460px">
-      <el-form label-width="90px">
-        <el-form-item label="订单号">{{ current.order_no }}</el-form-item>
-        <el-form-item label="订单金额">¥{{ current.amount }}</el-form-item>
-        <el-form-item label="退款金额">
-          <el-input-number v-model="refundForm.amount" :min="0.01" :max="current.amount" :precision="2" />
-        </el-form-item>
-        <el-form-item label="退款原因">
-          <el-input v-model="refundForm.reason" type="textarea" :rows="3" placeholder="选填" />
-        </el-form-item>
-      </el-form>
-      <el-alert type="info" :closable="false" show-icon
-        title="发起后订单转为「退款中」，确认退款后将回收该用户会员权益。" />
-      <template #footer>
-        <el-button @click="refundDialog = false">取消</el-button>
-        <el-button type="warning" :loading="submitting" @click="onRefund">发起退款</el-button>
-      </template>
-    </el-dialog>
-  </div>
+  </BusinessPage>
 </template>
 
 <script setup lang="ts">
@@ -250,8 +253,8 @@ onMounted(load);
 </script>
 
 <style scoped>
-.toolbar { margin-bottom: 16px; display: flex; gap: 12px; }
-.pager { margin-top: 16px; justify-content: flex-end; }
-.reason { color: #999; }
-.txid { font-size: 12px; color: #909399; }
+
+
+.reason { color: var(--el-text-color-secondary); }
+.txid { font-size: 12px; color: var(--el-text-color-secondary); }
 </style>

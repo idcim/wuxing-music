@@ -85,10 +85,10 @@ function insertLink() {
 .markdown-editor__preview {
   min-height: 160px;
   padding: 12px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--el-border-color);
   border-radius: 4px;
   line-height: 1.8;
-  color: #303133;
+  color: var(--el-text-color-primary);
   overflow-wrap: anywhere;
 }
 .markdown-editor__preview :deep(h1),
@@ -99,14 +99,14 @@ function insertLink() {
 .markdown-editor__preview :deep(blockquote) {
   margin: 0.7em 0;
   padding-left: 12px;
-  border-left: 3px solid #dcdfe6;
-  color: #606266;
+  border-left: 3px solid var(--el-border-color);
+  color: var(--el-text-color-regular);
 }
 .markdown-editor__preview :deep(code) {
   padding: 2px 5px;
   border-radius: 4px;
-  background: #f4f4f5;
-  color: #c45656;
+  background: var(--el-fill-color-light);
+  color: var(--el-color-danger);
 }
-.markdown-editor__preview :deep(a) { color: #409eff; }
+.markdown-editor__preview :deep(a) { color: var(--el-color-primary); }
 </style>

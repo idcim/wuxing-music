@@ -1,9 +1,9 @@
 <template>
-  <el-card style="max-width: 680px" v-loading="loading">
+  <BusinessCard class="settings-panel" v-loading="loading">
     <template #header>短信配置</template>
     <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px"
       title="短信验证码服务商配置，用于手机号登录发码。未启用或未配置时，后端走开发兜底（日志打印验证码），便于联调。" />
-    <el-form :model="form" label-width="120px">
+    <BusinessForm :model="form" label-width="120px">
       <el-form-item label="启用">
         <el-switch v-model="form.enabled" />
       </el-form-item>
@@ -29,8 +29,8 @@
       <el-form-item>
         <el-button type="primary" :loading="saving" @click="onSave">保存</el-button>
       </el-form-item>
-    </el-form>
-  </el-card>
+    </BusinessForm>
+  </BusinessCard>
 </template>
 
 <script setup lang="ts">

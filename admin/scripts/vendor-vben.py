@@ -17,7 +17,7 @@ catalog = {
 }
 manifests = list(upstream.glob("packages/**/package.json")) + list(upstream.glob("internal/*/package.json"))
 packages = {json.loads(p.read_text(encoding="utf-8"))["name"]: p for p in manifests}
-todo = ["@vben-core/layout-ui", "@vben-core/menu-ui", "@vben/preferences", "@vben/tailwind-config"]
+todo = ["@vben-core/layout-ui", "@vben-core/menu-ui", "@vben-core/popup-ui", "@vben/preferences", "@vben/tailwind-config"]
 selected = set()
 while todo:
     name = todo.pop()
@@ -59,3 +59,6 @@ theme.write_text(css.replace("@import 'tw-animate-css';", "@import 'tw-animate-c
 print(f"Vendored {len(selected)} Vben 5.7.0 packages")
 content = vendor / "vben-core-layout-ui/src/components/layout-content.vue"
 content.write_text(content.read_text(encoding="utf-8").replace("// @ts-expect-error - unused\n", ""), encoding="utf-8")
+shutil.copytree(upstream / 'packages/effects/common-ui/src/components/page', vendor / 'vben-page', dirs_exist_ok=True)
+for source in (vendor / 'vben-core-popup-ui/src').rglob('*.vue'):
+    source.write_text(re.sub(r'^// @ts-expect-error[^\n]*unused[^\n]*\n', '', source.read_text(encoding='utf-8'), flags=re.M), encoding='utf-8')

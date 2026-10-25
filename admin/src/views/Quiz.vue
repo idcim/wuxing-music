@@ -1,44 +1,47 @@
 <template>
-  <div>
-    <div class="toolbar">
-      <el-button type="primary" :icon="Plus" @click="openEdit()">新增题目</el-button>
-      <span class="hint">选项格式：每行一条「选项文本 | 木:2,火:1」</span>
-    </div>
-    <el-table :data="rows" v-loading="loading" border>
-      <el-table-column prop="sort" label="序" width="60" />
-      <el-table-column prop="q" label="题目" min-width="200" />
-      <el-table-column label="选项数" width="90">
-        <template #default="{ row }">{{ (row.options || []).length }}</template>
-      </el-table-column>
-      <el-table-column label="启用" width="80">
-        <template #default="{ row }">
-          <el-tag :type="row.is_active ? 'success' : 'info'" size="small">{{ row.is_active ? '启用' : '停用' }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="160" fixed="right">
-        <template #default="{ row }">
-          <el-button size="small" @click="openEdit(row)">编辑</el-button>
-          <el-button size="small" type="danger" @click="onDelete(row)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+  <BusinessPage>
+    <div>
+      <div class="toolbar">
+        <el-button type="primary" :icon="Plus" @click="openEdit()">新增题目</el-button>
+        <span class="hint">选项格式：每行一条「选项文本 | 木:2,火:1」</span>
+      </div>
+      <BusinessTable :data="rows" v-loading="loading" border>
+        <el-table-column prop="sort" label="序" width="60" />
+        <el-table-column prop="q" label="题目" min-width="200" />
+        <el-table-column label="选项数" width="90">
+          <template #default="{ row }">{{ (row.options || []).length }}</template>
+        </el-table-column>
+        <el-table-column label="启用" width="80">
+          <template #default="{ row }">
+            <el-tag :type="row.is_active ? 'success' : 'info'" size="small">{{ row.is_active ? '启用' : '停用' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="160" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" @click="openEdit(row)">编辑</el-button>
+            <el-button size="small" type="danger" @click="onDelete(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </BusinessTable>
 
-    <el-dialog v-model="dialog" :title="form.id ? '编辑题目' : '新增题目'" width="600px">
-      <el-form :model="form" label-width="80px">
-        <el-form-item label="题目"><el-input v-model="form.q" /></el-form-item>
-        <el-form-item label="选项">
-          <el-input v-model="optionsText" type="textarea" :rows="6"
-            placeholder="难以入睡，思虑过多 | 火:2,木:1" />
-        </el-form-item>
-        <el-form-item label="排序"><el-input-number v-model="form.sort" :min="0" /></el-form-item>
-        <el-form-item label="启用"><el-switch v-model="form.is_active" /></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialog = false">取消</el-button>
-        <el-button type="primary" @click="onSave">保存</el-button>
-      </template>
-    </el-dialog>
-  </div>
+      <BusinessModal v-model="dialog" :title="form.id ? '编辑题目' : '新增题目'" width="600px">
+        <BusinessForm :model="form" label-width="80px">
+          <el-form-item label="题目"><el-input v-model="form.q" /></el-form-item>
+          <el-form-item label="选项">
+            <el-input v-model="optionsText" type="textarea" :rows="6"
+              placeholder="难以入睡，思虑过多 | 火:2,木:1" />
+          </el-form-item>
+          <el-form-item label="排序"><el-input-number v-model="form.sort" :min="0" /></el-form-item>
+          <el-form-item label="启用"><el-switch v-model="form.is_active" /></el-form-item>
+        </BusinessForm>
+        <template #footer>
+          <el-button @click="dialog = false">取消</el-button>
+          <el-button type="primary" @click="onSave">保存</el-button>
+        </template>
+      </BusinessModal>
+    </div>
+
+  </BusinessPage>
 </template>
 
 <script setup lang="ts">
@@ -113,6 +116,6 @@ onMounted(load);
 </script>
 
 <style scoped>
-.toolbar { margin-bottom: 16px; display: flex; align-items: center; gap: 12px; }
-.hint { color: #999; font-size: 12px; }
+
+.hint { color: var(--el-text-color-secondary); font-size: 12px; }
 </style>

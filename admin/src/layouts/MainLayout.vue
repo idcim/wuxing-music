@@ -69,8 +69,8 @@ function logout() {
     :sidebar-width="224" :side-collapse-width="64" :header-height="56"
     :header-toggle-sidebar-button="false" :sidebar-fixed-button="false"
     :sidebar-expand-on-hover="true"
-    :sidebar-draggable="false" :content-padding="20" :content-padding-top="20"
-    :content-padding-left="20" :content-padding-right="20" :content-padding-bottom="20"
+    :sidebar-draggable="false" :content-padding="0" :content-padding-top="0"
+    :content-padding-left="0" :content-padding-right="0" :content-padding-bottom="0"
     :header-theme="isDark ? 'dark' : 'light'" sidebar-theme="dark" @toggle-sidebar="collapsed = !collapsed">
     <template #logo>
       <router-link to="/" class="admin-brand">

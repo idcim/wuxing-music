@@ -1,83 +1,86 @@
 <template>
-  <div>
-    <div class="toolbar">
-      <el-select v-model="filterAgent" placeholder="按代理筛选" clearable filterable style="width: 200px" @change="reload">
-        <el-option v-for="a in agents" :key="a.id" :label="`${a.name}（${a.code}）`" :value="a.id" />
-      </el-select>
-      <el-select v-model="filterStatus" placeholder="按状态筛选" clearable style="width: 150px" @change="reload">
-        <el-option label="冻结中" value="pending" />
-        <el-option label="可提现" value="available" />
-        <el-option label="提现处理中" value="withdrawing" />
-        <el-option label="已到账" value="paid" />
-        <el-option label="已作废" value="void" />
-      </el-select>
-      <el-select v-model="filterLevel" placeholder="按层级筛选" clearable style="width: 140px" @change="reload">
-        <el-option label="直推" :value="1" />
-        <el-option label="下级加成" :value="2" />
-      </el-select>
-      <el-button :icon="Search" @click="reload">查询</el-button>
+  <BusinessPage>
+    <div>
+      <div class="toolbar">
+        <el-select v-model="filterAgent" placeholder="按代理筛选" clearable filterable style="width: 200px" @change="reload">
+          <el-option v-for="a in agents" :key="a.id" :label="`${a.name}（${a.code}）`" :value="a.id" />
+        </el-select>
+        <el-select v-model="filterStatus" placeholder="按状态筛选" clearable style="width: 150px" @change="reload">
+          <el-option label="冻结中" value="pending" />
+          <el-option label="可提现" value="available" />
+          <el-option label="提现处理中" value="withdrawing" />
+          <el-option label="已到账" value="paid" />
+          <el-option label="已作废" value="void" />
+        </el-select>
+        <el-select v-model="filterLevel" placeholder="按层级筛选" clearable style="width: 140px" @change="reload">
+          <el-option label="直推" :value="1" />
+          <el-option label="下级加成" :value="2" />
+        </el-select>
+        <el-button :icon="Search" @click="reload">查询</el-button>
+      </div>
+
+      <BusinessTable :data="rows" v-loading="loading" border>
+        <el-table-column label="代理" min-width="150">
+          <template #default="{ row }">
+            {{ row.agentName }}
+            <!-- 组织上他挂在谁下面。与下面「来自」那个成交时点快照不是一回事 -->
+            <div v-if="row.parentName" class="muted src2">所属上级：{{ row.parentName }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="订单金额" width="110">
+          <template #default="{ row }">¥{{ money(row.orderAmount) }}</template>
+        </el-table-column>
+        <el-table-column label="比例" width="90">
+          <template #default="{ row }">{{ (Number(row.rate || 0) * 100).toFixed(1) }}%</template>
+        </el-table-column>
+        <el-table-column label="层级" width="150">
+          <template #default="{ row }">
+            <el-tag v-if="row.level === 2" size="small" type="warning" effect="plain">
+              下级加成
+            </el-tag>
+            <el-tag v-else size="small" effect="plain">直推</el-tag>
+            <span v-if="row.level === 2 && row.sourceAgentName" class="muted src">
+              来自 {{ row.sourceAgentName }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column label="分成" width="180">
+          <template #default="{ row }">
+            <b>¥{{ money(row.amount) }}</b>
+            <!-- 总支出随有没有上级浮动（20% 或 25%），没法再从比例反推，只能存下来 -->
+            <span v-if="row.platformCost" class="muted src">
+              (本单平台支出 ¥{{ money(row.platformCost) }})
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="180">
+          <template #default="{ row }">
+            <el-tag size="small" :type="tagType(row)">{{ statusText(row) }}</el-tag>
+            <el-tag v-if="row.clawback" size="small" type="danger" style="margin-left: 6px">已付款后退款</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="解冻时间" width="170">
+          <template #default="{ row }">{{ fmt(row.availableAt) }}</template>
+        </el-table-column>
+        <el-table-column prop="orderId" label="订单 ID" width="100" />
+        <el-table-column label="成交时间" width="170">
+          <template #default="{ row }">{{ fmt(row.createdAt) }}</template>
+        </el-table-column>
+        <el-table-column prop="voidReason" label="作废原因" min-width="160" />
+      </BusinessTable>
+
+      <BusinessPagination class="pager" layout="total, prev, pager, next" :total="total"
+        :page-size="size" :current-page="page" @current-change="onPage" />
+
+      <el-alert type="info" :closable="false" class="note">
+        <template #title>
+          「已付款后退款」是指分成的钱已经打给代理、订单事后才退款——这笔钱系统追不回来，需人工向代理追讨。
+          把设置里的<b>冻结天数</b>调得比退款窗口长，可以基本杜绝这种情况。
+        </template>
+      </el-alert>
     </div>
 
-    <el-table :data="rows" v-loading="loading" border>
-      <el-table-column label="代理" min-width="150">
-        <template #default="{ row }">
-          {{ row.agentName }}
-          <!-- 组织上他挂在谁下面。与下面「来自」那个成交时点快照不是一回事 -->
-          <div v-if="row.parentName" class="muted src2">所属上级：{{ row.parentName }}</div>
-        </template>
-      </el-table-column>
-      <el-table-column label="订单金额" width="110">
-        <template #default="{ row }">¥{{ money(row.orderAmount) }}</template>
-      </el-table-column>
-      <el-table-column label="比例" width="90">
-        <template #default="{ row }">{{ (Number(row.rate || 0) * 100).toFixed(1) }}%</template>
-      </el-table-column>
-      <el-table-column label="层级" width="150">
-        <template #default="{ row }">
-          <el-tag v-if="row.level === 2" size="small" type="warning" effect="plain">
-            下级加成
-          </el-tag>
-          <el-tag v-else size="small" effect="plain">直推</el-tag>
-          <span v-if="row.level === 2 && row.sourceAgentName" class="muted src">
-            来自 {{ row.sourceAgentName }}
-          </span>
-        </template>
-      </el-table-column>
-      <el-table-column label="分成" width="180">
-        <template #default="{ row }">
-          <b>¥{{ money(row.amount) }}</b>
-          <!-- 总支出随有没有上级浮动（20% 或 25%），没法再从比例反推，只能存下来 -->
-          <span v-if="row.platformCost" class="muted src">
-            (本单平台支出 ¥{{ money(row.platformCost) }})
-          </span>
-        </template>
-      </el-table-column>
-      <el-table-column label="状态" width="180">
-        <template #default="{ row }">
-          <el-tag size="small" :type="tagType(row)">{{ statusText(row) }}</el-tag>
-          <el-tag v-if="row.clawback" size="small" type="danger" style="margin-left: 6px">已付款后退款</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="解冻时间" width="170">
-        <template #default="{ row }">{{ fmt(row.availableAt) }}</template>
-      </el-table-column>
-      <el-table-column prop="orderId" label="订单 ID" width="100" />
-      <el-table-column label="成交时间" width="170">
-        <template #default="{ row }">{{ fmt(row.createdAt) }}</template>
-      </el-table-column>
-      <el-table-column prop="voidReason" label="作废原因" min-width="160" />
-    </el-table>
-
-    <el-pagination class="pager" layout="total, prev, pager, next" :total="total"
-      :page-size="size" :current-page="page" @current-change="onPage" />
-
-    <el-alert type="info" :closable="false" class="note">
-      <template #title>
-        「已付款后退款」是指分成的钱已经打给代理、订单事后才退款——这笔钱系统追不回来，需人工向代理追讨。
-        把设置里的<b>冻结天数</b>调得比退款窗口长，可以基本杜绝这种情况。
-      </template>
-    </el-alert>
-  </div>
+  </BusinessPage>
 </template>
 
 <script setup lang="ts">
@@ -145,21 +148,13 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.toolbar {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 14px;
-  flex-wrap: wrap;
-}
-.pager {
-  margin-top: 14px;
-  justify-content: flex-end;
-}
+
+
 .note {
   margin-top: 16px;
 }
 .muted {
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 .src {
   margin-left: 6px;

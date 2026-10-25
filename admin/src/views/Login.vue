@@ -1,11 +1,11 @@
 <template>
   <div class="login">
-    <div class="login__card">
+    <BusinessCard class="login__card">
       <div class="login__brand">
         <div class="login__title">{{ site.name }}</div>
         <div class="login__sub">管理后台</div>
       </div>
-      <el-form :model="form" @submit.prevent="onSubmit">
+      <BusinessForm :model="form" @submit.prevent="onSubmit">
         <el-form-item>
           <el-input v-model="form.username" placeholder="管理员账号" size="large" :prefix-icon="User" />
         </el-form-item>
@@ -47,8 +47,8 @@
         <el-button type="primary" size="large" :loading="loading" class="login__btn" @click="onSubmit">
           登录
         </el-button>
-      </el-form>
-    </div>
+      </BusinessForm>
+    </BusinessCard>
   </div>
 </template>
 
@@ -108,19 +108,19 @@ async function onSubmit() {
 
 <style scoped>
 .login {
-  height: 100vh;
+  min-height: 100dvh;
+  padding: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #0a0e1a 0%, #03050a 100%);
+  background: radial-gradient(ellipse at top, hsl(var(--primary) / .12), transparent 65%), hsl(var(--background-deep));
 }
 .login__card {
-  width: 380px;
-  padding: 48px 40px;
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  width: 420px;
+  max-width: 100%;
+  box-shadow: 0 16px 48px hsl(var(--foreground) / .06);
 }
+.login__card :deep(.business-card__body) { padding: 36px 32px; }
 .login__brand {
   text-align: center;
   margin-bottom: 36px;
@@ -136,7 +136,7 @@ async function onSubmit() {
   width: 120px;
   height: 40px;
   border-radius: 4px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--el-border-color);
   cursor: pointer;
   object-fit: cover;
 }
@@ -145,22 +145,28 @@ async function onSubmit() {
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  color: #909399;
-  background: #f5f7fa;
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color-light);
 }
 .login__title {
   font-size: 28px;
   font-weight: 600;
-  letter-spacing: 4px;
-  color: #1a1a1a;
+  letter-spacing: 1px;
+  color: var(--el-text-color-primary);
 }
 .login__sub {
   margin-top: 8px;
   font-size: 14px;
-  color: #999;
+  color: var(--el-text-color-secondary);
   letter-spacing: 2px;
 }
 .login__btn {
   width: 100%;
+}
+@media (max-width: 480px) {
+  .login { padding: 16px; }
+  .login__card :deep(.business-card__body) { padding: 28px 20px; }
+  .login__title { font-size: 24px; }
+  .login__captcha-img { width: 100px; }
 }
 </style>

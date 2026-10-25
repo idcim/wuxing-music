@@ -1,166 +1,169 @@
 <template>
-  <div>
-    <div class="toolbar">
-      <el-select v-model="filterElement" placeholder="按五行筛选" clearable style="width: 160px" @change="reload">
-        <el-option v-for="e in elements" :key="e.id" :label="`${e.id} · ${e.note}音`" :value="e.id" />
-      </el-select>
-      <el-button type="primary" :icon="Plus" @click="openEdit()">新增曲目</el-button>
-      <el-button plain :loading="normRunning" @click="onNormalize">
-        {{ normRunning ? normText || '修复中…' : '全部处理' }}
-      </el-button>
-      <span class="hint">默认直接播放母版；按存储设置补 AAC，会员曲目补试听，单行「处理」可单独执行</span>
+  <BusinessPage>
+    <div>
+      <div class="toolbar">
+        <el-select v-model="filterElement" placeholder="按五行筛选" clearable style="width: 160px" @change="reload">
+          <el-option v-for="e in elements" :key="e.id" :label="`${e.id} · ${e.note}音`" :value="e.id" />
+        </el-select>
+        <el-button type="primary" :icon="Plus" @click="openEdit()">新增曲目</el-button>
+        <el-button plain :loading="normRunning" @click="onNormalize">
+          {{ normRunning ? normText || '修复中…' : '全部处理' }}
+        </el-button>
+        <span class="hint">默认直接播放母版；按存储设置补 AAC，会员曲目补试听，单行「处理」可单独执行</span>
+      </div>
+
+      <BusinessTable :data="rows" v-loading="loading" border @sort-change="onSort">
+        <el-table-column prop="id" label="ID" width="70" sortable="custom" />
+        <el-table-column prop="element_id" label="五行" width="70" />
+        <el-table-column prop="title" label="曲名" min-width="120" sortable="custom" />
+        <el-table-column prop="hz" label="频率" width="90" />
+        <el-table-column prop="tag" label="标签" width="110" />
+        <el-table-column prop="duration_sec" label="时长" width="90" sortable="custom">
+          <template #default="{ row }">{{ row.duration }}</template>
+        </el-table-column>
+        <el-table-column label="会员专属" width="90" prop="is_premium" sortable="custom">
+          <template #default="{ row }">
+            <el-tag :type="row.is_premium ? 'warning' : 'success'" size="small">
+              {{ row.is_premium ? '会员' : '免费' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="播放版本" width="230">
+          <template #default="{ row }">
+            <template v-if="normCurrentId === row.id">
+              <el-tag size="small" type="warning"><el-icon class="is-loading"><Loading /></el-icon> 处理中</el-tag>
+            </template>
+            <el-tag v-else-if="normQueuedIds.includes(row.id)" size="small" type="info">排队中</el-tag>
+            <template v-else>
+              <el-tag v-if="row.play_url" size="small" type="info">旧版副本</el-tag>
+              <el-tag v-if="row.aac_url" size="small" type="warning" style="margin-left: 4px">AAC</el-tag>
+              <span v-if="!row.play_url && !row.aac_url" class="hint">仅母版</span>
+              <el-tooltip v-if="row.process_error" :content="row.process_error" placement="top">
+                <el-tag size="small" type="danger" style="margin-left: 4px">失败</el-tag>
+              </el-tooltip>
+            </template>
+            <el-button
+              size="small" text type="primary" style="margin-left: 6px"
+              :disabled="normQueuedIds.includes(row.id) || normCurrentId === row.id"
+              @click="onProcessOne(row)"
+            >处理</el-button>
+            <el-button size="small" text @click="openVersions(row)">版本</el-button>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="90" prop="is_online" sortable="custom">
+          <template #default="{ row }">
+            <el-tag v-if="!row.is_online" type="info" size="small">下架</el-tag>
+            <el-tag v-else-if="row.process_state === 'error'" type="danger" size="small">处理失败</el-tag>
+            <el-tag v-else-if="row.process_state === 'processing'" type="warning" size="small">处理中</el-tag>
+            <el-tag v-else-if="row.process_state === 'pending'" size="small" effect="plain">待处理</el-tag>
+            <el-tag v-else type="success" size="small">已上架</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="160" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" @click="openEdit(row)">编辑</el-button>
+            <el-button size="small" type="danger" @click="onDelete(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </BusinessTable>
+
+      <BusinessPagination
+        class="pager"
+        layout="total, prev, pager, next"
+        :total="total"
+        :page-size="size"
+        :current-page="page"
+        @current-change="onPage"
+      />
+
+      <BusinessModal v-model="dialog" :title="form.id ? '编辑曲目' : '新增曲目'" width="560px">
+        <BusinessForm :model="form" label-width="90px">
+          <el-form-item label="五行">
+            <el-select v-model="form.element_id" placeholder="选择五行">
+              <el-option v-for="e in elements" :key="e.id" :label="`${e.id} · ${e.note}音`" :value="e.id" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="曲名"><el-input v-model="form.title" /></el-form-item>
+          <el-form-item label="时长">
+            <el-input v-model="form.duration" placeholder="MM:SS" style="width: 140px" @change="syncSec" />
+            <span class="hint">（{{ form.duration_sec }} 秒）</span>
+          </el-form-item>
+          <el-form-item label="频率"><el-input v-model="form.hz" placeholder="324Hz / 角调" /></el-form-item>
+          <el-form-item label="标签"><el-input v-model="form.tag" /></el-form-item>
+          <el-form-item label="播放量"><el-input v-model="form.plays" placeholder="12.4k" /></el-form-item>
+          <el-form-item label="音频">
+            <div class="up-row">
+              <el-upload
+                :show-file-list="false"
+                accept="audio/*,.mp3,.m4a,.wav"
+                :http-request="uploadAudio"
+              >
+                <el-button :icon="Upload" :loading="audioUploading" :disabled="audioUploading">
+                  {{ audioUploading ? `上传中 ${audioPct}%` : '上传音频' }}
+                </el-button>
+              </el-upload>
+              <el-input v-model="form.audio_url" placeholder="或填 CDN 地址" />
+            </div>
+            <div class="hint">
+              OSS 配置下音频直接上传 OSS，默认播放原始母版；保存后仅按存储设置补 AAC，
+              会员曲目补试听剪辑。后台处理无需等待，保存后可离开页面。
+            </div>
+            <el-progress
+              v-if="audioUploading"
+              :percentage="audioPct"
+              :stroke-width="6"
+              style="margin-top: 8px"
+            />
+            <audio v-if="form.audio_url && !audioUploading" :src="form.audio_url" controls class="up-audio" />
+          </el-form-item>
+          <el-form-item label="封面">
+            <div class="up-row">
+              <el-upload
+                :action="UPLOAD_URL"
+                :headers="uploadHeaders"
+                :show-file-list="false"
+                accept="image/*"
+                :before-upload="() => { coverUploading = true; coverPct = 0; }"
+                :on-progress="(e: any) => { coverPct = Math.round(e.percent || 0); }"
+                :on-success="onCoverSuccess"
+                :on-error="onUploadError"
+              >
+                <div v-if="coverUploading" class="up-cover up-cover--loading">
+                  <el-icon class="is-loading"><Loading /></el-icon>
+                  <span class="up-cover-pct">{{ coverPct }}%</span>
+                </div>
+                <img v-else-if="form.cover_url" :src="form.cover_url" class="up-cover" />
+                <el-button v-else :icon="Upload">上传封面</el-button>
+              </el-upload>
+              <el-input v-model="form.cover_url" placeholder="或填 CDN 地址" />
+            </div>
+          </el-form-item>
+          <el-form-item label="会员专属"><el-switch v-model="form.is_premium" /></el-form-item>
+          <el-form-item label="试听(秒)"><el-input-number v-model="form.preview_sec" :min="0" /></el-form-item>
+          <el-form-item label="上架"><el-switch v-model="form.is_online" /></el-form-item>
+          <el-form-item label="排序"><el-input-number v-model="form.sort" :min="0" /></el-form-item>
+        </BusinessForm>
+        <template #footer>
+          <el-button @click="dialog = false">取消</el-button>
+          <el-button type="primary" :loading="saving" :disabled="audioUploading || coverUploading" @click="onSave">保存</el-button>
+        </template>
+      </BusinessModal>
+
+      <!-- 版本详情：母版与各播放副本的地址 + 试听 -->
+      <BusinessModal v-model="versionsDialog" :title="`音频版本 · ${versionsRow?.title || ''}`" width="640px">
+        <div v-for="v in versionList" :key="v.label" class="ver">
+          <div class="ver__head">
+            <el-tag size="small" :type="v.tagType">{{ v.label }}</el-tag>
+            <span class="ver__url">{{ v.url }}</span>
+            <el-button size="small" text type="primary" @click="copyUrl(v.url)">复制</el-button>
+          </div>
+          <audio :src="v.url" controls preload="none" class="ver__audio" />
+        </div>
+        <el-empty v-if="!versionList.length" description="该曲目还没有音频地址" />
+      </BusinessModal>
     </div>
 
-    <el-table :data="rows" v-loading="loading" border @sort-change="onSort">
-      <el-table-column prop="id" label="ID" width="70" sortable="custom" />
-      <el-table-column prop="element_id" label="五行" width="70" />
-      <el-table-column prop="title" label="曲名" min-width="120" sortable="custom" />
-      <el-table-column prop="hz" label="频率" width="90" />
-      <el-table-column prop="tag" label="标签" width="110" />
-      <el-table-column prop="duration_sec" label="时长" width="90" sortable="custom">
-        <template #default="{ row }">{{ row.duration }}</template>
-      </el-table-column>
-      <el-table-column label="会员专属" width="90" prop="is_premium" sortable="custom">
-        <template #default="{ row }">
-          <el-tag :type="row.is_premium ? 'warning' : 'success'" size="small">
-            {{ row.is_premium ? '会员' : '免费' }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="播放版本" width="230">
-        <template #default="{ row }">
-          <template v-if="normCurrentId === row.id">
-            <el-tag size="small" type="warning"><el-icon class="is-loading"><Loading /></el-icon> 处理中</el-tag>
-          </template>
-          <el-tag v-else-if="normQueuedIds.includes(row.id)" size="small" type="info">排队中</el-tag>
-          <template v-else>
-            <el-tag v-if="row.play_url" size="small" type="info">旧版副本</el-tag>
-            <el-tag v-if="row.aac_url" size="small" type="warning" style="margin-left: 4px">AAC</el-tag>
-            <span v-if="!row.play_url && !row.aac_url" class="hint">仅母版</span>
-            <el-tooltip v-if="row.process_error" :content="row.process_error" placement="top">
-              <el-tag size="small" type="danger" style="margin-left: 4px">失败</el-tag>
-            </el-tooltip>
-          </template>
-          <el-button
-            size="small" text type="primary" style="margin-left: 6px"
-            :disabled="normQueuedIds.includes(row.id) || normCurrentId === row.id"
-            @click="onProcessOne(row)"
-          >处理</el-button>
-          <el-button size="small" text @click="openVersions(row)">版本</el-button>
-        </template>
-      </el-table-column>
-      <el-table-column label="状态" width="90" prop="is_online" sortable="custom">
-        <template #default="{ row }">
-          <el-tag v-if="!row.is_online" type="info" size="small">下架</el-tag>
-          <el-tag v-else-if="row.process_state === 'error'" type="danger" size="small">处理失败</el-tag>
-          <el-tag v-else-if="row.process_state === 'processing'" type="warning" size="small">处理中</el-tag>
-          <el-tag v-else-if="row.process_state === 'pending'" size="small" effect="plain">待处理</el-tag>
-          <el-tag v-else type="success" size="small">已上架</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="160" fixed="right">
-        <template #default="{ row }">
-          <el-button size="small" @click="openEdit(row)">编辑</el-button>
-          <el-button size="small" type="danger" @click="onDelete(row)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-
-    <el-pagination
-      class="pager"
-      layout="total, prev, pager, next"
-      :total="total"
-      :page-size="size"
-      :current-page="page"
-      @current-change="onPage"
-    />
-
-    <el-dialog v-model="dialog" :title="form.id ? '编辑曲目' : '新增曲目'" width="560px">
-      <el-form :model="form" label-width="90px">
-        <el-form-item label="五行">
-          <el-select v-model="form.element_id" placeholder="选择五行">
-            <el-option v-for="e in elements" :key="e.id" :label="`${e.id} · ${e.note}音`" :value="e.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="曲名"><el-input v-model="form.title" /></el-form-item>
-        <el-form-item label="时长">
-          <el-input v-model="form.duration" placeholder="MM:SS" style="width: 140px" @change="syncSec" />
-          <span class="hint">（{{ form.duration_sec }} 秒）</span>
-        </el-form-item>
-        <el-form-item label="频率"><el-input v-model="form.hz" placeholder="324Hz / 角调" /></el-form-item>
-        <el-form-item label="标签"><el-input v-model="form.tag" /></el-form-item>
-        <el-form-item label="播放量"><el-input v-model="form.plays" placeholder="12.4k" /></el-form-item>
-        <el-form-item label="音频">
-          <div class="up-row">
-            <el-upload
-              :show-file-list="false"
-              accept="audio/*,.mp3,.m4a,.wav"
-              :http-request="uploadAudio"
-            >
-              <el-button :icon="Upload" :loading="audioUploading" :disabled="audioUploading">
-                {{ audioUploading ? `上传中 ${audioPct}%` : '上传音频' }}
-              </el-button>
-            </el-upload>
-            <el-input v-model="form.audio_url" placeholder="或填 CDN 地址" />
-          </div>
-          <div class="hint">
-            OSS 配置下音频直接上传 OSS，默认播放原始母版；保存后仅按存储设置补 AAC，
-            会员曲目补试听剪辑。后台处理无需等待，保存后可离开页面。
-          </div>
-          <el-progress
-            v-if="audioUploading"
-            :percentage="audioPct"
-            :stroke-width="6"
-            style="margin-top: 8px"
-          />
-          <audio v-if="form.audio_url && !audioUploading" :src="form.audio_url" controls class="up-audio" />
-        </el-form-item>
-        <el-form-item label="封面">
-          <div class="up-row">
-            <el-upload
-              :action="UPLOAD_URL"
-              :headers="uploadHeaders"
-              :show-file-list="false"
-              accept="image/*"
-              :before-upload="() => { coverUploading = true; coverPct = 0; }"
-              :on-progress="(e: any) => { coverPct = Math.round(e.percent || 0); }"
-              :on-success="onCoverSuccess"
-              :on-error="onUploadError"
-            >
-              <div v-if="coverUploading" class="up-cover up-cover--loading">
-                <el-icon class="is-loading"><Loading /></el-icon>
-                <span class="up-cover-pct">{{ coverPct }}%</span>
-              </div>
-              <img v-else-if="form.cover_url" :src="form.cover_url" class="up-cover" />
-              <el-button v-else :icon="Upload">上传封面</el-button>
-            </el-upload>
-            <el-input v-model="form.cover_url" placeholder="或填 CDN 地址" />
-          </div>
-        </el-form-item>
-        <el-form-item label="会员专属"><el-switch v-model="form.is_premium" /></el-form-item>
-        <el-form-item label="试听(秒)"><el-input-number v-model="form.preview_sec" :min="0" /></el-form-item>
-        <el-form-item label="上架"><el-switch v-model="form.is_online" /></el-form-item>
-        <el-form-item label="排序"><el-input-number v-model="form.sort" :min="0" /></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialog = false">取消</el-button>
-        <el-button type="primary" :loading="saving" :disabled="audioUploading || coverUploading" @click="onSave">保存</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 版本详情：母版与各播放副本的地址 + 试听 -->
-    <el-dialog v-model="versionsDialog" :title="`音频版本 · ${versionsRow?.title || ''}`" width="640px">
-      <div v-for="v in versionList" :key="v.label" class="ver">
-        <div class="ver__head">
-          <el-tag size="small" :type="v.tagType">{{ v.label }}</el-tag>
-          <span class="ver__url">{{ v.url }}</span>
-          <el-button size="small" text type="primary" @click="copyUrl(v.url)">复制</el-button>
-        </div>
-        <audio :src="v.url" controls preload="none" class="ver__audio" />
-      </div>
-      <el-empty v-if="!versionList.length" description="该曲目还没有音频地址" />
-    </el-dialog>
-  </div>
+  </BusinessPage>
 </template>
 
 <script setup lang="ts">
@@ -510,9 +513,9 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.toolbar { margin-bottom: 16px; display: flex; gap: 12px; }
-.pager { margin-top: 16px; justify-content: flex-end; }
-.hint { margin-left: 10px; color: #999; font-size: 12px; }
+
+
+.hint { margin-left: 10px; color: var(--el-text-color-secondary); font-size: 12px; }
 .up-row { display: flex; gap: 12px; align-items: center; width: 100%; }
 .up-audio { display: block; margin-top: 10px; width: 100%; height: 36px; }
 .up-cover { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; }
@@ -522,13 +525,13 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  border: 1px dashed #d9d9d9;
-  color: #999;
+  border: 1px dashed var(--el-border-color);
+  color: var(--el-text-color-secondary);
   font-size: 12px;
 }
 .up-cover-pct { font-size: 12px; }
 .ver { margin-bottom: 14px; }
 .ver__head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-.ver__url { flex: 1; font-size: 12px; color: #909399; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ver__url { flex: 1; font-size: 12px; color: var(--el-text-color-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ver__audio { width: 100%; height: 36px; }
 </style>

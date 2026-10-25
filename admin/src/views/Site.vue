@@ -1,8 +1,8 @@
 <template>
   <div>
-    <el-card style="max-width: 720px" v-loading="loading">
+    <BusinessCard class="settings-panel" v-loading="loading">
       <template #header>站点信息</template>
-      <el-form :model="form" label-width="110px">
+      <BusinessForm :model="form" label-width="110px">
         <el-form-item label="项目名称">
           <el-input v-model="form.site_name" placeholder="五行律音" />
           <div class="hint">小程序 / H5 / 本后台的标题、分享文案、海报品牌行、微信账单里的商品名都取这里。</div>
@@ -46,8 +46,8 @@
         <el-form-item>
           <el-button type="primary" :loading="saving" @click="onSave">保存</el-button>
         </el-form-item>
-      </el-form>
-    </el-card>
+      </BusinessForm>
+    </BusinessCard>
   </div>
 </template>
 
@@ -119,7 +119,7 @@ onMounted(load);
 
 <style scoped>
 .logo-upload :deep(.el-upload) {
-  border: 1px dashed #d9d9d9;
+  border: 1px dashed var(--el-border-color);
   border-radius: 8px;
   width: 100px;
   height: 100px;
@@ -129,6 +129,6 @@ onMounted(load);
   cursor: pointer;
 }
 .logo-preview { width: 100px; height: 100px; object-fit: contain; }
-.logo-uploader-icon { font-size: 28px; color: #999; }
-.hint { margin-top: 6px; color: #999; font-size: 12px; }
+.logo-uploader-icon { font-size: 28px; color: var(--el-text-color-secondary); }
+.hint { margin-top: 6px; color: var(--el-text-color-secondary); font-size: 12px; }
 </style>

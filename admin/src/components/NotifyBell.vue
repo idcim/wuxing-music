@@ -1,5 +1,5 @@
 <template>
-  <el-popover placement="bottom-end" :width="400" trigger="click" @show="markRead">
+  <el-popover placement="bottom-end" :width="400" popper-class="business-notifications" trigger="click" @show="markRead">
     <template #reference>
       <span class="notify" title="任务通知">
         <el-badge :value="unread" :hidden="!unread" :max="99">
@@ -57,9 +57,9 @@ function label(result: string): string {
 }
 
 function iconColor(result: string): string {
-  if (result.startsWith('done:')) return '#67c23a';
-  if (result.startsWith('error:')) return '#f56c6c';
-  return '#909399';
+  if (result.startsWith('done:')) return 'var(--el-color-success)';
+  if (result.startsWith('error:')) return 'var(--el-color-danger)';
+  return 'var(--el-text-color-secondary)';
 }
 
 function fmtTime(iso: string): string {
@@ -96,17 +96,17 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
 </script>
 
 <style scoped>
-.notify { cursor: pointer; display: inline-flex; align-items: center; padding: 4px; color: #555; }
-.notify:hover { color: #000; }
+.notify { cursor: pointer; display: inline-flex; align-items: center; padding: 4px; color: var(--el-text-color-regular); }
+.notify:hover { color: var(--el-text-color-primary); }
 .notify__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .notify__list { max-height: 420px; overflow-y: auto; }
 .notify__all { display:block; text-align:center; padding:12px 0 2px; color:var(--el-color-primary); }
-.notify__empty { color: #999; text-align: center; padding: 16px 0; }
-.notify__item { display: flex; align-items: flex-start; gap: 8px; padding: 8px 0; border-top: 1px solid #f0f0f0; }
+.notify__empty { color: var(--el-text-color-secondary); text-align: center; padding: 16px 0; }
+.notify__item { display: flex; align-items: flex-start; gap: 8px; padding: 8px 0; border-top: 1px solid var(--el-border-color-lighter); }
 .notify__icon { margin-top: 2px; }
 .notify__body { flex: 1; min-width: 0; }
-.notify__title { font-size: 13px; color: #333; }
-.notify__result { font-size: 12px; color: #909399; word-break: break-all; }
-.notify__result.is-err { color: #f56c6c; }
-.notify__time { font-size: 12px; color: #c0c4cc; flex-shrink: 0; }
+.notify__title { font-size: 13px; color: var(--el-text-color-primary); }
+.notify__result { font-size: 12px; color: var(--el-text-color-secondary); word-break: break-all; }
+.notify__result.is-err { color: var(--el-color-danger); }
+.notify__time { font-size: 12px; color: var(--el-text-color-secondary); flex-shrink: 0; }
 </style>
