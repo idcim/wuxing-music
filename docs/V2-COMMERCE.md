@@ -37,6 +37,7 @@
 | `media.py`、`attachments.py` | 私有课件处理与售后凭证 |
 | `worker.py`、`common.py` | 数据库任务、租约、重试、持久历史与开关 |
 | `monitor.py` | Worker 独立心跳、容器健康检查、积压与过期租约统计 |
+| `admin_history.py` | 媒体、任务、审计历史的分页与筛选 |
 | `lifecycle.py` | 账号合并、删除引用检查与地址清理 |
 | `src/packages/courses/`、`src/packages/shop/` | 12 个独立小程序页面入口，业务代码实际进入分包 |
 | `src/features/commerce/common.tsx`、`commerce.scss` | 品牌样式、请求状态、客服、购买栏与播放器协调 |
@@ -58,6 +59,10 @@
 
 金额使用整数分。创建订单必须提交稳定的 `request_key` 与上次报价 `quoted_fen`；服务端重新计算金额，并拒绝同一幂等键对应不同内容。订单保存标题、规格、价格、课程有效期、支付道具版本、付款身份及地址快照。
 
+后台查询统一返回 `{items,total}`，`page` 从 1 开始，`size` 上限 100。媒体、任务与历史默认每页 20 条，支持翻阅全部记录；不再截断为最近 100 条。媒体按文件名/状态筛选，任务按编号或标识、类型及状态筛选，历史按业务记录、操作人、操作类型筛选，并可用 `subject=job:编号` 精确追踪单个任务。媒体列表不返回课件源文件或播放对象键。
+
+交易列表可组合课程/实物、支付状态与履约状态，按订单号或快递单号查询；售后可按状态、订单号或退款单号查询。失败任务重试使用条件更新，只有一个并发操作能将失败状态改为待处理；审计保存原失败原因与尝试次数，后台可从“处理历史”找回。权限仍由服务端按任务种类校验。
+
 ## 交易与异常规则
 
 1. 创建实物订单，通过条件更新预占库存；支付成功后才扣库存。重复支付通知不能重复扣库存或发权益。
@@ -77,7 +82,7 @@
 
 任务保存在 `commerce_job`，事件保存在 `commerce_event`，不依赖网页内存。Worker 每次通过条件更新领取任务，使用两小时租约；真正异常最多尝试三次，保留失败原因，可按权限手动重试。等待用户付款、支付结果确认、退款已受理及渠道尚未确认关单属于正常等待，每 60 秒继续补查，不消耗异常重试次数，保留等待历史。尚未发起支付的订单在有效期内也持续保留补查，防止首次检查后用户才付款而丢失自动补偿。媒体转码限制线程并设置超时，上传完成接口只排队，不等待转码。
 
-容器部署将交易任务与媒体任务分为 `commerce-worker`、`commerce-media-worker` 两个进程，长转码不占用支付、退款和发货补查队列。每个进程由独立线程每 15 秒写入心跳；超过 90 秒未更新即视为离线。后台“课件与任务”分别展示两类 Worker 的在线状态，并提示超过计划时间 5 分钟的任务、过期租约及失败总数。统计覆盖全部任务，不限于列表最近 100 条。心跳仅保留最近 7 天，业务任务和事件历史不随心跳清理。
+容器部署将交易任务与媒体任务分为 `commerce-worker`、`commerce-media-worker` 两个进程，长转码不占用支付、退款和发货补查队列。每个进程由独立线程每 15 秒写入心跳；超过 90 秒未更新即视为离线。后台“课件与任务”分别展示两类 Worker 的在线状态，并提示超过计划时间 5 分钟的任务、过期租约及失败总数。统计覆盖全部任务，列表支持分页筛选。心跳仅保留最近 7 天，业务任务和事件历史不随心跳清理。
 
 现有 OSS 已通过实机使用；课程新增的私有课件链路需单独验证。课件必须使用**独立的 private OSS 桶**，上传签名前校验桶 ACL，播放签名前校验对象 ACL。后台直传 OSS，Worker 下载、检查后转为标准 MP4/AAC；原件与播放件均私有。按新桶和课件域名核对后台域名 CORS、小程序媒体域名、HTTPS 和大文件网络限制。
 
@@ -121,9 +126,10 @@ Worker 与 API 共享部署配置和数据库。首次启用 `commerce` profile 
 - `python -m unittest discover -s tests -v`：临时 SQLite/临时文件，覆盖交易幂等、金额篡改、并发库存、部分退款及运费、权益独立、进度、账号合并、后台权限、任务恢复、私有凭证、真实 RSA/AESGCM 通知验真；同时回归既有音频流水线。
 - `python -m compileall app`、前端 `npm run type-check`、`npm run build:weapp`、`npm run build:h5`、后台 `npm run build`。
 - 支付适配器回归：`node --test scripts/tests/commerce-payment.test.cjs`，执行真实小程序支付适配器并模拟平台和服务端，验证 POST 补查、服务端未确认时不报成功、用户取消支付；不产生真实资金交易。
-- 后端全套 **41 项**临时 SQLite/文件回归通过；其中课程商城 **29 项**在一次性 MySQL **8.0.46** 实际执行通过，包含 v1→v2 及重入迁移、并发下单、退款、多轮正常等待、关单期间延迟支付、心跳离线及长媒体任务隔离。小程序支付适配器 **3 项**回归、类型检查及小程序构建此前通过；本轮后台构建及后端语法检查通过。
+- 后端全套 **46 项**临时 SQLite/文件回归通过；其中课程商城 **34 项**在一次性 MySQL **8.0.46** 实际执行通过，包含 v1→v2 及重入迁移、并发下单、退款、多轮正常等待、关单期间延迟支付、心跳离线、长媒体任务隔离、超过 100 条后的旧失败查询、精确历史、私有字段排除、查询权限和并发手动重试。MySQL 时间测试使用秒级基准与明确已到期任务，避免 DATETIME 小数秒进位带来的偶发测试失败。小程序支付适配器 **3 项**回归、类型检查及小程序构建此前通过；本轮后台构建及后端语法检查通过。
 - 发布检查回归：`python -m unittest discover -s scripts/tests -p test_deploy_runtime.py -v`，**10 项**通过；在命令替身环境执行真实脚本函数，覆盖沿用 Worker profile、停止的 Worker 仍纳入下次更新、双队列检查、API 正常但 Worker 异常、启动中和旧版回滚。不执行部署、生产迁移或外部通知。
 - MySQL 测试通过显式的 `COMMERCE_TEST_MYSQL_URL` 选择本机测试实例，只允许数据库标识 `wuxing_v2_test`，内部创建独立随机数据库并在结束后删除；不使用部署 `.env` 中的数据库连接。临时 MySQL 测试不能替代生产数据副本迁移和备份恢复预演。
 - 浏览器使用本地临时数据库检查 Vben 列表、示例课程编辑保存、长弹窗、运营配置和主题；不连接生产数据库或支付渠道。
+- 本轮已截图检查课件与任务页的在线提示、查询栏及分页布局；筛选切换和重试的浏览器点击联调仍因浏览器指令超时待复核，对应接口回归已通过。截图中的 Worker 离线及私有存储未配置提示来自本地测试环境，不代表现网状态。
 
 技术依据：[微信虚拟支付](https://developers.weixin.qq.com/miniprogram/dev/platform-capabilities/business-capabilities/virtual-payment)、[查单](https://developers.weixin.qq.com/miniprogram/dev/server/API/VirtualPayment/api_query_order.html)、[退款](https://developers.weixin.qq.com/miniprogram/dev/server/API/VirtualPayment/api_refund_order.html)、[发货管理](https://developers.weixin.qq.com/miniprogram/dev/platform-capabilities/business-capabilities/order-shipping/order-shipping.html)、[确认收货组件](https://developers.weixin.qq.com/miniprogram/dev/platform-capabilities/business-capabilities/order-shipping/order-shipping-half)、[物流接口](https://developers.weixin.qq.com/miniprogram/dev/server/API/weixin-express/express-search/api_trace_waybill.html)。

@@ -39,7 +39,7 @@ from app.security import get_current_admin
 from app.routers.mp import get_current_user
 from app.commerce import admin, aftersales, attachments, callbacks, catalog, common, lifecycle, monitor, providers, public, schemas, trading, worker
 from app.commerce.migrate import upgrade
-from app.commerce.models import Address, AfterSale, Base, Course, Enrollment, Job, Lesson, MediaAsset, Order, OrderItem, Payment, Product, Progress, SchemaVersion, Sku, WorkerHeartbeat
+from app.commerce.models import Address, AfterSale, Base, Course, Enrollment, Event, Job, Lesson, MediaAsset, Order, OrderItem, Payment, Product, Progress, SchemaVersion, Shipment, Sku, WorkerHeartbeat
 
 
 class CommerceTests(unittest.TestCase):
@@ -192,7 +192,8 @@ class CommerceTests(unittest.TestCase):
             self.assertFalse(monitor.snapshot(db)["queues"]["media"])
 
     def test_monitor_distinguishes_backlog_from_future_jobs(self):
-        now = datetime.utcnow()
+        # MySQL DATETIME 默认精度为秒；固定基准避免小数秒进位造成 359/360 秒抖动。
+        now = datetime.utcnow().replace(microsecond=0)
         with self.sessions() as db:
             db.add_all([Job(key="late", kind="payment", run_at=now - timedelta(minutes=6)),
                 Job(key="future", kind="close", run_at=now + timedelta(minutes=30)),
@@ -210,7 +211,9 @@ class CommerceTests(unittest.TestCase):
     def test_busy_media_worker_does_not_block_transaction_queue(self):
         order = self.order().json()["data"]
         with self.sessions() as db:
-            db.add(Job(key="long-media", kind="media", payload={"asset_id": 100}))
+            # MySQL 秒级精度可能把“现在”进位到下一秒；明确设为已到期任务。
+            db.add(Job(key="long-media", kind="media", payload={"asset_id": 100},
+                run_at=datetime.utcnow() - timedelta(seconds=2)))
             db.query(Job).filter_by(key=f"check:{order['id']}").one().run_at = datetime.utcnow() - timedelta(seconds=1)
             db.commit()
         started, release = threading.Event(), threading.Event()
@@ -386,7 +389,105 @@ class CommerceTests(unittest.TestCase):
             job = db.query(Job).one()
             self.assertEqual((job.state, job.attempts), ("failed", 3))
             self.assertIn("未知任务类型", job.error)
-        self.assertEqual(len(self.client.get("/api/admin/commerce/jobs").json()["data"]), 1)
+        self.assertEqual(self.client.get("/api/admin/commerce/jobs").json()["data"]["total"], 1)
+
+    def test_old_failed_task_is_searchable_with_complete_history(self):
+        with self.sessions() as db:
+            old = Job(key="old-media", kind="media", state="failed", attempts=3, error="原始失败原因")
+            db.add(old)
+            db.flush()
+            ident = old.id
+            common.record(db, f"job:{ident}", "failed", {"error": old.error})
+            for index in range(125):
+                db.add(Job(key=f"new:{index}", kind="payment", state="done"))
+                common.record(db, f"other:{index}", "done")
+            # 相似业务号不得混入精确的任务历史。
+            common.record(db, f"job:{ident}0", "failed", {"error": "另一任务"})
+            db.commit()
+        found = self.client.get("/api/admin/commerce/jobs", params={"state": "failed", "kind": "media"}).json()["data"]
+        self.assertEqual(found["total"], 1)
+        self.assertEqual(found["items"][0]["id"], ident)
+        ids = []
+        for page in range(1, 8):
+            result = self.client.get("/api/admin/commerce/jobs", params={"page": page, "size": 20}).json()["data"]
+            self.assertEqual(result["total"], 126)
+            ids.extend(row["id"] for row in result["items"])
+        self.assertEqual(len(set(ids)), 126)
+        self.assertEqual(ids[-1], ident)
+        self.assertEqual(self.client.post(f"/api/admin/commerce/jobs/{ident}/retry").status_code, 200)
+        history = self.client.get("/api/admin/commerce/events", params={"subject": f"job:{ident}"}).json()["data"]
+        self.assertEqual(history["total"], 2)
+        self.assertEqual([event["action"] for event in history["items"]], ["manual_retry", "failed"])
+        self.assertEqual(history["items"][0]["detail"]["previous_error"], "原始失败原因")
+        self.assertEqual(self.client.get("/api/admin/commerce/events", params={"subject": f"job:{ident}", "action": "failed"}).json()["data"]["total"], 1)
+        self.assertEqual(self.client.get("/api/admin/commerce/jobs", params={"q": str(ident), "state": "pending"}).json()["data"]["items"][0]["id"], ident)
+
+    def test_media_pagination_preserves_private_keys_and_literal_search(self):
+        with self.sessions() as db:
+            target = MediaAsset(name="older_100%.mp4", kind="video", state="failed", source_key="secret-source", playback_key="secret-playback")
+            db.add(target)
+            db.flush()
+            ident = target.id
+            db.add(MediaAsset(name="older_100X.mp4", kind="video", state="failed"))
+            db.add_all([MediaAsset(name=f"new-{i}.mp4", kind="video", state="ready") for i in range(120)])
+            db.commit()
+        result = self.client.get("/api/admin/commerce/media", params={"state": "failed", "q": "100%"}).json()["data"]
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["items"][0]["id"], ident)
+        self.assertNotIn("source_key", result["items"][0])
+        self.assertNotIn("playback_key", result["items"][0])
+        last = self.client.get("/api/admin/commerce/media", params={"page": 7, "size": 20}).json()["data"]
+        self.assertEqual(last["total"], 123)
+        self.assertEqual(len(last["items"]), 3)
+
+    def test_concurrent_manual_retries_do_not_enqueue_twice(self):
+        with self.sessions() as db:
+            job = Job(key="retry-race", kind="payment", state="failed", attempts=3, error="网络暂时不可用")
+            db.add(job)
+            db.commit()
+            ident = job.id
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _: self.client.post(f"/api/admin/commerce/jobs/{ident}/retry"), range(2)))
+        self.assertEqual(sorted(r.status_code for r in results), [200, 409])
+        with self.sessions() as db:
+            self.assertEqual(db.get(Job, ident).state, "pending")
+            self.assertEqual(db.get(Job, ident).attempts, 0)
+            self.assertEqual(db.query(Event).filter_by(subject=f"job:{ident}", action="manual_retry").count(), 1)
+
+    def test_admin_order_and_refund_filters(self):
+        first = self.order(key="filter-first").json()["data"]
+        second = self.order(key="filter-second").json()["data"]
+        pending = self.order(key="filter-pending").json()["data"]
+        self.paid(first["id"])
+        self.paid(second["id"])
+        with self.sessions() as db:
+            db.get(Order, second["id"]).fulfillment = "shipped"
+            db.add(Shipment(order_id=second["id"], carrier="SF", tracking_no="TRACK_100%"))
+            db.commit()
+        result = self.client.get("/api/admin/commerce/orders", params={"state": "paid", "fulfillment": "unshipped", "kind": "physical"}).json()["data"]
+        self.assertEqual([row["id"] for row in result["items"]], [first["id"]])
+        result = self.client.get("/api/admin/commerce/orders", params={"q": "TRACK_100%"}).json()["data"]
+        self.assertEqual([row["id"] for row in result["items"]], [second["id"]])
+        result = self.client.get("/api/admin/commerce/orders", params={"state": "pending"}).json()["data"]
+        self.assertEqual([row["id"] for row in result["items"]], [pending["id"]])
+        sale = self.client.post(f"/api/mp/v2/orders/{first['id']}/aftersales", json=dict(
+            item_id=first["items"][0]["id"], quantity=1, kind="refund", reason="不再需要")).json()["data"]
+        for text in (first["order_no"], sale["refund_no"]):
+            result = self.client.get("/api/admin/commerce/aftersales", params={"q": text, "state": "requested"}).json()["data"]
+            self.assertEqual(result["total"], 1)
+            self.assertEqual(result["items"][0]["order_no"], first["order_no"])
+        self.assertEqual(self.client.get("/api/admin/commerce/aftersales", params={"state": "refunded"}).json()["data"]["total"], 0)
+
+    def test_history_query_limits_and_permissions(self):
+        for path in ("/jobs?page=0", "/jobs?size=101", "/jobs?state=invalid", "/jobs?kind=invalid",
+                     "/media?state=invalid", "/events?q=" + "x" * 81, "/orders?kind=music", "/aftersales?state=paid"):
+            self.assertEqual(self.client.get("/api/admin/commerce" + path).status_code, 422, path)
+        with self.sessions() as db:
+            db.add(Role(id=110, name="no-commerce", permissions="[]"))
+            db.commit()
+        self.app.dependency_overrides[get_current_admin] = lambda: SimpleNamespace(id=2, username="viewer", is_super=False, role_id=110)
+        for path in ("/jobs", "/events", "/media", "/orders", "/aftersales"):
+            self.assertEqual(self.client.get("/api/admin/commerce" + path).status_code, 403, path)
 
     def test_worker_waits_for_late_payment_without_exhausting_retries(self):
         order = self.order().json()["data"]

@@ -1,9 +1,10 @@
 import json
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ValidationError
-from sqlalchemy import update
+from sqlalchemy import or_, update
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -11,7 +12,8 @@ from app.models import Setting
 from app.security import require_perm
 from . import catalog, media, providers, schemas, trading
 from .common import config, enqueue, migrated, ok, ready, record, require_row, serialize
-from .models import AfterSale, Category, Course, Event, InventoryLog, Job, Lesson, MediaAsset, Order, Payment, Product, Shipment, Sku, Teacher
+from .models import AfterSale, Category, Course, InventoryLog, Job, Lesson, MediaAsset, Order, Payment, Product, Shipment, Sku, Teacher
+from .admin_history import paginated, router as history_router
 
 router = APIRouter(prefix="/api/admin/commerce", tags=["commerce-admin"])
 RESOURCES = {"categories": (Category, schemas.CategoryIn, "commerce:content"),
@@ -150,11 +152,6 @@ def stock(ident: int, body: schemas.StockIn, admin=Depends(require_perm("commerc
     return ok(serialize(require_row(db, Sku, ident)))
 
 
-@api.get("/media")
-def media_list(_=Depends(require_perm("commerce:view")), db: Session = Depends(get_db)):
-    return ok([serialize(m, ("source_key", "playback_key")) for m in db.query(MediaAsset).order_by(MediaAsset.id.desc()).limit(100)])
-
-
 @api.post("/media/sign")
 def media_sign(body: dict, _=Depends(require_perm("commerce:content")), db: Session = Depends(get_db)):
     name, kind = str(body.get("name", "")), body.get("kind", "video")
@@ -177,12 +174,22 @@ def media_complete(ident: int, _=Depends(require_perm("commerce:content")), db: 
 
 
 @api.get("/orders")
-def order_list(kind: str = "", page: int = Query(1, ge=1), size: int = Query(20, ge=1, le=100),
+def order_list(kind: Literal["", "course", "physical"] = "", page: int = Query(1, ge=1), size: int = Query(20, ge=1, le=100),
+               state: Literal["", "pending", "closing", "paid", "closed", "refunded"] = "",
+               fulfillment: Literal["", "unpaid", "ready", "unshipped", "shipped", "received"] = "",
+               q: str = Query("", max_length=80),
                _=Depends(require_perm("commerce:view")), db: Session = Depends(get_db)):
     query = db.query(Order)
     if kind:
         query = query.filter_by(kind=kind)
-    return ok(dict(items=[trading.order_dict(db, o) for o in query.order_by(Order.id.desc()).offset((page - 1) * size).limit(size)], total=query.count()))
+    if state:
+        query = query.filter_by(status=state)
+    if fulfillment:
+        query = query.filter_by(fulfillment=fulfillment)
+    if q.strip():
+        query = query.filter(or_(Order.order_no.contains(q.strip(), autoescape=True),
+            Order.id.in_(db.query(Shipment.order_id).filter(Shipment.tracking_no.contains(q.strip(), autoescape=True)))))
+    return paginated(query, page, size, lambda row: trading.order_dict(db, row))
 
 
 @api.post("/orders/{ident}/ship")
@@ -216,10 +223,21 @@ def ship(ident: int, body: schemas.ReturnIn, admin=Depends(require_perm("commerc
 
 
 @api.get("/aftersales")
-def sales(_=Depends(require_perm("commerce:view")), page: int = Query(1, ge=1), db: Session = Depends(get_db)):
+def sales(_=Depends(require_perm("commerce:view")), page: int = Query(1, ge=1),
+          size: int = Query(30, ge=1, le=100), q: str = Query("", max_length=80),
+          state: Literal["", "requested", "awaiting_return", "returning", "refunding", "refunded", "rejected"] = "",
+          db: Session = Depends(get_db)):
     from .attachments import sale_dict
     query = db.query(AfterSale)
-    return ok(dict(items=[sale_dict(a) for a in query.order_by(AfterSale.id.desc()).offset((page - 1) * 30).limit(30)], total=query.count()))
+    if state:
+        query = query.filter_by(state=state)
+    if q.strip():
+        query = query.filter(or_(AfterSale.refund_no.contains(q.strip(), autoescape=True),
+            AfterSale.order_id.in_(db.query(Order.id).filter(Order.order_no.contains(q.strip(), autoescape=True)))))
+    def dump(row):
+        order = db.get(Order, row.order_id)
+        return {**sale_dict(row), "order_no": order.order_no if order else ""}
+    return paginated(query, page, size, dump)
 
 
 @api.post("/aftersales/{ident}/review")
@@ -238,16 +256,6 @@ def review_sale(ident: int, body: schemas.ReviewIn, admin=Depends(require_perm("
     return ok(serialize(db.get(AfterSale, ident)))
 
 
-@api.get("/jobs")
-def jobs(_=Depends(require_perm("commerce:view")), db: Session = Depends(get_db)):
-    return ok([serialize(j) for j in db.query(Job).order_by(Job.id.desc()).limit(100)])
-
-
-@api.get("/events")
-def events(_=Depends(require_perm("commerce:view")), db: Session = Depends(get_db)):
-    return ok([serialize(e) for e in db.query(Event).order_by(Event.id.desc()).limit(100)])
-
-
 @api.post("/jobs/{ident}/retry")
 def retry_job(ident: int, admin=Depends(require_perm("commerce:payments", "commerce:content", "commerce:ship")), db: Session = Depends(get_db)):
     job = require_row(db, Job, ident)
@@ -255,12 +263,16 @@ def retry_job(ident: int, admin=Depends(require_perm("commerce:payments", "comme
     permission = "commerce:content" if job.kind == "media" else "commerce:ship" if job.kind in ("shipping", "receipt") else "commerce:payments"
     if not admin.is_super and permission not in admin_permissions(admin, db):
         raise HTTPException(403, "无此类任务的重试权限")
-    if job.state != "failed":
+    previous_error, previous_attempts = job.error, job.attempts
+    changed = db.execute(update(Job).where(Job.id == ident, Job.state == "failed")
+        .values(state="pending", attempts=0, run_at=datetime.utcnow(), lease_until=None, error="")).rowcount
+    if changed != 1:
         raise HTTPException(409, "仅失败任务可手动重试")
-    job.state, job.attempts, job.run_at = "pending", 0, datetime.utcnow()
-    record(db, f"job:{ident}", "manual_retry", operator=admin.username)
+    record(db, f"job:{ident}", "manual_retry", {"previous_error": previous_error,
+        "previous_attempts": previous_attempts}, operator=admin.username)
     db.commit()
     return ok(serialize(job))
 
 
+api.include_router(history_router)
 router.include_router(api)

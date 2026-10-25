@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { commerce, stateLabel, yuan } from '@/api/commerce';
 import { useAuthStore } from '@/stores/auth';
 const auth = useAuthStore();
@@ -7,11 +7,21 @@ const tab = ref('orders'), kind = ref(''), rows = ref<any[]>([]), page = ref(1),
 const detail = ref<any>({}), drawer = ref(false), shipDialog = ref(false), shipping = ref({ carrier: 'SF', tracking_no: '' });
 const reviewDialog = ref(false), sale = ref<any>({}), review = ref({ action: 'approve', remark: '', restock: false });
 const busy = ref(false);
+const keyword = ref(''), state = ref(''), fulfillment = ref('');
+const states = computed(() => tab.value === 'orders' ? ['pending','closing','paid','closed','refunded'] : ['requested','awaiting_return','returning','refunding','refunded','rejected']);
+let loadId = 0;
 async function load() {
+  const id = ++loadId;
+  const params = new URLSearchParams({ page: String(page.value), state: state.value, q: keyword.value.trim() });
+  if (tab.value === 'orders') { params.set('kind', kind.value); params.set('fulfillment', fulfillment.value); }
+  const path = tab.value === 'orders' ? '/orders' : '/aftersales';
   loading.value = true;
-  try { const result = await commerce.get(tab.value === 'orders' ? `/orders?kind=${kind.value}&page=${page.value}` : `/aftersales?page=${page.value}`); rows.value = result.items; total.value = result.total; }
-  finally { loading.value = false; }
+  try { const result = await commerce.get(`${path}?${params}`); if (id !== loadId) return; rows.value = result.items; total.value = result.total; }
+  finally { if (id === loadId) loading.value = false; }
 }
+const refresh = () => load().catch(() => {});
+function search() { page.value = 1; refresh(); }
+function resetFilters() { kind.value = ''; keyword.value = ''; state.value = ''; fulfillment.value = ''; search(); }
 async function ship() {
   busy.value = true;
   try { await commerce.post(`/orders/${detail.value.id}/ship`, shipping.value); shipDialog.value = false; drawer.value = false; await load(); }
@@ -22,17 +32,24 @@ async function submitReview() {
   try { await commerce.post(`/aftersales/${sale.value.id}/review`, review.value); reviewDialog.value = false; await load(); }
   finally { busy.value = false; }
 }
-watch([tab, kind], () => { page.value = 1; load(); });
-onMounted(load);
+watch(tab, resetFilters);
+onMounted(refresh);
+onUnmounted(() => { loadId++; });
 </script>
 <template>
   <BusinessPage title="课程商城交易" description="课程与实物订单独立管理；退款由支付渠道确认，发货和售后操作均保留历史。">
     <el-tabs v-model="tab"><el-tab-pane label="交易订单" name="orders" /><el-tab-pane label="售后处理" name="aftersales" /></el-tabs>
-    <div class="toolbar"><el-select v-if="tab === 'orders'" v-model="kind" style="width:160px"><el-option label="全部订单" value="" /><el-option label="课程" value="course" /><el-option label="实物" value="physical" /></el-select><el-button @click="load">刷新</el-button></div>
+    <div class="toolbar">
+      <el-input v-model="keyword" clearable :maxlength="80" :placeholder="tab === 'orders' ? '订单号或快递单号' : '订单号或退款单号'" style="width:260px" @keyup.enter="search" @clear="search" />
+      <el-select v-if="tab === 'orders'" v-model="kind" placeholder="全部订单" style="width:130px" @change="search"><el-option label="全部订单" value="" /><el-option label="课程" value="course" /><el-option label="实物" value="physical" /></el-select>
+      <el-select v-model="state" placeholder="全部交易状态" style="width:150px" @change="search"><el-option label="全部交易状态" value="" /><el-option v-for="value in states" :key="value" :label="value === 'pending' ? '待付款' : stateLabel(value)" :value="value" /></el-select>
+      <el-select v-if="tab === 'orders'" v-model="fulfillment" placeholder="全部履约状态" style="width:150px" @change="search"><el-option label="全部履约状态" value="" /><el-option v-for="value in ['unpaid','ready','unshipped','shipped','received']" :key="value" :label="stateLabel(value)" :value="value" /></el-select>
+      <el-button type="primary" @click="search">查询</el-button><el-button @click="resetFilters">重置</el-button><el-button :loading="loading" @click="refresh">刷新</el-button>
+    </div>
     <BusinessTable :data="rows" v-loading="loading">
       <el-table-column prop="id" label="编号" width="80" />
-      <el-table-column v-if="tab === 'orders'" prop="order_no" label="订单号" min-width="250" />
-      <el-table-column v-else prop="order_id" label="订单编号" width="100" />
+      <el-table-column prop="order_no" label="订单号" min-width="250" />
+      <el-table-column v-if="tab === 'aftersales'" prop="refund_no" label="退款单号" min-width="250" />
       <el-table-column prop="user_id" label="用户编号" width="100" />
       <el-table-column label="金额" width="120"><template #default="{ row }">{{ yuan(row.amount_fen) }}</template></el-table-column>
       <el-table-column label="状态" min-width="160"><template #default="{ row }">{{ stateLabel(row.status || row.state) }} {{ row.fulfillment ? `· ${stateLabel(row.fulfillment)}` : '' }}</template></el-table-column>
