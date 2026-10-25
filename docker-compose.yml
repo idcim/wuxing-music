@@ -42,9 +42,35 @@ services:
     restart: unless-stopped
     env_file:
       - ./backend/.env
-    command: [python, -m, app.commerce.worker]
+    command: [python, -m, app.commerce.worker, --queue, transactions]
     healthcheck:
-      disable: true
+      test: [CMD, python, -m, app.commerce.monitor, --check]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    dns:
+      - 223.5.5.5
+      - 119.29.29.29
+    volumes:
+      - commerce_private_data:/app/private-commerce
+    networks:
+      - default
+      - onepanel
+
+  commerce-media-worker:
+    profiles: [commerce]
+    image: wuxing-backend:latest
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    command: [python, -m, app.commerce.worker, --queue, media]
+    healthcheck:
+      test: [CMD, python, -m, app.commerce.monitor, --check]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
     dns:
       - 223.5.5.5
       - 119.29.29.29

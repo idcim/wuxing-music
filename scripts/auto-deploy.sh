@@ -48,6 +48,7 @@ HEALTH_RETRIES="${WUXING_HEALTH_RETRIES:-20}"                    # 健康检查�
 HEALTH_INTERVAL="${WUXING_HEALTH_INTERVAL:-3}"                   # 每次间隔（秒）
 ROLLBACK_ON_FAIL="${WUXING_ROLLBACK:-1}"                         # 部署失败是否回滚（1=是）
 PRUNE_IMAGES="${WUXING_PRUNE:-1}"                                # 部署后清理悬空镜像省磁盘
+COMMERCE_ENABLED="${WUXING_COMMERCE:-auto}"                      # auto=沿用已启用的 Worker，1=显式启用，0=不启用
 
 # 计划任务的 PATH 可能很精简，补上常见 bin 目录
 export PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:${PATH:-}"
@@ -71,10 +72,28 @@ else
   echo "❌ 找不到 docker compose，请先安装 docker 及 compose 插件。" >&2; exit 1
 fi
 
+worker_health_ok() {
+  [ "$COMMERCE_ENABLED" = "1" ] || return 0
+  local configured services service worker_ids worker_id worker_state
+  configured="$($COMPOSE config --services 2>/dev/null)" || return 1
+  # 回滚到尚无课程商城的版本时，仅检查该版本实际声明的服务。
+  case "$configured" in *commerce-worker*) services="commerce-worker" ;; *) return 0 ;; esac
+  case "$configured" in *commerce-media-worker*) services="$services commerce-media-worker" ;; esac
+  for service in $services; do
+    worker_ids="$($COMPOSE ps -q "$service" 2>/dev/null)" || return 1
+    [ -n "$worker_ids" ] || return 1
+    for worker_id in $worker_ids; do
+      worker_state="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$worker_id" 2>/dev/null)" || return 1
+      # 旧版本 Worker 没有 healthcheck，回滚时仍须至少处于 running。
+      case "$worker_state" in healthy|running) ;; *) return 1 ;; esac
+    done
+  done
+}
+
 health_ok() {
   local i
   for i in $(seq 1 "$HEALTH_RETRIES"); do
-    curl -fsS -m 5 "$HEALTH_URL" >/dev/null 2>&1 && return 0
+    if curl -fsS -m 5 "$HEALTH_URL" >/dev/null 2>&1 && worker_health_ok; then return 0; fi
     sleep "$HEALTH_INTERVAL"
   done
   return 1
@@ -115,6 +134,19 @@ log "代码已更新到 $(git rev-parse --short HEAD)。重建并重启容器…
 # 只能上服务器翻日志。回滚分支里要重新 export，那时 HEAD 已经变了。
 export GIT_COMMIT="$(git rev-parse --short HEAD)"
 export BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+if [ "$COMMERCE_ENABLED" = "auto" ]; then
+  if [ -n "$($COMPOSE ps -a -q commerce-worker 2>/dev/null)" ] || [ -n "$($COMPOSE ps -a -q commerce-media-worker 2>/dev/null)" ]; then
+    COMMERCE_ENABLED=1
+  else
+    COMMERCE_ENABLED=0
+  fi
+fi
+case "$COMMERCE_ENABLED" in
+  1) COMPOSE="$COMPOSE --profile commerce"; log "课程商城已启用，交易与媒体 Worker 一并更新并检查健康状态。" ;;
+  0) ;;
+  *) log "❌ WUXING_COMMERCE 只能为 auto、1 或 0。"; exit 1 ;;
+esac
 
 # 构建与启动分开：构建期网络抖动（PyPI/npm/Docker Hub 都可能间歇超时）用重试扛，
 # 层缓存让重试只续跑失败的层，不会从头再来。

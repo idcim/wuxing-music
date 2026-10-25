@@ -11,6 +11,7 @@ import shutil
 import struct
 import wave
 import tempfile
+import threading
 import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
@@ -36,9 +37,9 @@ from app.database import Base as LegacyBase, get_db
 from app.models import Role, Setting, User
 from app.security import get_current_admin
 from app.routers.mp import get_current_user
-from app.commerce import admin, aftersales, attachments, callbacks, catalog, common, lifecycle, providers, public, schemas, trading, worker
+from app.commerce import admin, aftersales, attachments, callbacks, catalog, common, lifecycle, monitor, providers, public, schemas, trading, worker
 from app.commerce.migrate import upgrade
-from app.commerce.models import Address, AfterSale, Base, Course, Enrollment, Job, Lesson, MediaAsset, Order, OrderItem, Payment, Product, Progress, Sku
+from app.commerce.models import Address, AfterSale, Base, Course, Enrollment, Job, Lesson, MediaAsset, Order, OrderItem, Payment, Product, Progress, SchemaVersion, Sku, WorkerHeartbeat
 
 
 class CommerceTests(unittest.TestCase):
@@ -147,6 +148,100 @@ class CommerceTests(unittest.TestCase):
             self.assertEqual(db.query(Course).filter_by(status="draft").count(), 1)
         for table in Base.metadata.sorted_tables:
             self.assertTrue(str(CreateTable(table).compile(dialect=mysql.dialect())))
+
+    def test_v1_upgrade_preserves_operational_data(self):
+        with self.sessions() as db:
+            db.delete(db.get(SchemaVersion, 2))
+            db.get(Product, 100).title = "运营已修改商品"
+            db.commit()
+        WorkerHeartbeat.__table__.drop(self.engine)
+        status = self.client.get("/api/admin/commerce/status").json()["data"]
+        self.assertFalse(status["migrated"])
+        self.assertIsNone(status["runtime"])
+        upgrade(self.engine)
+        upgrade(self.engine)
+        with self.sessions() as db:
+            self.assertTrue(common.migrated(db))
+            self.assertIsNotNone(db.get(SchemaVersion, 1))
+            self.assertIsNotNone(db.get(SchemaVersion, 2))
+            self.assertEqual(db.get(Product, 100).title, "运营已修改商品")
+            self.assertEqual(db.query(Product).count(), 6)
+            self.assertTrue(common.config(db)["shop_sale"])
+
+    def test_worker_heartbeat_detects_missing_queue_and_stale_process(self):
+        transaction_monitor = monitor.WorkerMonitor(self.sessions, hostname="transactions", queue="transactions")
+        media_monitor = monitor.WorkerMonitor(self.sessions, hostname="media", queue="media")
+        transaction_monitor.beat()
+        status = self.client.get("/api/admin/commerce/status").json()["data"]["runtime"]
+        self.assertFalse(status["online"])
+        self.assertEqual(status["queues"], {"transactions": True, "media": False})
+        media_monitor.active(999)
+        media_monitor.beat()
+        with self.sessions() as db:
+            status = monitor.snapshot(db)
+            self.assertTrue(status["online"])
+            self.assertTrue(monitor.local_healthy(db, hostname="media"))
+            self.assertFalse(monitor.local_healthy(db, hostname="different-container"))
+            media_worker = next(w for w in status["workers"] if w["queue"] == "media")
+            self.assertEqual(media_worker["active_job_id"], 999)
+            self.assertIsNotNone(media_worker["job_started_at"])
+            db.query(WorkerHeartbeat).filter_by(worker_id=media_monitor.worker_id).one().last_seen -= timedelta(seconds=91)
+            db.commit()
+        with self.sessions() as db:
+            self.assertFalse(monitor.local_healthy(db, hostname="media"))
+            self.assertFalse(monitor.snapshot(db)["queues"]["media"])
+
+    def test_monitor_distinguishes_backlog_from_future_jobs(self):
+        now = datetime.utcnow()
+        with self.sessions() as db:
+            db.add_all([Job(key="late", kind="payment", run_at=now - timedelta(minutes=6)),
+                Job(key="future", kind="close", run_at=now + timedelta(minutes=30)),
+                Job(key="failed", kind="refund", state="failed"),
+                Job(key="expired", kind="media", state="running", lease_until=now - timedelta(seconds=1)),
+                Job(key="busy", kind="media", state="running", lease_until=now + timedelta(hours=1))])
+            db.commit()
+        with self.sessions() as db:
+            status = monitor.snapshot(db, now)
+            self.assertEqual(status["jobs"], dict(pending=2, running=2, failed=1, done=0))
+            self.assertEqual(status["delayed"], 1)
+            self.assertEqual(status["expired_leases"], 1)
+            self.assertEqual(status["oldest_due_seconds"], 360)
+
+    def test_busy_media_worker_does_not_block_transaction_queue(self):
+        order = self.order().json()["data"]
+        with self.sessions() as db:
+            db.add(Job(key="long-media", kind="media", payload={"asset_id": 100}))
+            db.query(Job).filter_by(key=f"check:{order['id']}").one().run_at = datetime.utcnow() - timedelta(seconds=1)
+            db.commit()
+        started, release = threading.Event(), threading.Event()
+        original_perform = worker.perform
+        media_monitor = monitor.WorkerMonitor(self.sessions, hostname="media", queue="media")
+
+        def perform(db, job):
+            if job.kind == "media":
+                started.set()
+                if not release.wait(10):
+                    raise RuntimeError("测试未释放转码")
+            else:
+                original_perform(db, job)
+
+        with patch.object(worker, "perform", side_effect=perform), ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(worker.run_one, self.sessions, media_monitor, "media")
+            try:
+                self.assertTrue(started.wait(5))
+                media_monitor.beat()
+                self.assertTrue(worker.run_one(self.sessions, queue="transactions"))
+                with self.sessions() as db:
+                    self.assertEqual(db.query(Job).filter_by(key="long-media").one().state, "running")
+                    payment_job = db.query(Job).filter_by(key=f"check:{order['id']}").one()
+                    self.assertIn("等待用户发起支付", payment_job.error)
+                    self.assertTrue(monitor.local_healthy(db, hostname="media"))
+            finally:
+                release.set()
+            self.assertTrue(future.result(timeout=5))
+        media_monitor.beat()
+        with self.sessions() as db:
+            self.assertIsNone(db.query(WorkerHeartbeat).one().active_job_id)
 
     def test_quote_address_region_threshold_and_tampering(self):
         payload = dict(kind="physical", items=[dict(sku_id=100, quantity=1)], address_id=1)

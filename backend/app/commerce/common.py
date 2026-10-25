@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Setting
-from .models import Event, Job, SchemaVersion
+from .models import Event, Job, SCHEMA_VERSION, SchemaVersion
 
 DEFAULTS = dict(courses_visible=False, shop_visible=False, courses_sale=False, shop_sale=False,
                 course_banner="", shop_banner="", course_banner_course_id=None, shop_banner_product_id=None,
@@ -31,7 +31,7 @@ def throttle(uid, action, limit=30):
 def migrated(db):
     if not inspect(db.get_bind()).has_table(SchemaVersion.__tablename__):
         return False
-    return db.get(SchemaVersion, 1) is not None
+    return db.get(SchemaVersion, SCHEMA_VERSION) is not None
 
 
 def ready(db: Session = Depends(get_db)):

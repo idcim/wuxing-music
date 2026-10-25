@@ -59,13 +59,19 @@ def perform(db, job):
         raise RuntimeError("未知任务类型")
 
 
-def run_one(sessions=SessionLocal):
+def run_one(sessions=SessionLocal, monitor=None, queue="all"):
+    if queue not in ("all", "media", "transactions"):
+        raise ValueError("未知任务队列")
     with sessions() as db:
         if not migrated(db):
             return False
         now = datetime.utcnow()
         candidate = db.query(Job).filter(Job.run_at <= now,
             or_(Job.state == "pending", (Job.state == "running") & (Job.lease_until < now)))
+        if queue == "media":
+            candidate = candidate.filter(Job.kind == "media")
+        elif queue == "transactions":
+            candidate = candidate.filter(Job.kind != "media")
         job = candidate.order_by(Job.run_at, Job.id).first()
         if not job:
             return False
@@ -77,6 +83,8 @@ def run_one(sessions=SessionLocal):
             return False
         ident = job.id
         db.commit()
+        if monitor:
+            monitor.active(ident)
         try:
             job = db.get(Job, ident)
             perform(db, job)
@@ -105,15 +113,24 @@ def run_one(sessions=SessionLocal):
                 shipment.sync_state, shipment.error = "failed", job.error
             record(db, f"job:{ident}", job.state, {"error": job.error})
             db.commit()
+        finally:
+            if monitor:
+                monitor.active(None)
         return True
 
 
 if __name__ == "__main__":
-    while True:
-        try:
-            if not run_one():
-                time.sleep(3)
-        except Exception:
-            import logging
-            logging.exception("commerce worker iteration failed")
-            time.sleep(5)
+    import argparse
+    from .monitor import WorkerMonitor
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--queue", choices=("all", "media", "transactions"), default="all")
+    queue = parser.parse_args().queue
+    with WorkerMonitor(queue=queue) as monitor:
+        while True:
+            try:
+                if not run_one(monitor=monitor, queue=queue):
+                    time.sleep(3)
+            except Exception:
+                import logging
+                logging.exception("commerce worker iteration failed")
+                time.sleep(5)

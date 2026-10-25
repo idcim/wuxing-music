@@ -36,6 +36,7 @@
 | `aftersales.py`、`shipping.py` | 部分退款、退货、人工发货、平台履约 |
 | `media.py`、`attachments.py` | 私有课件处理与售后凭证 |
 | `worker.py`、`common.py` | 数据库任务、租约、重试、持久历史与开关 |
+| `monitor.py` | Worker 独立心跳、容器健康检查、积压与过期租约统计 |
 | `lifecycle.py` | 账号合并、删除引用检查与地址清理 |
 | `src/packages/courses/`、`src/packages/shop/` | 12 个独立小程序页面入口，业务代码实际进入分包 |
 | `src/features/commerce/common.tsx`、`commerce.scss` | 品牌样式、请求状态、客服、购买栏与播放器协调 |
@@ -76,22 +77,29 @@
 
 任务保存在 `commerce_job`，事件保存在 `commerce_event`，不依赖网页内存。Worker 每次通过条件更新领取任务，使用两小时租约；真正异常最多尝试三次，保留失败原因，可按权限手动重试。等待用户付款、支付结果确认、退款已受理及渠道尚未确认关单属于正常等待，每 60 秒继续补查，不消耗异常重试次数，保留等待历史。尚未发起支付的订单在有效期内也持续保留补查，防止首次检查后用户才付款而丢失自动补偿。媒体转码限制线程并设置超时，上传完成接口只排队，不等待转码。
 
+容器部署将交易任务与媒体任务分为 `commerce-worker`、`commerce-media-worker` 两个进程，长转码不占用支付、退款和发货补查队列。每个进程由独立线程每 15 秒写入心跳；超过 90 秒未更新即视为离线。后台“课件与任务”分别展示两类 Worker 的在线状态，并提示超过计划时间 5 分钟的任务、过期租约及失败总数。统计覆盖全部任务，不限于列表最近 100 条。心跳仅保留最近 7 天，业务任务和事件历史不随心跳清理。
+
 现有 OSS 已通过实机使用；课程新增的私有课件链路需单独验证。课件必须使用**独立的 private OSS 桶**，上传签名前校验桶 ACL，播放签名前校验对象 ACL。后台直传 OSS，Worker 下载、检查后转为标准 MP4/AAC；原件与播放件均私有。按新桶和课件域名核对后台域名 CORS、小程序媒体域名、HTTPS 和大文件网络限制。
 
 售后图片使用 `COMMERCE_PRIVATE_DIR`，不放公开 `uploads`。限制图片体积/像素、重新编码清除元数据，仅可引用本人的上传记录，读取使用短时签名。目录需持久化、备份并限制宿主机访问。长期留存、孤立上传清理策略在正式运营前需结合售后保留期配置。
 
 ## 部署顺序（本轮未执行生产操作）
 
-先在测试环境备份与预演，确认现有 `user` 等表已存在。新域使用独立 metadata，后端启动不会隐式建这些表。v1 迁移只增加新表、外键与草稿，不改写会员订单；不要用删除新财务表的方式回滚。
+先在测试环境备份与预演，确认现有 `user` 等表已存在。新域使用独立 metadata，后端启动不会隐式建这些表。当前结构版本为 **v2**：v1 增加新业务表、外键与草稿，v2 增加 Worker 心跳表及版本记录，不改写已有会员订单、运营内容或售卖设置。曾应用 v1 的环境也需显式运行升级；升级前新业务接口返回未就绪，Worker 健康检查不通过。不要用删除新财务表的方式回滚。
 
 ```bash
 # 仓库根目录：测试环境先运行；生产操作须按发布流程执行。
 docker compose build api
 docker compose run --rm api python -m app.commerce.migrate
-docker compose --profile commerce up -d api commerce-worker
+docker compose --profile commerce up -d api commerce-worker commerce-media-worker
+docker compose --profile commerce ps
+docker compose --profile commerce exec -T commerce-worker python -m app.commerce.monitor --check
+docker compose --profile commerce exec -T commerce-media-worker python -m app.commerce.monitor --check
 ```
 
-单独本地开发可在 `backend/` 运行 `python -m app.commerce.migrate` 与 `python -m app.commerce.worker`。只使用测试数据库。Worker 与 API 共享部署配置和数据库；compose 的 `commerce` profile 需显式启用，并将 Worker 纳入后续发布更新与告警。默认自动部署不启动这个 profile。
+单独本地开发可在 `backend/` 运行 `python -m app.commerce.migrate`；分别以 `python -m app.commerce.worker --queue transactions` 和 `python -m app.commerce.worker --queue media` 启动两个进程。不带参数仍支持单进程处理所有任务，适合本地调试。只使用测试数据库。
+
+Worker 与 API 共享部署配置和数据库。首次启用 `commerce` profile 需显式执行并确认迁移；自动发布不隐式迁移数据库。后续 `scripts/auto-deploy.sh` 默认 `WUXING_COMMERCE=auto`，发现已有 Worker 后会将两个任务服务一并更新，并在 API 与 Worker 均健康后才报告成功。初次发布可在完成迁移后显式设置 `WUXING_COMMERCE=1`；`0` 仅用于已停止任务服务、关闭新业务售卖的环境。容器健康失败应由部署平台接入现有告警渠道；本轮没有配置或发送外部通知。
 
 部署变量模板见 `backend/.env.example`，真实密钥仅配置部署环境。新售卖能力没有 `DEBUG=true` 免付兜底。密钥或准入缺失就拒绝支付，不能临时复制会员支付来绕过数字内容渠道。
 
@@ -113,7 +121,8 @@ docker compose --profile commerce up -d api commerce-worker
 - `python -m unittest discover -s tests -v`：临时 SQLite/临时文件，覆盖交易幂等、金额篡改、并发库存、部分退款及运费、权益独立、进度、账号合并、后台权限、任务恢复、私有凭证、真实 RSA/AESGCM 通知验真；同时回归既有音频流水线。
 - `python -m compileall app`、前端 `npm run type-check`、`npm run build:weapp`、`npm run build:h5`、后台 `npm run build`。
 - 支付适配器回归：`node --test scripts/tests/commerce-payment.test.cjs`，执行真实小程序支付适配器并模拟平台和服务端，验证 POST 补查、服务端未确认时不报成功、用户取消支付；不产生真实资金交易。
-- 后端全套 **37 项**临时 SQLite/文件回归通过；其中课程商城 **25 项**在一次性 MySQL **8.0.46** 实际执行通过，包含新表迁移、重入迁移、并发下单、退款、多轮正常等待及关单期间延迟支付。小程序支付适配器 **3 项**回归、类型检查及小程序构建通过。
+- 后端全套 **41 项**临时 SQLite/文件回归通过；其中课程商城 **29 项**在一次性 MySQL **8.0.46** 实际执行通过，包含 v1→v2 及重入迁移、并发下单、退款、多轮正常等待、关单期间延迟支付、心跳离线及长媒体任务隔离。小程序支付适配器 **3 项**回归、类型检查及小程序构建此前通过；本轮后台构建及后端语法检查通过。
+- 发布检查回归：`python -m unittest discover -s scripts/tests -p test_deploy_runtime.py -v`，**10 项**通过；在命令替身环境执行真实脚本函数，覆盖沿用 Worker profile、停止的 Worker 仍纳入下次更新、双队列检查、API 正常但 Worker 异常、启动中和旧版回滚。不执行部署、生产迁移或外部通知。
 - MySQL 测试通过显式的 `COMMERCE_TEST_MYSQL_URL` 选择本机测试实例，只允许数据库标识 `wuxing_v2_test`，内部创建独立随机数据库并在结束后删除；不使用部署 `.env` 中的数据库连接。临时 MySQL 测试不能替代生产数据副本迁移和备份恢复预演。
 - 浏览器使用本地临时数据库检查 Vben 列表、示例课程编辑保存、长弹窗、运营配置和主题；不连接生产数据库或支付渠道。
 

@@ -24,7 +24,10 @@ RESOURCES = {"categories": (Category, schemas.CategoryIn, "commerce:content"),
 
 @router.get("/status")
 def status(_=Depends(require_perm("commerce:view")), db: Session = Depends(get_db)):
-    return ok({"migrated": migrated(db), "capabilities": providers.capabilities()})
+    from .monitor import snapshot
+    initialized = migrated(db)
+    return ok({"migrated": initialized, "capabilities": providers.capabilities(),
+               "runtime": snapshot(db) if initialized else None})
 
 
 api = APIRouter(dependencies=[Depends(ready)])

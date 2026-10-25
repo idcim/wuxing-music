@@ -5,6 +5,7 @@ from sqlalchemy.orm import Mapped, declarative_base, mapped_column
 from app.models import User
 
 Base = declarative_base()
+SCHEMA_VERSION = 2
 
 
 class Row:
@@ -239,3 +240,13 @@ class Job(Row, Base):
     run_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     lease_until: Mapped[datetime | None] = mapped_column(nullable=True)
     error: Mapped[str] = mapped_column(Text, default="")
+
+
+class WorkerHeartbeat(Row, Base):
+    __tablename__ = "commerce_worker_heartbeat"
+    worker_id: Mapped[str] = mapped_column(String(64), unique=True)
+    hostname: Mapped[str] = mapped_column(String(255), index=True)
+    queue: Mapped[str] = mapped_column(String(24), default="all")
+    last_seen: Mapped[datetime] = mapped_column(index=True)
+    active_job_id: Mapped[int | None] = mapped_column(nullable=True)
+    job_started_at: Mapped[datetime | None] = mapped_column(nullable=True)

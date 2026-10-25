@@ -2,7 +2,7 @@
 from datetime import datetime
 from sqlalchemy.orm import Session
 
-from .models import Base, Category, Course, Lesson, Product, SchemaVersion, Sku, Teacher
+from .models import Base, Category, Course, Lesson, Product, SCHEMA_VERSION, SchemaVersion, Sku, Teacher
 
 
 def upgrade(engine):
@@ -10,6 +10,9 @@ def upgrade(engine):
     Base.metadata.create_all(engine)
     with Session(engine) as db:
         if db.get(SchemaVersion, 1):
+            if not db.get(SchemaVersion, SCHEMA_VERSION):
+                db.add(SchemaVersion(version=SCHEMA_VERSION))
+                db.commit()
             return
         categories = [Category(kind=kind, name=name, sort=i) for i, (kind, name) in enumerate([
             ("course", "声乐课程"), ("physical", "咖啡"), ("physical", "五行茶"),
@@ -38,10 +41,11 @@ def upgrade(engine):
             db.add(Sku(product_id=product.id, name="250g 单袋（示例规格）" if name == "咖啡" else "100g 单盒（示例规格）",
                 price_fen=6800 if name == "咖啡" else 8800, stock=0))
         db.add(SchemaVersion(version=1, applied_at=datetime.utcnow()))
+        db.add(SchemaVersion(version=SCHEMA_VERSION))
         db.commit()
 
 
 if __name__ == "__main__":
     from app.database import engine
     upgrade(engine)
-    print("commerce schema v1 applied; all catalog entries are drafts; sales remain disabled")
+    print(f"commerce schema v{SCHEMA_VERSION} applied; existing catalog and sales settings preserved")
