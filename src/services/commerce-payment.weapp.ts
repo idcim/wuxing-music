@@ -36,8 +36,11 @@ export async function openCommerceLogistics(id: number): Promise<void> {
   const data = await commerceApi(`/orders/${id}/logistics`);
   const token = data.trace?.waybill_token;
   if (!token) throw new Error('物流信息暂未就绪，请稍后重试');
-  await new Promise<void>((resolve, reject) => native().openBusinessView({ businessType: 'express',
-    extraData: { waybill_token: token }, success: () => resolve(), fail: reject }));
+  const plugin = Taro.requirePlugin('logisticsPlugin') as {
+    openWaybillTracking?: (options: { waybillToken: string }) => void | Promise<void>;
+  };
+  if (typeof plugin?.openWaybillTracking !== 'function') throw new Error('物流查询暂不可用，请稍后重试或联系客服');
+  await plugin.openWaybillTracking({ waybillToken: token });
 }
 
 export async function confirmCommerceReceipt(transactionId: string): Promise<void> {

@@ -25,6 +25,9 @@ export default defineAppConfig({
     { root: 'packages/courses', pages: ['list/index', 'detail/index', 'mine/index', 'learn/index'] },
     { root: 'packages/shop', pages: ['list/index', 'detail/index', 'cart/index', 'checkout/index', 'addresses/index', 'orders/index', 'order/index', 'aftersale/index'] },
   ] : [],
+  plugins: process.env.TARO_ENV === 'weapp' ? {
+    logisticsPlugin: { version: '2.1.5', provider: 'wx9ad912bf20548d92' },
+  } : {},
   window: {
     backgroundTextStyle: 'light',
     navigationBarBackgroundColor: '#03050a',
