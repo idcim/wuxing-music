@@ -34,7 +34,7 @@ def public_config(db: Session = Depends(get_db)):
     initialized = migrated(db)
     if not initialized:
         cfg.update(courses_visible=False, shop_visible=False, courses_sale=False, shop_sale=False)
-    return ok({**cfg, "commerce_ready": initialized, "capabilities": providers.capabilities()})
+    return ok({**cfg, "commerce_ready": initialized, "capabilities": providers.capabilities(db)})
 
 
 @api.get("/catalog/{kind}")

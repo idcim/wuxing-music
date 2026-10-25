@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from app.config import settings
 from .common import record
 from .models import LogisticsQuery
+from .logistics_settings import load as account_config
 
 ENDPOINT = "https://poll.kuaidi100.com/poll/query.do"
 CACHE_INTERVAL = timedelta(minutes=30)
@@ -75,7 +76,8 @@ def _normalise(data, carrier, number):
 
 
 def trace(db, order, shipment):
-    if settings.commerce_logistics_provider != "kuaidi100" or not all([settings.commerce_logistics_customer, settings.commerce_logistics_key]):
+    account = account_config(db)
+    if not account["enabled"] or not all([account["customer"], account["key"]]) or account["error"]:
         raise HTTPException(409, "快递100物流查询尚未配置，请复制运单号查询或咨询客服")
     mapping = {**CARRIERS, **settings.commerce_logistics_carriers}
     carrier = mapping.get(shipment.carrier, mapping.get(shipment.carrier.upper(), shipment.carrier.lower()))
@@ -91,7 +93,7 @@ def trace(db, order, shipment):
             raise HTTPException(409, "此快递查询需要订单收件电话，请联系客服核对")
         param["phone"] = phone
     encoded = json.dumps(param, ensure_ascii=False, separators=(",", ":"))
-    customer = settings.commerce_logistics_customer
+    customer = account["customer"]
     fingerprint = hashlib.sha256((customer + encoded).encode()).hexdigest()
     # 账号、运单只共享限频；轨迹按发货记录存储，不能把收件人不同的结果共享给其他订单。
     quota = _row(db, "account:" + hashlib.sha256(customer.encode()).hexdigest())
@@ -126,7 +128,7 @@ def trace(db, order, shipment):
     db.commit()  # 网络请求前持久化领取；进程中断或超时也不能重复扣费和超频。
     value, error_code = None, ""
     try:
-        sign = hashlib.md5((encoded + settings.commerce_logistics_key + customer).encode()).hexdigest().upper()
+        sign = hashlib.md5((encoded + account["key"] + customer).encode()).hexdigest().upper()
         response = httpx.post(ENDPOINT, data={"customer": customer, "sign": sign, "param": encoded}, timeout=15)
         response.raise_for_status()
         value = _normalise(response.json(), carrier, number)

@@ -11,4 +11,5 @@ export const stateLabel = (value: string) => ({ draft: '草稿', published: '已
   waiting: '等待确认', manual_retry: '手动重试', created: '已创建', updated: '已更新', saved: '已保存',
   lease_lost: '过期执行已丢弃',
   logistics_queried: '物流已查询', logistics_query_failed: '物流查询失败',
+  logistics_account_saved: '物流账号已保存',
 } as Record<string, string>)[value] || value;

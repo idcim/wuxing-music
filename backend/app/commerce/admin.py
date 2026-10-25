@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import ValidationError
 from sqlalchemy import or_, update
 from sqlalchemy.orm import Session
@@ -28,8 +28,28 @@ RESOURCES = {"categories": (Category, schemas.CategoryIn, "commerce:content"),
 def status(_=Depends(require_perm("commerce:view")), db: Session = Depends(get_db)):
     from .monitor import snapshot
     initialized = migrated(db)
-    return ok({"migrated": initialized, "capabilities": providers.capabilities(),
+    return ok({"migrated": initialized, "capabilities": providers.capabilities(db),
                "runtime": snapshot(db) if initialized else None})
+
+
+@router.get("/logistics/settings")
+def logistics_settings(_=Depends(require_perm("commerce:settings")), db: Session = Depends(get_db)):
+    from .logistics_settings import masked
+    return ok(masked(db))
+
+
+@router.post("/logistics/settings")
+async def logistics_settings_save(request: Request, admin=Depends(require_perm("commerce:settings")), db: Session = Depends(get_db)):
+    from .logistics_settings import save
+    try:
+        raw = await request.body()
+        if len(raw) > 8192:
+            raise ValueError("oversize")
+        body = schemas.LogisticsConfigIn.model_validate(json.loads(raw))
+    except (ValidationError, ValueError, TypeError):
+        # 凭证表单的校验错误不能回显输入内容。
+        raise HTTPException(422, "物流账号字段格式不正确，请核对 Customer、Key 和开关") from None
+    return ok(save(db, body, admin.username))
 
 
 api = APIRouter(dependencies=[Depends(ready)])
@@ -37,7 +57,7 @@ api = APIRouter(dependencies=[Depends(ready)])
 
 @api.get("/settings")
 def settings(_=Depends(require_perm("commerce:view")), db: Session = Depends(get_db)):
-    return ok({**config(db), "capabilities": providers.capabilities()})
+    return ok({**config(db), "capabilities": providers.capabilities(db)})
 
 
 @api.post("/settings")

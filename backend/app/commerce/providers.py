@@ -19,14 +19,15 @@ from app.routers.mp import _get_access_token, _mp_cfg, _pay_cfg, _site_name
 from .models import Course, OrderItem, Payment
 
 
-def capabilities():
+def capabilities(db=None):
+    from .logistics_settings import configured
     return dict(physical_payment=bool(settings.commerce_wxpay_public_key and settings.commerce_wxpay_public_key_id and settings.commerce_public_base),
         course_payment=bool(settings.commerce_virtual_approved and settings.commerce_virtual_offer_id and settings.commerce_virtual_app_key
             and settings.commerce_push_token and settings.commerce_push_aes_key and settings.commerce_public_base),
         course_ios=bool(settings.commerce_virtual_ios_approved),
         private_media=bool(settings.commerce_private_bucket and settings.commerce_private_endpoint and settings.commerce_private_key_id and settings.commerce_private_key_secret),
         shipping=bool(settings.commerce_shipping_approved),
-        logistics=bool(settings.commerce_logistics_provider == "kuaidi100" and settings.commerce_logistics_customer and settings.commerce_logistics_key))
+        logistics=configured(db))
 
 
 def pay_cfg(db, require_enabled=False):
