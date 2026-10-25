@@ -1,5 +1,5 @@
 import Taro from '@tarojs/taro';
-import { commerceApi } from './commerce';
+import { commerceApi, shopPath } from './commerce';
 
 interface NativeCommerce {
   requestVirtualPayment: (options: Record<string, unknown>) => void;
@@ -33,14 +33,8 @@ export async function payCommerceOrder(id: number, kind: string): Promise<void> 
 }
 
 export async function openCommerceLogistics(id: number): Promise<void> {
-  const data = await commerceApi(`/orders/${id}/logistics`);
-  const token = data.trace?.waybill_token;
-  if (!token) throw new Error('物流信息暂未就绪，请稍后重试');
-  const plugin = Taro.requirePlugin('logisticsPlugin') as {
-    openWaybillTracking?: (options: { waybillToken: string }) => void | Promise<void>;
-  };
-  if (typeof plugin?.openWaybillTracking !== 'function') throw new Error('物流查询暂不可用，请稍后重试或联系客服');
-  await plugin.openWaybillTracking({ waybillToken: token });
+  if (!Number.isSafeInteger(id) || id < 1) throw new Error('订单编号无效');
+  await Taro.navigateTo({ url: `${shopPath}/logistics/index?id=${id}` });
 }
 
 export async function confirmCommerceReceipt(transactionId: string): Promise<void> {

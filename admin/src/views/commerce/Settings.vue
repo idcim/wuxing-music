@@ -23,8 +23,9 @@ onMounted(load);
 <template>
   <BusinessPage title="课程商城运营配置" description="展示与售卖分别控制；关闭售卖不影响已购课程、已支付订单和售后处理。">
     <BusinessForm v-loading="loading" :model="form" class="settings-panel" :disabled="!auth.can('commerce:settings')">
-      <el-alert title="支付与私有存储密钥只在服务端部署环境配置，不在运营表单中填写。未完成能力验收不能开启售卖。" :closable="false" style="margin-bottom:20px" />
-      <el-descriptions :column="2" border style="margin-bottom:24px"><el-descriptions-item v-for="(label, key) in { physical_payment:'实物支付', course_payment:'数字课程支付', course_ios:'iOS 数字支付', private_media:'私有课程存储', shipping:'微信发货与物流' }" :key="key" :label="label"><el-tag :type="caps[key] ? 'success' : 'info'">{{ caps[key] ? '已配置（仍需真实联调）' : '未配置 / 未验收' }}</el-tag></el-descriptions-item></el-descriptions>
+      <el-alert title="支付、私有存储和快递100密钥只在服务端部署环境配置，不在运营表单中填写。未完成能力验收不能开启售卖。" :closable="false" style="margin-bottom:20px" />
+      <el-descriptions :column="2" border style="margin-bottom:24px"><el-descriptions-item v-for="(label, key) in { physical_payment:'实物支付', course_payment:'数字课程支付', course_ios:'iOS 数字支付', private_media:'私有课程存储', shipping:'微信发货与收货同步', logistics:'快递100轨迹查询' }" :key="key" :label="label"><el-tag :type="caps[key] ? 'success' : 'info'">{{ caps[key] ? '已配置（仍需真实联调）' : '未配置 / 未验收' }}</el-tag></el-descriptions-item></el-descriptions>
+      <el-alert title="物流轨迹在订单内展示，无需添加微信物流插件。由服务端配置快递100 CUSTOMER/KEY；同一运单至少间隔 30 分钟查询。" type="info" :closable="false" style="margin-bottom:20px" />
       <el-form-item label="展示课程入口"><el-switch v-model="form.courses_visible" /></el-form-item>
       <el-form-item label="开放收费课程购买"><el-switch v-model="form.courses_sale" /></el-form-item>
       <el-form-item label="展示商城入口"><el-switch v-model="form.shop_visible" /></el-form-item>

@@ -42,16 +42,6 @@ def sync(db, shipment_id):
     db.commit()
 
 
-def trace(db, order, shipment):
-    user = db.get(User, order.user_id)
-    item = db.query(OrderItem).filter_by(order_id=order.id).first()
-    # 返回微信物流查询组件 token，前端使用官方查询插件展示实际轨迹。
-    return call(db, "cgi-bin/express/delivery/open_msg/trace_waybill", dict(openid=user.openid,
-        waybill_id=shipment.tracking_no, delivery_id=shipment.carrier, receiver_phone=order.address["phone"],
-        trans_id=order.transaction_id, order_detail_path=f"packages/shop/order/index?id={order.id}",
-        goods_info=dict(detail_list=[dict(goods_name=item.title, goods_img_url=item.cover)])))
-
-
 def confirm_receipt(db, order):
     data = call(db, "wxa/sec/order/get_order", {"transaction_id": order.transaction_id}).get("order", {})
     if data.get("transaction_id") != order.transaction_id or data.get("openid") != order.payer_openid or data.get("paid_amount") != order.amount_fen:

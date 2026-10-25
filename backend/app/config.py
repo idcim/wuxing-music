@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     commerce_push_token: str = ""
     commerce_push_aes_key: str = ""
     commerce_shipping_approved: bool = False
+    commerce_logistics_provider: str = "kuaidi100"
+    commerce_logistics_customer: str = ""
+    commerce_logistics_key: str = ""
+    commerce_logistics_carriers: dict[str, str] = {}
 
     # CORS 允许的后台前端地址
     cors_origins: list[str] = [

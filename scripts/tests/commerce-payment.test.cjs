@@ -6,18 +6,18 @@ const test = require('node:test');
 const vm = require('node:vm');
 const ts = require('typescript');
 
-function paymentAdapter(api, requestPayment = async () => {}, requirePlugin = () => undefined) {
+function paymentAdapter(api, requestPayment = async () => {}, navigateTo = async () => {}) {
   const source = fs.readFileSync(path.join(__dirname, '../../src/services/commerce-payment.weapp.ts'), 'utf8');
   const compiled = ts.transpileModule(source, { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020,
   } }).outputText;
   const exports = {};
-  const taro = { getDeviceInfo: () => ({ platform: 'android' }), requestPayment, requirePlugin };
+  const taro = { getDeviceInfo: () => ({ platform: 'android' }), requestPayment, navigateTo };
   vm.runInNewContext(compiled, {
     exports,
     require: name => {
       if (name === '@tarojs/taro') return { default: taro };
-      if (name === './commerce') return { commerceApi: api };
+      if (name === './commerce') return { commerceApi: api, shopPath: '/packages/shop' };
       throw new Error(`Unexpected dependency: ${name}`);
     },
     setTimeout: fn => { fn(); },
@@ -62,34 +62,24 @@ test('用户取消平台支付后不返回支付成功', async () => {
   await assert.rejects(adapter.payCommerceOrder(42, 'physical'), /cancel/);
 });
 
-test('物流查询使用官方插件并将服务端令牌传为 waybillToken', async () => {
+test('物流查询进入站内轨迹页，不调用微信插件或查询 API', async () => {
   const calls = [];
-  const adapter = paymentAdapter(async (url, method) => {
-    assert.equal(url, '/orders/42/logistics');
-    assert.equal(method, undefined);
-    return { trace: { waybill_token: 'test-waybill-token' } };
-  }, undefined, name => {
-    assert.equal(name, 'logisticsPlugin');
-    return { openWaybillTracking: options => { calls.push(options.waybillToken); } };
-  });
+  const adapter = paymentAdapter(async () => { throw new Error('不应提前请求'); }, undefined, async options => { calls.push(options.url); });
   await adapter.openCommerceLogistics(42);
-  assert.deepEqual(calls, ['test-waybill-token']);
+  assert.deepEqual(calls, ['/packages/shop/logistics/index?id=42']);
 });
 
-test('物流令牌缺失时不拉起插件，插件缺失时提供明确错误', async () => {
-  const missingToken = paymentAdapter(async () => ({ trace: {} }), undefined, () => { throw new Error('不应调用'); });
-  await assert.rejects(missingToken.openCommerceLogistics(42), /物流信息暂未就绪/);
-  const missingPlugin = paymentAdapter(async () => ({ trace: { waybill_token: 'test-token' } }));
-  await assert.rejects(missingPlugin.openCommerceLogistics(42), /物流查询暂不可用/);
+test('无效订单不打开物流页面', async () => {
+  const adapter = paymentAdapter(async () => {}, undefined, async () => { throw new Error('不应导航'); });
+  for (const id of [0, -1, NaN, 1.5]) await assert.rejects(adapter.openCommerceLogistics(id), /订单编号无效/);
 });
 
-test('物流插件的失败返回给调用者，不冒充查询成功', async () => {
-  const adapter = paymentAdapter(async () => ({ trace: { waybill_token: 'test-token' } }), undefined,
-    () => ({ openWaybillTracking: async () => { throw new Error('plugin unavailable'); } }));
-  await assert.rejects(adapter.openCommerceLogistics(42), /plugin unavailable/);
+test('物流页面导航失败返回调用者', async () => {
+  const adapter = paymentAdapter(async () => {}, undefined, async () => { throw new Error('navigate failed'); });
+  await assert.rejects(adapter.openCommerceLogistics(42), /navigate failed/);
 });
 
-test('小程序声明官方物流插件，H5 不加载插件', () => {
+test('小程序物流页位于商城分包，构建不再依赖物流插件', () => {
   const source = fs.readFileSync(path.join(__dirname, '../../src/app.config.ts'), 'utf8');
   const compiled = ts.transpileModule(source, { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020,
@@ -97,10 +87,10 @@ test('小程序声明官方物流插件，H5 不加载插件', () => {
   for (const env of ['weapp', 'h5']) {
     const exports = {};
     vm.runInNewContext(compiled, { exports, process: { env: { TARO_ENV: env } }, defineAppConfig: value => value });
-    const plugin = exports.default.plugins.logisticsPlugin;
+    assert.equal(exports.default.plugins?.logisticsPlugin, undefined);
     if (env === 'weapp') {
-      assert.equal(plugin.provider, 'wx9ad912bf20548d92');
-      assert.equal(plugin.version, '2.1.5');
-    } else assert.equal(plugin, undefined);
+      const shop = exports.default.subPackages.find(item => item.root === 'packages/shop');
+      assert.ok(shop.pages.includes('logistics/index'));
+    } else assert.equal(exports.default.subPackages.length, 0);
   }
 });
