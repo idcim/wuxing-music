@@ -16,6 +16,7 @@ const router = createRouter({
         { path: 'plans', component: () => import('@/views/Plans.vue'), meta: { title: '套餐管理', perm: 'plans:view' } },
         { path: 'elements', component: () => import('@/views/Elements.vue'), meta: { title: '五行管理', perm: 'elements:view' } },
         { path: 'tracks', component: () => import('@/views/Tracks.vue'), meta: { title: '歌曲管理', perm: 'tracks:view' } },
+        { path: 'audio-history', component: () => import('@/views/AudioHistory.vue'), meta: { title: '音频任务历史', perm: 'tracks:view' } },
         { path: 'cdkeys', component: () => import('@/views/Cdkeys.vue'), meta: { title: '兑换码', perm: 'cdkeys:view' } },
         { path: 'quiz', component: () => import('@/views/Quiz.vue'), meta: { title: '测评管理', perm: 'quiz:view' } },
         { path: 'orders', component: () => import('@/views/Orders.vue'), meta: { title: '订单管理', perm: 'orders:view' } },

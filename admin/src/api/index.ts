@@ -43,6 +43,8 @@ export const cleanupOrders = (confirm: boolean) => req.post('/api/admin/orders/c
 export const normalizeAudio = () => req.post('/api/admin/tracks/normalize-audio');
 export const normalizeAudioStatus = () => req.get('/api/admin/tracks/normalize-audio');
 export const normalizeTrack = (id: number) => req.post(`/api/admin/tracks/${id}/normalize`);
+export const listAudioHistory = (params: { page?: number; size?: number; outcome?: string; job?: number } = {}) =>
+  req.get('/api/admin/tracks/audio-history', { params });
 
 // ── 套餐 ──
 export const listPlans = () => req.get('/api/admin/plans');

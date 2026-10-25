@@ -1,111 +1,134 @@
-<template>
-  <el-container class="layout">
-    <el-aside width="220px" class="layout__aside">
-      <div class="layout__logo">{{ site.name }}</div>
-      <el-menu :default-active="route.path" router class="layout__menu" background-color="#0a0e1a"
-        text-color="#94a3b8" active-text-color="#fff">
-        <el-menu-item v-for="item in mainNav" :key="item.path" :index="item.path">
-          <el-icon><component :is="item.icon" /></el-icon><span>{{ item.title }}</span>
-        </el-menu-item>
-        <el-sub-menu v-if="agentNav.length" index="agent">
-          <template #title><el-icon><Shop /></el-icon><span>代理分成</span></template>
-          <el-menu-item v-for="item in agentNav" :key="item.path" :index="item.path">
-            <el-icon><component :is="item.icon" /></el-icon><span>{{ item.title }}</span>
-          </el-menu-item>
-        </el-sub-menu>
-        <el-sub-menu v-if="systemNav.length" index="system">
-          <template #title><el-icon><Tools /></el-icon><span>系统管理</span></template>
-          <el-menu-item v-for="item in systemNav" :key="item.path" :index="item.path">
-            <el-icon><component :is="item.icon" /></el-icon><span>{{ item.title }}</span>
-          </el-menu-item>
-        </el-sub-menu>
-      </el-menu>
-    </el-aside>
-    <el-container>
-      <el-header class="layout__header">
-        <span class="layout__title">{{ route.meta.title || '' }}</span>
-        <div class="layout__right">
-          <NotifyBell />
-          <el-dropdown @command="onCommand">
-            <span class="layout__user">
-              {{ auth.nickname || '管理员' }}
-              <el-tag v-if="auth.isSuper" size="small" type="danger" effect="plain">超管</el-tag>
-              <el-tag v-else-if="auth.roleName" size="small" effect="plain">{{ auth.roleName }}</el-tag>
-              <el-icon><ArrowDown /></el-icon>
-            </span>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="logout">退出登录</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-        </div>
-      </el-header>
-      <el-main class="layout__main">
-        <router-view />
-      </el-main>
-    </el-container>
-  </el-container>
-</template>
-
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, markRaw, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import * as Icons from '@element-plus/icons-vue';
+import { VbenAdminLayout } from '@vben-core/layout-ui';
+import { Menu } from '@vben-core/menu-ui';
+import { preferences, updatePreferences } from '@vben/preferences';
+import { useMediaQuery } from '@vueuse/core';
 import { useAuthStore } from '@/stores/auth';
 import { useSiteStore } from '@/stores/site';
-import { NAV_MAIN, NAV_AGENT, NAV_SYSTEM } from '@/menu';
+import { NAV_MAIN, NAV_AGENT, NAV_SYSTEM, NAV_ALL, type NavItem } from '@/menu';
 import NotifyBell from '@/components/NotifyBell.vue';
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
-// 侧边栏品牌名跟着「设置中心 → 站点信息」的项目名称走
 const site = useSiteStore();
-
-// 无权限、或所属可选模块未开启的，都不进菜单
-//（拦截以后端 require_perm / require_enabled 为准，这里只是体验）
-const visible = (n: { perm: string; feature?: string }) =>
-  auth.can(n.perm) && auth.hasFeature(n.feature);
-const mainNav = computed(() => NAV_MAIN.filter(visible));
-// 逐项过滤：模块关闭时这一组只剩「分成设置」，整组为空才隐藏
-const agentNav = computed(() => NAV_AGENT.filter(visible));
-const systemNav = computed(() => NAV_SYSTEM.filter(visible));
-
-onMounted(() => {
-  if (!auth.loaded) auth.loadMe().catch(() => {});
+const mobile = useMediaQuery('(max-width: 767px)');
+const collapsed = computed({
+  get: () => preferences.sidebar.collapsed,
+  set: (value: boolean) => updatePreferences({ sidebar: { collapsed: value } }),
 });
-
-function onCommand(cmd: string) {
-  if (cmd === 'logout') {
-    auth.logout();
-    router.push('/login');
+const isDark = computed(() => preferences.theme.mode === 'dark');
+const visible = (n: NavItem) => auth.can(n.perm) && auth.hasFeature(n.feature);
+const asMenu = (n: NavItem) => ({
+  path: n.path, name: n.title,
+  icon: markRaw((Icons as Record<string, any>)[n.icon] || Icons.Menu),
+});
+const menus = computed(() => {
+  const agent = NAV_AGENT.filter(visible).map(asMenu);
+  const system = NAV_SYSTEM.filter(visible).map(asMenu);
+  return [
+    ...NAV_MAIN.filter(visible).map(asMenu),
+    ...(agent.length ? [{ path: '/agent-menu', name: '代理分成', icon: markRaw(Icons.Shop), children: agent }] : []),
+    ...(system.length ? [{ path: '/system-menu', name: '系统管理', icon: markRaw(Icons.Setting), children: system }] : []),
+  ];
+});
+const tabKey = computed(() => `admin_tabs_${auth.username}`);
+const tabs = ref<{ path: string; title: string }[]>([]);
+const refreshKey = ref(0);
+try {
+  const cached = JSON.parse(localStorage.getItem(tabKey.value) || '[]');
+  if (Array.isArray(cached)) tabs.value = cached.filter(t => NAV_ALL.some(n => n.path === t.path && visible(n)));
+} catch { /* 损坏的浏览器缓存不影响进入后台 */ }
+watch(() => route.path, () => {
+  if (!tabs.value.some(t => t.path === route.path)) {
+    tabs.value.push({ path: route.path, title: String(route.meta.title || '') });
   }
+  tabs.value = tabs.value.slice(-16);
+  localStorage.setItem(tabKey.value, JSON.stringify(tabs.value));
+  if (mobile.value) collapsed.value = true;
+}, { immediate: true });
+
+function closeTab(path: string) {
+  const index = tabs.value.findIndex(t => t.path === path);
+  if (index < 0 || tabs.value.length === 1) return;
+  tabs.value.splice(index, 1);
+  localStorage.setItem(tabKey.value, JSON.stringify(tabs.value));
+  if (route.path === path) router.push(tabs.value[Math.max(0, index - 1)].path);
+}
+function logout() {
+  auth.logout();
+  router.push('/login');
 }
 </script>
 
+<template>
+  <VbenAdminLayout v-model:sidebar-collapse="collapsed" :is-mobile="mobile"
+    :sidebar-width="224" :side-collapse-width="64" :header-height="56"
+    :header-toggle-sidebar-button="false" :sidebar-fixed-button="false"
+    :sidebar-expand-on-hover="true"
+    :sidebar-draggable="false" :content-padding="20" :content-padding-top="20"
+    :content-padding-left="20" :content-padding-right="20" :content-padding-bottom="20"
+    :header-theme="isDark ? 'dark' : 'light'" sidebar-theme="dark" @toggle-sidebar="collapsed = !collapsed">
+    <template #logo>
+      <router-link to="/" class="admin-brand">
+        <span class="admin-brand__mark"><el-icon><Icons.Headset /></el-icon></span>
+        <span v-if="!collapsed" class="admin-brand__name">{{ site.name }}</span>
+      </router-link>
+    </template>
+    <template #menu>
+      <Menu :menus="menus" :collapse="collapsed" :default-active="route.path"
+        theme="dark" rounded @select="(path: string) => router.push(path)" />
+    </template>
+    <template #header>
+      <div class="admin-header">
+        <el-button text circle aria-label="展开或折叠菜单" @click="collapsed = !collapsed">
+          <el-icon :size="20"><Icons.Expand v-if="collapsed" /><Icons.Fold v-else /></el-icon>
+        </el-button>
+        <el-breadcrumb class="admin-breadcrumb">
+          <el-breadcrumb-item>工作台</el-breadcrumb-item>
+          <el-breadcrumb-item>{{ route.meta.title }}</el-breadcrumb-item>
+        </el-breadcrumb>
+        <div class="admin-header__actions">
+          <el-tooltip content="刷新当前页面"><el-button text circle aria-label="刷新当前页面" @click="refreshKey++"><el-icon><Icons.Refresh /></el-icon></el-button></el-tooltip>
+          <el-tooltip :content="isDark ? '切换浅色主题' : '切换深色主题'">
+            <el-button text circle aria-label="切换主题" @click="updatePreferences({ theme: { mode: isDark ? 'light' : 'dark' } })"><el-icon><Icons.Sunny v-if="isDark" /><Icons.Moon v-else /></el-icon></el-button>
+          </el-tooltip>
+          <NotifyBell v-if="auth.can('tracks:view')" />
+          <el-dropdown @command="logout">
+            <span class="admin-user"><el-avatar :size="30">{{ (auth.nickname || auth.username || '管').slice(0, 1) }}</el-avatar>
+              <span>{{ auth.nickname || auth.username }}</span><el-icon><Icons.ArrowDown /></el-icon></span>
+            <template #dropdown><el-dropdown-menu><el-dropdown-item disabled>{{ auth.isSuper ? '超级管理员' : auth.roleName || '管理员' }}</el-dropdown-item><el-dropdown-item command="logout" divided>退出登录</el-dropdown-item></el-dropdown-menu></template>
+          </el-dropdown>
+        </div>
+      </div>
+    </template>
+    <template #tabbar>
+      <div class="admin-tabs">
+        <div v-for="tab in tabs" :key="tab.path" class="admin-tab" :class="{ 'is-active': route.path === tab.path }">
+          <button class="admin-tab__link" @click="router.push(tab.path)">{{ tab.title }}</button>
+          <button v-if="tabs.length > 1" class="admin-tab__close" :aria-label="`关闭${tab.title}`" @click="closeTab(tab.path)">×</button>
+        </div>
+      </div>
+    </template>
+    <template #content><router-view :key="refreshKey" /></template>
+  </VbenAdminLayout>
+</template>
+
 <style scoped>
-.layout { height: 100vh; }
-.layout__aside { background: #0a0e1a; }
-.layout__logo {
-  height: 60px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: 18px;
-  letter-spacing: 3px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-.layout__menu { border-right: none; }
-.layout__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: #fff;
-  border-bottom: 1px solid #eee;
-}
-.layout__title { font-size: 16px; font-weight: 500; }
-.layout__right { display: flex; align-items: center; gap: 16px; }
-.layout__user { cursor: pointer; display: flex; align-items: center; gap: 4px; color: #555; }
-.layout__main { background: #f5f7fa; }
+.admin-brand { display:flex; align-items:center; gap:12px; height:56px; padding:0 18px; color:#f8fafc; text-decoration:none; overflow:hidden; }
+.admin-brand__mark { display:flex; align-items:center; justify-content:center; flex-shrink:0; width:30px; height:30px; border-radius:9px; background:#3b82f6; }
+.admin-brand__name { white-space:nowrap; font-size:17px; font-weight:600; letter-spacing:1px; }
+.admin-header { display:flex; align-items:center; gap:12px; width:100%; height:100%; padding:0 16px; }
+.admin-breadcrumb { flex:1; }
+.admin-header__actions { display:flex; align-items:center; gap:8px; margin-left:auto; }
+.admin-user { display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--el-text-color-primary); }
+.admin-tabs { display:flex; align-items:center; height:40px; padding:0 12px; gap:4px; overflow:auto; border-bottom:1px solid var(--el-border-color-light); background:var(--el-bg-color); }
+.admin-tab { display:flex; align-items:center; flex-shrink:0; height:32px; border-radius:6px 6px 0 0; color:var(--el-text-color-regular); }
+.admin-tab.is-active { color:var(--el-color-primary); background:var(--el-color-primary-light-9); }
+.admin-tab__link { height:100%; padding:0 12px; font-size:13px; }
+.admin-tab__close { padding:0 8px 0 0; font-size:18px; }
+@media(max-width:767px) { .admin-breadcrumb { display:none; } .admin-header { padding:0 8px; gap:4px; } .admin-user > span { display:none; } }
 </style>

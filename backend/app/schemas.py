@@ -144,6 +144,7 @@ class SiteSettingIn(BaseModel):
 # ── 存储设置 ──
 class StorageSettingIn(BaseModel):
     provider: str = "local"     # local | oss
+    aac_enabled: bool = False   # 完整版 AAC 副本；默认直接播放母版，试听剪辑不受此开关影响
     oss_endpoint: str = ""
     oss_bucket: str = ""
     oss_access_key_id: str = ""

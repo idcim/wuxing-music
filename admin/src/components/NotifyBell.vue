@@ -14,7 +14,7 @@
       </el-button>
     </div>
     <div v-if="!items.length" class="notify__empty">暂无任务通知</div>
-    <div v-for="r in items" :key="r.seq" class="notify__item">
+    <div class="notify__list"><div v-for="r in items" :key="r.seq" class="notify__item">
       <el-icon :color="iconColor(r.result)" class="notify__icon">
         <CircleCheck v-if="r.result.startsWith('done:')" />
         <CircleClose v-else-if="r.result.startsWith('error:')" />
@@ -27,7 +27,8 @@
         </div>
       </div>
       <span class="notify__time">{{ fmtTime(r.at) }}</span>
-    </div>
+    </div></div>
+    <router-link to="/audio-history" class="notify__all">查看全部历史与失败详情</router-link>
   </el-popover>
 </template>
 
@@ -35,10 +36,11 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { Bell, CircleCheck, CircleClose, Remove } from '@element-plus/icons-vue';
 import { normalizeAudioStatus } from '@/api';
+import { useAuthStore } from '@/stores/auth';
 
 // 任务通知中心：音频归一管线（副本生成/母版上 OSS）的每条结果都会进来。
 // 已读游标存 localStorage：打开面板或点「全部已读」即消角标。
-const READ_KEY = 'admin_notify_read_seq';
+const READ_KEY = `admin_notify_read_seq_${useAuthStore().username}`;
 
 const results = ref<any[]>([]);
 const lastRead = ref(Number(localStorage.getItem(READ_KEY) || 0));
@@ -50,6 +52,7 @@ function label(result: string): string {
   if (result.startsWith('done:')) return `完成（${result.slice(5)}）`;
   if (result.startsWith('error:')) return `失败：${result.slice(6)}`;
   if (result.startsWith('skip:')) return `无需处理（${result.slice(5)}）`;
+  if (result.startsWith('retry:')) return `自动重试：${result.slice(6)}`;
   return result;
 }
 
@@ -96,6 +99,8 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
 .notify { cursor: pointer; display: inline-flex; align-items: center; padding: 4px; color: #555; }
 .notify:hover { color: #000; }
 .notify__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.notify__list { max-height: 420px; overflow-y: auto; }
+.notify__all { display:block; text-align:center; padding:12px 0 2px; color:var(--el-color-primary); }
 .notify__empty { color: #999; text-align: center; padding: 16px 0; }
 .notify__item { display: flex; align-items: flex-start; gap: 8px; padding: 8px 0; border-top: 1px solid #f0f0f0; }
 .notify__icon { margin-top: 2px; }

@@ -10,6 +10,11 @@
           </el-radio-group>
         </el-form-item>
 
+        <el-form-item label="完整版 AAC">
+          <el-switch v-model="form.aac_enabled" />
+          <div class="hint">默认关闭，直接播放原始母版；开启后后台生成 AAC 192k 副本。会员试听剪辑始终按需生成。</div>
+        </el-form-item>
+
         <template v-if="form.provider === 'oss'">
           <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px"
             title="阿里云 OSS：保存配置后新上传的文件直传 OSS。可用下方「迁移」把已有本地文件搬到 OSS。" />
@@ -79,7 +84,7 @@ const rewriteDb = ref(true);
 const migrateResult = ref<{ migrated: number; failed: string[]; db_rewritten: number } | null>(null);
 const secretSet = ref(false);
 const form = reactive({
-  provider: 'local', oss_endpoint: '', oss_bucket: '',
+  provider: 'local', aac_enabled: false, oss_endpoint: '', oss_bucket: '',
   oss_access_key_id: '', oss_access_key_secret: '', oss_base_url: ''
 });
 
@@ -89,6 +94,7 @@ async function load() {
     const d = await getStorageSetting();
     Object.assign(form, {
       provider: d.provider ?? 'local',
+      aac_enabled: d.aac_enabled ?? false,
       oss_endpoint: d.oss_endpoint ?? '',
       oss_bucket: d.oss_bucket ?? '',
       oss_access_key_id: d.oss_access_key_id ?? '',

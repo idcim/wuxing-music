@@ -137,12 +137,14 @@ def build_oss_post_policy(db: Session, ext: str, max_bytes: int) -> dict:
         raise RuntimeError("OSS 配置不完整（endpoint/bucket/accessKey）")
 
     key = _object_key(ext)
+    content_type = audio_content_type(key)
     expire_at = datetime.utcnow() + timedelta(minutes=30)
     policy = {
         "expiration": expire_at.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
         "conditions": [
             # 锁死对象键：客户端不能改传到别的路径去
             ["eq", "$key", key],
+            ["eq", "$Content-Type", content_type],
             ["content-length-range", 0, max_bytes],
         ],
     }
@@ -161,6 +163,7 @@ def build_oss_post_policy(db: Session, ext: str, max_bytes: int) -> dict:
         "policy": policy_b64,
         "signature": signature,
         "OSSAccessKeyId": key_id,
+        "contentType": content_type,
         # 直传成功后可直接入库的地址（含自定义域名/CDN 规则）
         "url": _oss_public_url(cfg, key),
         "maxBytes": max_bytes,

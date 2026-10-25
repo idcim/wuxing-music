@@ -9,7 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # 系统依赖（bcrypt/cryptography 的运行时；slim 镜像需补 libffi）
-# ffmpeg：音频管线生成 AAC 副本用（app/audio_norm.py）；缺失时 AAC 阶段自动跳过
+# ffmpeg：会员试听剪辑及可选 AAC 副本用（app/audio_norm.py）；缺失时任务明确报告失败
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl ffmpeg \
     && rm -rf /var/lib/apt/lists/*

@@ -1,10 +1,7 @@
-"""一次性/按需工具：把曲库里的 24-bit WAV 降位深为 16-bit PCM。
+"""按需扫描曲库并执行后台音频管线。
 
-起因：PC 微信解不了 24-bit WAV（Unable to decode audio data），手机端能解。
-16-bit PCM 是所有端的公分母。
-
-日常已不需要手动跑：后台「曲目 → 音频兼容修复」按钮 + 曲目保存时的自动检查
-走同一套 `app/audio_norm.py`。本 CLI 留给服务器上直接操作的场景。
+母版搬 OSS、按存储设置补 AAC 完整版、会员曲目补试听；16-bit PCM 已退役。
+与后台「曲目 → 全部处理」共用 `app/audio_norm.py`，本 CLI 留给服务器直接操作。
 
 用法（服务器上，容器内）：
     docker exec wuxing-backend python -m app.tools.transcode_audio          # 实际执行
@@ -23,7 +20,7 @@ from app.models import Track  # noqa: E402
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="曲库 24bit WAV → 16bit PCM 降位深")
+    parser = argparse.ArgumentParser(description="曲库母版迁移、可选 AAC 与会员试听处理")
     parser.add_argument("--dry", action="store_true", help="只扫描报告，不改动")
     parser.add_argument("--fix-mime", action="store_true",
                         help="只修衍生对象的 Content-Type（早期裸分片上传的是 octet-stream，"
@@ -35,8 +32,8 @@ def main() -> int:
         cfg = storage.get_storage_cfg(db)
         if args.fix_mime:
             return fix_mime(db, cfg)
-        tracks = db.query(Track).filter(Track.audio_url.like("%.wav")).all()
-        print(f"共 {len(tracks)} 条 WAV 曲目")
+        tracks = db.query(Track).filter(Track.audio_url != "").all()
+        print(f"共 {len(tracks)} 条音频曲目")
         stats: dict[str, int] = {}
         for t in tracks:
             result = audio_norm.process_track(db, cfg, t, dry=args.dry)

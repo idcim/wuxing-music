@@ -8,7 +8,7 @@
       <el-button plain :loading="normRunning" @click="onNormalize">
         {{ normRunning ? normText || '修复中…' : '全部处理' }}
       </el-button>
-      <span class="hint">为每首曲目录入 16-bit（PC 兼容）与 AAC（省流量）播放副本，母版不动；单行「处理」可单独重做</span>
+      <span class="hint">默认直接播放母版；按存储设置补 AAC，会员曲目补试听，单行「处理」可单独执行</span>
     </div>
 
     <el-table :data="rows" v-loading="loading" border @sort-change="onSort">
@@ -34,10 +34,10 @@
           </template>
           <el-tag v-else-if="normQueuedIds.includes(row.id)" size="small" type="info">排队中</el-tag>
           <template v-else>
-            <el-tag v-if="row.play_url" size="small" type="success">16bit</el-tag>
+            <el-tag v-if="row.play_url" size="small" type="info">旧版副本</el-tag>
             <el-tag v-if="row.aac_url" size="small" type="warning" style="margin-left: 4px">AAC</el-tag>
             <span v-if="!row.play_url && !row.aac_url" class="hint">仅母版</span>
-            <el-tooltip v-if="normMap[row.id]?.result.startsWith('error:')" :content="normMap[row.id].result" placement="top">
+            <el-tooltip v-if="row.process_error" :content="row.process_error" placement="top">
               <el-tag size="small" type="danger" style="margin-left: 4px">失败</el-tag>
             </el-tooltip>
           </template>
@@ -52,6 +52,7 @@
       <el-table-column label="状态" width="90" prop="is_online" sortable="custom">
         <template #default="{ row }">
           <el-tag v-if="!row.is_online" type="info" size="small">下架</el-tag>
+          <el-tag v-else-if="row.process_state === 'error'" type="danger" size="small">处理失败</el-tag>
           <el-tag v-else-if="row.process_state === 'processing'" type="warning" size="small">处理中</el-tag>
           <el-tag v-else-if="row.process_state === 'pending'" size="small" effect="plain">待处理</el-tag>
           <el-tag v-else type="success" size="small">已上架</el-tag>
@@ -91,8 +92,6 @@
         <el-form-item label="播放量"><el-input v-model="form.plays" placeholder="12.4k" /></el-form-item>
         <el-form-item label="音频">
           <div class="up-row">
-            <!-- 音频一律先传服务端暂存（见 uploadAudio），保存后归一管线在后台
-                 生成 16-bit/AAC 副本并把母版推上 OSS -->
             <el-upload
               :show-file-list="false"
               accept="audio/*,.mp3,.m4a,.wav"
@@ -105,8 +104,8 @@
             <el-input v-model="form.audio_url" placeholder="或填 CDN 地址" />
           </div>
           <div class="hint">
-            音频先传服务端暂存；保存曲目后后台自动生成 16-bit（PC 兼容）与 AAC（省流量）播放副本，
-            并把母版推上 OSS——母版内容永不改动。无需等待，保存后可离开页面。
+            OSS 配置下音频直接上传 OSS，默认播放原始母版；保存后仅按存储设置补 AAC，
+            会员曲目补试听剪辑。后台处理无需等待，保存后可离开页面。
           </div>
           <el-progress
             v-if="audioUploading"
@@ -145,7 +144,7 @@
       </el-form>
       <template #footer>
         <el-button @click="dialog = false">取消</el-button>
-        <el-button type="primary" @click="onSave">保存</el-button>
+        <el-button type="primary" :loading="saving" :disabled="audioUploading || coverUploading" @click="onSave">保存</el-button>
       </template>
     </el-dialog>
 
@@ -165,10 +164,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { Plus, Upload, Loading } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { listTracks, createTrack, updateTrack, deleteTrack, listElements, UPLOAD_URL, normalizeAudio, normalizeAudioStatus, normalizeTrack } from '@/api';
+import { listTracks, createTrack, updateTrack, deleteTrack, listElements, UPLOAD_URL, ossSign, normalizeAudio, normalizeAudioStatus, normalizeTrack } from '@/api';
 
 const uploadHeaders = computed(() => ({
   Authorization: `Bearer ${localStorage.getItem('admin_token')}`
@@ -177,6 +176,7 @@ const uploadHeaders = computed(() => ({
 // 上传进度/状态
 const audioUploading = ref(false);
 const audioPct = ref(0);
+const saving = ref(false);
 const coverUploading = ref(false);
 const coverPct = ref(0);
 
@@ -192,26 +192,41 @@ const sortOrder = ref('');
 const dialog = ref(false);
 const form = ref<any>({});
 
-/**
- * 音频上传：一律先传服务端（暂存母版），保存曲目后归一管线在后台自动
- * 生成 16-bit/AAC 播放副本并把母版推上 OSS——上传者不用在场等。
- * 不再用浏览器直传 OSS：服务端拿不到字节就没法做转码。
- */
+/** 音频优先 OSS 直传；本地存储回退服务器分块上传。 */
 async function uploadAudio(opt: any) {
   const file: File = opt.file;
   audioUploading.value = true;
   audioPct.value = 0;
   try {
-    const fd = new FormData();
-    fd.append('file', file);
-    const res = await xhrUpload(UPLOAD_URL, fd, (p) => { audioPct.value = p; }, {
-      Authorization: `Bearer ${localStorage.getItem('admin_token')}`
-    });
-    const body = JSON.parse(res);
-    if (body?.code !== 0) throw new Error(body?.msg || '上传失败');
-    form.value.audio_url = body.data.url;
-    ElMessage.success('音频已上传，保存后后台自动生成播放副本');
-    readAudioDuration(body.data.full_url || body.data.url);
+    const sign = await ossSign(file.name);
+    let finalUrl = '';
+    let probeUrl = '';
+    if (sign?.provider === 'oss') {
+      const fd = new FormData();
+      fd.append('key', sign.key);
+      fd.append('policy', sign.policy);
+      fd.append('OSSAccessKeyId', sign.OSSAccessKeyId);
+      fd.append('signature', sign.signature);
+      fd.append('Content-Type', sign.contentType);
+      fd.append('success_action_status', '200');
+      fd.append('file', file);
+      await xhrUpload(sign.host, fd, (p) => { audioPct.value = p; });
+      finalUrl = sign.url;
+      probeUrl = sign.url;
+    } else {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await xhrUpload(UPLOAD_URL, fd, (p) => { audioPct.value = p; }, {
+        Authorization: `Bearer ${localStorage.getItem('admin_token')}`
+      });
+      const body = JSON.parse(res);
+      if (body?.code !== 0) throw new Error(body?.msg || '上传失败');
+      finalUrl = body.data.url;
+      probeUrl = body.data.full_url || body.data.url;
+    }
+    form.value.audio_url = finalUrl;
+    ElMessage.success('音频已上传，保存后按设置处理');
+    readAudioDuration(probeUrl);
     opt.onSuccess?.({});
   } catch (e: any) {
     ElMessage.error(e?.message || '上传失败');
@@ -326,19 +341,26 @@ function openEdit(row?: any) {
 }
 
 async function onSave() {
+  if (saving.value || audioUploading.value || coverUploading.value) return;
   if (!form.value.element_id || !form.value.title) {
     ElMessage.warning('五行和曲名必填');
     return;
   }
-  syncSec();
-  if (form.value.id) {
-    await updateTrack(form.value.id, form.value);
-  } else {
-    await createTrack(form.value);
+  saving.value = true;
+  try {
+    syncSec();
+    if (form.value.id) {
+      await updateTrack(form.value.id, form.value);
+    } else {
+      await createTrack(form.value);
+    }
+    ElMessage.success(form.value.audio_url ? '已保存，后续音频处理在后台继续，可离开页面' : '已保存');
+    dialog.value = false;
+    load();
+    ensurePolling();
+  } finally {
+    saving.value = false;
   }
-  ElMessage.success('已保存');
-  dialog.value = false;
-  load();
 }
 
 async function onDelete(row: any) {
@@ -357,7 +379,7 @@ const versionList = computed(() => {
   if (!r) return [];
   const list: { label: string; url: string; tagType: string }[] = [];
   if (r.audio_url) list.push({ label: '母版（原始上传）', url: r.audio_url, tagType: 'info' });
-  if (r.play_url) list.push({ label: '16-bit 副本（PC 兼容）', url: r.play_url, tagType: 'success' });
+  if (r.play_url) list.push({ label: '旧版 16-bit 副本（不再生成）', url: r.play_url, tagType: 'info' });
   if (r.aac_url) list.push({ label: 'AAC 副本（省流量）', url: r.aac_url, tagType: 'warning' });
   if (r.preview_url) list.push({ label: `试听剪辑（${r.preview_sec || 30} 秒）`, url: r.preview_url, tagType: 'danger' });
   return list;
@@ -382,20 +404,10 @@ const normRunning = ref(false);
 const normText = ref('');
 const normQueuedIds = ref<number[]>([]);
 const normCurrentId = ref(0);
-// 每个曲目的最新处理结果（按 seq 取新），行内展示失败原因用
-const normMap = ref<Record<number, { seq: number; result: string }>>({});
 let normTimer: ReturnType<typeof setInterval> | null = null;
 let normJob = 0;
-
-function mergeResults(results: any[]) {
-  const m = { ...normMap.value };
-  for (const r of results || []) {
-    if (r.trackId && (!m[r.trackId] || m[r.trackId].seq < r.seq)) {
-      m[r.trackId] = { seq: r.seq, result: r.result };
-    }
-  }
-  normMap.value = m;
-}
+let polling = false;
+let disposed = false;
 
 function stopPolling() {
   if (normTimer) clearInterval(normTimer);
@@ -408,44 +420,51 @@ function ensurePolling() {
 }
 
 async function pollNorm() {
+  if (polling || disposed) return;
+  polling = true;
   try {
     const s = await normalizeAudioStatus();
+    if (disposed) return;
     normQueuedIds.value = s.queuedIds || [];
     normCurrentId.value = s.currentId || 0;
-    mergeResults(s.results);
-    if (s.running) {
+    const activeBatch = s.batch?.job === normJob ? s.batch : null;
+    if (s.running && !activeBatch?.finished) {
       if (normJob) {
-        const mine = s.results.filter((r: any) => r.job === normJob);
-        normText.value = `修复中（本轮已处理 ${mine.length}，队列剩 ${s.pending}）`;
+        const b = s.batch;
+        normText.value = b?.job === normJob
+          ? `处理中（${b.done}/${b.total}，失败 ${b.failed}）`
+          : `处理中（队列剩 ${s.pending}）`;
       }
       return;
     }
-    stopPolling();
+    if (!s.running) stopPolling();
     if (normJob) {
       normRunning.value = false;
       // 按 job 编号取本轮结果（不能用条数偏移——多轮任务/自动检查会互相污染计数）
       const fresh = s.results.filter((r: any) => r.job === normJob);
-      const conv = fresh.filter((r: any) => String(r.result).startsWith('done:')).length;
+      const summary = s.batch?.job === normJob ? s.batch : null;
+      const conv = summary?.success ?? fresh.filter((r: any) => String(r.result).startsWith('done:')).length;
       const errs = fresh.filter((r: any) => String(r.result).startsWith('error:'));
-      const skip = fresh.length - conv - errs.length;
+      const failed = summary?.failed ?? errs.length;
+      const skip = summary?.skipped ?? fresh.filter((r: any) => String(r.result).startsWith('skip:')).length;
       normJob = 0;
       ElMessageBox.alert(
-        `处理 ${conv} 条（母版上 OSS / 16-bit / AAC 副本按需生成），无需处理或跳过 ${skip} 条` +
-        (errs.length
-          ? `，失败 ${errs.length} 条：\n` + errs.map((e: any) => `#${e.trackId} ${e.title}：${e.result}`).join('\n')
-          : ''),
+        `处理 ${conv} 条（母版上 OSS / 可选 AAC / 会员试听），无需处理或跳过 ${skip} 条` +
+        (failed ? `，失败 ${failed} 条。完整记录请到「音频任务历史」查看。` : ''),
         '全部处理完成'
       );
     }
     load();  // 刷新版本标识
   } catch {
     // 轮询失败（网络抖动）下一轮再试，不打断任务
+  } finally {
+    polling = false;
   }
 }
 
 async function onNormalize() {
   await ElMessageBox.confirm(
-    '扫描全部曲目，为每首生成缺失的 16-bit / AAC 播放副本（母版不动）。任务在后台执行，期间可正常操作后台。',
+    '扫描全部曲目，按需搬运本地母版、补会员试听；仅在存储设置开启时补 AAC。任务在后台执行，期间可正常操作后台。',
     '全部处理',
     { type: 'info', confirmButtonText: '开始处理' }
   );
@@ -469,19 +488,24 @@ async function onProcessOne(row: any) {
 
 onMounted(async () => {
   elements.value = await listElements();
+  if (disposed) return;
   load();
   // 可能上一轮处理还在后台跑（比如刚保存过曲目），接上进度显示
   try {
     const s = await normalizeAudioStatus();
+    if (disposed) return;
     normQueuedIds.value = s.queuedIds || [];
     normCurrentId.value = s.currentId || 0;
-    mergeResults(s.results);
     if (s.running) {
-      normJob = s.job || 0;
+      normJob = s.batch && !s.batch.finished ? s.batch.job : 0;
       if (normJob) normRunning.value = true;
       ensurePolling();
     }
   } catch { /* 状态拉不到就算了 */ }
+});
+onUnmounted(() => {
+  disposed = true;
+  stopPolling();
 });
 </script>
 

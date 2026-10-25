@@ -239,6 +239,9 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
     logger.info("数据库就绪：%s", _safe_db_url())
+    # 只恢复已持久化的未完成任务，转换工作由独立线程执行，不阻塞启动。
+    from app import audio_norm
+    audio_norm.recover_pending()
     yield
 
 

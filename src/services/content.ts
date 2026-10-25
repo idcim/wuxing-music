@@ -17,7 +17,7 @@ export interface PlayUrlResult {
 }
 
 // 目录接口不下发音频地址（版权保护）：播放前用曲目 id 换短时效签名地址。
-// fmt：PC 微信只信 16-bit PCM（传 wav），其余端优先 AAC 副本。
+// fmt 是格式偏好：默认优先已有 AAC，无 AAC 时直接回退母版；wav 用于解码失败重试。
 export async function getPlayUrl(trackId: number, fmt: 'aac' | 'wav'): Promise<PlayUrlResult> {
   return request<PlayUrlResult>(`/api/mp/tracks/${trackId}/play-url?fmt=${fmt}`);
 }

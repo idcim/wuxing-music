@@ -24,8 +24,8 @@ async def upload_file(
     分块落盘，不把整个文件读进内存——曲目 WAV 动辄上百 MB，
     旧写法先 `await file.read()` 再比对上限，超限请求反而最先把内存吃满。
 
-    音频一律先落服务端本地（暂存母版）：后台管线（app/audio_norm.py）随后自动
-    生成多版本播放副本并连同母版一起推 OSS，上传者不必在场等。
+    这是本地存储或直传不可用时的服务器中转路径。OSS 音频优先由浏览器直传；
+    本地音频先落服务端暂存，保存曲目后由后台管线按需搬 OSS、生成 AAC 或试听。
     """
     ext = storage.ext_of(file.filename)
     if ext not in storage.ALL_EXT:

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app import audio_norm
+from app import audio_history, audio_norm, storage
 from app.database import get_db
 from app.models import Admin, Track
 from app.schemas import TrackIn, ok
@@ -10,15 +10,7 @@ from app.security import require_perm
 router = APIRouter(prefix="/api/admin/tracks", tags=["tracks"])
 
 
-def _enqueue_audio_pipeline(track: Track) -> None:
-    """有音频地址就排队走一遍归一管线（后台线程，不阻塞保存）：
-    母版搬 OSS、24-bit WAV 补 16-bit 副本、有 ffmpeg 则补 AAC 副本。
-    详见 app/audio_norm.py。"""
-    if track.audio_url:
-        audio_norm.enqueue(track.id)
-
-
-def _to_dict(t: Track, norm: dict | None = None) -> dict:
+def _to_dict(t: Track, norm: dict | None = None, aac_enabled: bool = False) -> dict:
     return {
         "id": t.id,
         "element_id": t.element_id,
@@ -36,21 +28,23 @@ def _to_dict(t: Track, norm: dict | None = None) -> dict:
         "is_premium": t.is_premium,
         "preview_sec": t.preview_sec,
         "is_online": t.is_online,
-        "process_state": _process_state(t, norm or {}),
+        "process_state": _process_state(t, norm or {}, aac_enabled),
+        "process_error": t.audio_error or "",
         "sort": t.sort,
     }
 
 
-def _process_state(t: Track, norm: dict) -> str:
-    """处理状态（与上架状态正交）：
-    processing=在队列或处理中；pending=音频未传或副本未齐；ready=副本就绪。
-    「缺什么副本算没处理完」的口径与 audio_norm 管线一致。"""
+def _process_state(t: Track, norm: dict, aac_enabled: bool = False) -> str:
+    """处理状态（与上架状态正交）：可选副本的缺失去向与管线开关一致。"""
     if t.id in (norm.get("queuedIds") or []) or norm.get("currentId") == t.id:
         return "processing"
+    if t.audio_pending:
+        return "processing"
+    if t.audio_error:
+        return "error"
     if not t.audio_url:
         return "pending"
-    # 就绪口径：AAC 副本 + （会员曲目的试听剪辑）
-    needs = not t.aac_url or (t.is_premium and not t.preview_url)
+    needs = (aac_enabled and not t.aac_url) or (t.is_premium and not t.preview_url)
     return "pending" if needs else "ready"
 
 
@@ -87,7 +81,8 @@ def list_tracks(
         q = q.order_by(Track.is_online.desc(), Track.element_id, Track.sort)
     rows = q.offset((page - 1) * size).limit(size).all()
     norm = audio_norm.status()
-    return ok({"total": total, "items": [_to_dict(t, norm) for t in rows]})
+    aac_enabled = bool(storage.get_storage_cfg(db).get("aac_enabled", False))
+    return ok({"total": total, "items": [_to_dict(t, norm, aac_enabled) for t in rows]})
 
 
 @router.post("")
@@ -97,11 +92,16 @@ def create_track(
     _: Admin = Depends(require_perm("tracks:edit")),
 ):
     track = Track(**body.model_dump())
+    audio_norm.mark_pending(track)
     db.add(track)
     db.commit()
     db.refresh(track)
-    _enqueue_audio_pipeline(track)
-    return ok(_to_dict(track))
+    if track.audio_url:
+        audio_norm.enqueue(track.id, persist=False)
+    return ok(_to_dict(
+        track,
+        aac_enabled=bool(storage.get_storage_cfg(db).get("aac_enabled", False)),
+    ))
 
 
 @router.put("/{track_id}")
@@ -114,12 +114,25 @@ def update_track(
     track = db.query(Track).filter(Track.id == track_id).first()
     if not track:
         raise HTTPException(status_code=404, detail="曲目不存在")
+    source_changed = track.audio_url != body.audio_url
+    preview_changed = track.preview_sec != body.preview_sec or track.is_premium != body.is_premium
     for k, v in body.model_dump().items():
         setattr(track, k, v)
+    if source_changed:
+        track.play_url = ""
+        track.aac_url = ""
+        track.preview_url = ""
+    elif preview_changed:
+        track.preview_url = ""
+    audio_norm.mark_pending(track)
     db.commit()
     db.refresh(track)
-    _enqueue_audio_pipeline(track)
-    return ok(_to_dict(track))
+    if track.audio_url:
+        audio_norm.enqueue(track.id, persist=False)
+    return ok(_to_dict(
+        track,
+        aac_enabled=bool(storage.get_storage_cfg(db).get("aac_enabled", False)),
+    ))
 
 
 @router.delete("/{track_id}")
@@ -136,7 +149,7 @@ def delete_track(
     return ok()
 
 
-# ── 音频兼容归一（24bit WAV → 16bit，修 PC 微信无法解码）──
+# ── 音频后台处理（母版上 OSS / 可选 AAC / 会员试听）──
 # 不存在 GET/POST /{track_id} 路由，/normalize-audio 不会被抢占，声明顺序无关。
 
 @router.post("/normalize-audio")
@@ -152,7 +165,7 @@ def normalize_track(
     db: Session = Depends(get_db),
     _: Admin = Depends(require_perm("tracks:edit")),
 ):
-    """单曲目处理（后台线程）：母版上 OSS、16-bit/AAC/试听剪辑缺啥补啥。"""
+    """单曲目处理（后台线程）：母版上 OSS、按设置补 AAC、会员曲目补试听。"""
     track = db.query(Track).filter(Track.id == track_id).first()
     if not track:
         raise HTTPException(status_code=404, detail="曲目不存在")
@@ -163,3 +176,15 @@ def normalize_track(
 @router.get("/normalize-audio")
 def normalize_audio_status(_: Admin = Depends(require_perm("tracks:view"))):
     return ok(audio_norm.status())
+
+
+@router.get("/audio-history")
+def audio_task_history(
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    outcome: str | None = Query(None, pattern="^(done|error|skip|retry)$"),
+    job: int | None = Query(None, ge=0),
+    db: Session = Depends(get_db),
+    _: Admin = Depends(require_perm("tracks:view")),
+):
+    return ok({**audio_history.history(db, page, size, outcome, job), "batch": audio_history.batch_summary(db, job)})

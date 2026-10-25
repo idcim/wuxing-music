@@ -128,15 +128,16 @@ H5 已作为 `wuxing-h5` 服务并入 `docker-compose.yml`——`docker compose 
 
 曲目 WAV 母版可达数百 MB，以下几处不配好会直接卡住：
 
-- [ ] **1Panel 外层反代的 `client_max_body_size`**（⚠️ 不在本仓库里，最容易漏）。
-      仓库内的 `admin/nginx.conf` 已放到 512m、后端 `UPLOAD_MAX_MB` 默认 500，
-      但请求先经过 1Panel 的 vhost，那里若仍是默认值，大文件会在最外层就被 413 掉。
-      同时建议给该 vhost 加长 `proxy_read_timeout`（大文件上传/下载耗时长）。
-- [ ] **OSS 直传**：后台 → 设置 → 存储设置 选 OSS 并填全 endpoint / bucket / accessKey。
-      ⚠️ v1.12.0 起**音频不再走浏览器直传**：一律先传服务端暂存，归一管线（多版本副本 +
-      母版上 OSS）在后台自动完成，因此外层反代的 body 上限对音频上传是硬约束，必须配好。
-- [ ] **OSS 桶 CORS**：允许 H5 域名的 `GET`（含 `Range` 请求头）。
-      不配的话：① 海报 canvas 会因跨域图片被污染而无法生成；② 部分浏览器的分段请求会被拒。
+- [ ] **本地中转的 body 上限**：OSS 音频直传不经过后端；使用本地存储或服务器中转兜底时，
+      需把仓库内 `admin/nginx.conf`、1Panel 外层 vhost 的 `client_max_body_size` 与后端
+      `UPLOAD_MAX_MB` 一并配够，并加长 `proxy_read_timeout`，否则大文件会被 413 或超时。
+- [ ] **OSS 直传与可选 AAC**：后台 → 设置 → 存储设置 选 OSS 并填全 endpoint / bucket / accessKey。
+      音频由浏览器直传 OSS，完整版 AAC 开关默认关闭，播放器直接使用母版；开启 AAC 或会员曲目
+      需要试听剪辑时，后台管线会通过鉴权源站断点下载母版再处理，保存后无需等待。
+      待处理标记与任务历史存数据库，重启后继续；成功、失败和重试可在「音频任务历史」分页查看。
+      已丢失的旧版通知无法恢复。实现和验证边界见 [AUDIO-TASKS.md](AUDIO-TASKS.md)。
+- [ ] **OSS 桶 CORS**：允许管理后台域名发起直传 `POST`，并允许 H5 域名的 `GET`（含 `Range` 请求头）。
+      不配的话：直传会被浏览器拦截，海报 canvas 可能因跨域图片被污染，部分浏览器的分段请求也会被拒。
 - [ ] **OSS 防盗链 referer 白名单**：必须加 `https://servicewechat.com`，并保持
       「允许空 Referer」开启。缺它的表现：**PC 微信小程序里所有音频/图片报
       Format error / Unable to decode**（PC 微信会带 `servicewechat.com` 的 Referer，

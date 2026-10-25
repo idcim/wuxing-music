@@ -13,6 +13,7 @@ export interface NavItem {
 export const NAV_MAIN: NavItem[] = [
   { path: '/dashboard', title: '仪表盘', perm: 'dashboard:view', icon: 'DataLine' },
   { path: '/tracks', title: '歌曲管理', perm: 'tracks:view', icon: 'Headset' },
+  { path: '/audio-history', title: '音频任务历史', perm: 'tracks:view', icon: 'Clock' },
   { path: '/elements', title: '五行管理', perm: 'elements:view', icon: 'MagicStick' },
   { path: '/plans', title: '套餐管理', perm: 'plans:view', icon: 'Goods' },
   { path: '/cdkeys', title: '兑换码', perm: 'cdkeys:view', icon: 'Ticket' },

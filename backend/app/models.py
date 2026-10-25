@@ -90,14 +90,19 @@ class Track(Base):
     tag: Mapped[str] = mapped_column(String(32), default="")
     plays: Mapped[str] = mapped_column(String(16), default="0")
     audio_url: Mapped[str] = mapped_column(Text, default="")
-    # 播放副本（16-bit PCM）。audio_url 永远是上传的母版原样；24-bit WAV 在 PC 微信
-    # 无法解码，归一工具（app/audio_norm.py）生成 16-bit 副本存这里，播放端优先用它。
+    # 已退役的 16-bit PCM 副本，仅为存量数据保留回退；audio_url 永远是上传母版。
     play_url: Mapped[str] = mapped_column(Text, default="")
-    # AAC 192k 副本（m4a）：手机/H5 的省流量版本（约为 WAV 的 1/10），由 ffmpeg 生成。
+    # 可选 AAC 192k 副本：存储设置开启 aac_enabled 时生成，默认新曲目直接播母版。
     aac_url: Mapped[str] = mapped_column(Text, default="")
     # 试听剪辑（preview_sec 秒的 AAC）：会员曲目的非会员播放只发这段，
     # 完整文件的字节不出服务器（版权保护，见 app/streaming.py）。
     preview_url: Mapped[str] = mapped_column(Text, default="")
+    # 与曲目一起持久化：服务重启后恢复任务，失败不要求重新上传母版。
+    audio_pending: Mapped[bool] = mapped_column(Boolean, default=False)
+    audio_error: Mapped[str] = mapped_column(Text, default="")
+    audio_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    audio_revision: Mapped[int] = mapped_column(Integer, default=0)
+    audio_job: Mapped[int] = mapped_column(Integer, default=0)
     cover_url: Mapped[str] = mapped_column(Text, default="")
     is_premium: Mapped[bool] = mapped_column(Boolean, default=True)
     preview_sec: Mapped[int] = mapped_column(Integer, default=30)
@@ -106,6 +111,28 @@ class Track(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
     element: Mapped["Element"] = relationship(back_populates="tracks")
+
+
+class AudioProcessBatch(Base):
+    """批次编号来自数据库，重启后不归零，通知与统计可长期追溯。"""
+
+    __tablename__ = "audio_process_batch"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    total: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class AudioProcessEvent(Base):
+    __tablename__ = "audio_process_event"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    # 不加外键：删除曲目后仍保留当时的任务结果与曲名。
+    track_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(64), default="")
+    result: Mapped[str] = mapped_column(Text)
+    outcome: Mapped[str] = mapped_column(String(16), index=True)
+    attempt: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
 
 class Plan(Base):

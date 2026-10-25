@@ -27,7 +27,7 @@
 | ---- | ---- | ------ | ---- |
 | `src/` | 小程序 / H5 前端 | **Taro 4.2 + React 18 + TS + Sass + Zustand** | 小程序主流程完成；H5（微信内）登录/支付已接入（v1.1），已容器化上服务器 |
 | `backend/` | 后端 API（管理端 + 小程序/H5 公开端） | **FastAPI + SQLAlchemy + 外部 MySQL**（开发可 SQLite），Docker | 全套接口 + 微信支付/礼物码/统计 + RBAC + 限流已实现，待真实商户配置上线 |
-| `admin/` | 管理后台 | **Vue3 + Vite + Element Plus + Pinia** | 18 个视图完成（含管理员/角色权限、设置中心） |
+| `admin/` | 管理后台 | **Vben Admin 5.7 官方核心 + Vue3 + Vite + Element Plus + Pinia** | 业务页完成，含管理员/角色权限、设置中心及持久音频任务历史 |
 
 - **数据源开关**：`src/constants/env.ts` 的 `USE_MOCK`。当前 `false`；`API_BASE` 按端分支——**H5 为空串（同源反代，免 CORS）**，小程序读取根目录 `.env.local` 的 `TARO_APP_API_BASE`（模板见 `.env.example`，本地文件不入库）。小程序 AppID 通过同一文件的 `TARO_APP_ID` 注入 `dist/project.config.json`。置 `true` 可在无后端时本地跑通登录/曲目/兑换/支付/音频全链路。
 - **已完成**：前端全部页面与播放体验、后端管理 CRUD、小程序公开接口对接、微信支付（JSAPI 统一下单 + 回调验签，逻辑已就绪）、CDKEY 兑换、买卡送人礼物码、订单/退款、聆听历史与周统计、海报小程序码、站点/存储/支付/小程序配置与文件上传（本地）。
@@ -410,8 +410,9 @@ const top = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
 - 非会员 **30 秒试听**：`previewSec` 到点由 `stores/player.ts::onTimeUpdate` **release 音源**（不是 pause——暂停后底层仍会把整包缓冲完），并经 `components/UpgradePrompt` 弹升级引导。
 - ⚠️ **`isLoading` 绝不能有「进得去出不来」的路径**：播放器页 `toggle()` 首行是 `if (isLoading) return`，一旦 `isLoading` 卡在 true，播放键就永久失效、一直转圈，用户只能刷新。两条已修的坑：① 加载看门狗超时必须**同时**置 `isLoading:false`，只写 `loadError` 等于把按钮焊死；② `audioService.release()` 拆音源前先 `bound = {}`，否则元素收尾时吐的 `stalled`/`waiting` 会把 `isLoading` 重新置真，而没了音源 `canplay` 永不到达。新增任何 `set({isLoading:true})` 都要问一句「谁保证它会被清掉」。
 - ⚠️ **「会员专属」不等于不能播**：付费曲目对非会员**照样点得动**，只是听到 `previewSec` 就断。列表页一律 `onPlay={() => onTrack(t.id)}`，**不要**再写成 `locked ? goMember() : onTrack(...)` —— v1.8.1 之前三个列表页都是那么写的，结果把曲目设成会员专属就等于彻底锁死，`player.ts` 里的断流逻辑和 `UpgradePrompt` 成了永远走不到的死代码。`TrackCard` 的 `locked` 只控制右侧的「试听 30s」徽标，**不控制能否播放**（也别再画锁头图标，那会让人以为点不动）。
-- **音频多版本副本**：`track.audio_url` 永远是上传原样；`track.aac_url` 是 AAC 192k 副本（`aac/` 前缀 m4a，全端优先用它，省约 90% 流量）；`track.preview_url` 是试听剪辑（`prev/` 前缀，会员曲目对非会员只发这段）。播放端选择：`aacUrl || playUrl || audioUrl`（`stores/player.ts`；play_url 是已退役的 16-bit PCM 副本字段，存量值仍可被回退使用）。（PC 微信曾经的「只能解 PCM」系列问题的根因是 OSS referer 白名单缺 `servicewechat.com`，修复后 PC 的 BGM 直接能播 AAC，PCM 副本随之退役，见 WEAPP-TODO。）
-- **音频管线**（`app/audio_norm.py`，进程内单 worker 线程，幂等缺啥补啥）：音频上传**一律先落服务端暂存**（`upload.py` force_local），保存曲目时自动排队——母版推 OSS（本地暂存删除）、有 ffmpeg 补 AAC 副本、会员曲目补试听剪辑；后台「曲目 → 全部处理」全量扫描（`POST/GET /api/admin/tracks/normalize-audio`，带 job 编号与逐条日志）。各阶段互相隔离，单个失败不影响其它落库；本地产物一律同目录临时文件 + 原子改名（`os.replace` 不能跨挂载点）；下载带 Range 续传。AAC 用 ffmpeg（`-f mp4` 显式指定封装，`.part` 临时名会猜错 muxer；容器 Dockerfile 已装 ffmpeg，本地没有则自动跳过）。服务器手动跑：`python -m app.tools.transcode_audio`。
+- **音频多版本副本**：`track.audio_url` 永远是上传原样；`track.aac_url` 是可选 AAC 192k 副本（`aac/` 前缀 m4a），存储设置 `aac_enabled` 默认关闭，新上传曲目直接播母版，已有 AAC 仍优先使用；`track.preview_url` 是试听剪辑（`prev/` 前缀，会员曲目对非会员只发这段）。播放端选择：`aacUrl || playUrl || audioUrl`（`play_url` 是已退役的 16-bit PCM 副本字段，存量值仍可被回退使用）。（PC 微信曾经的「只能解 PCM」系列问题的根因是 OSS referer 白名单缺 `servicewechat.com`，修复后 PC 的 BGM 直接能播 AAC，PCM 副本随之退役，见 WEAPP-TODO。）
+- **音频管线**（`app/audio_norm.py`，进程内单 worker 线程，幂等缺啥补啥）：OSS 配置下音频由浏览器直传，本地存储才先落服务端暂存（`upload.py` force_local）；保存曲目时自动排队——本地母版推 OSS、开启 `aac_enabled` 时补 AAC、会员曲目补试听剪辑（不受 AAC 开关影响）。直传 OSS 后需要副本时管线回源下载母版。后台「曲目 → 全部处理」全量扫描（`POST/GET /api/admin/tracks/normalize-audio`，带 job 编号与逐条日志）。各阶段互相隔离，单个失败不影响其它落库；本地产物一律同目录临时文件 + 原子改名（`os.replace` 不能跨挂载点）；下载带 Range 续传。AAC 用 ffmpeg（`-f mp4` 显式指定封装，`.part` 临时名会猜错 muxer；容器 Dockerfile 已装 ffmpeg，本地没有则自动跳过）。服务器手动跑：`python -m app.tools.transcode_audio`。
+  - **上传与处理分离**：文件上传只返回母版地址；保存曲目即落库并持久化待处理标记，后台继续生成所需副本，关闭页面不影响任务。`track.audio_pending / audio_error / audio_attempts / audio_revision` 保存任务状态，启动时恢复未完成任务；单次任务失败最多尝试 3 次，最终失败在曲目行显示原因，可点「处理」重试，无需重传。更换母版会清空旧副本，修改试听长度会清空旧试听，旧任务按 revision 校验后才写回，避免覆盖新音源。新增列沿用启动加列机制；不要在共享/生产库手工运行迁移。
 - iOS 弱网首次加载慢，需 loading 态；`audioUrl` 当前多为占位，真机需在微信后台配 `downloadFile` 合法域名，mock 下回退 `MOCK_AUDIO_URL`。
 
 ### 3. 睡眠定时器 `components/SleepTimer/`
@@ -886,6 +887,6 @@ ZEROER-GIFT-7DAY      → 7日体验卡
 ------
 
 **最后更新**：H5 在微信外浏览器支持微信扫码登录（开放平台「网站应用」），`user` 表新增 `web_openid`。
-**当前版本**：v1.11.0（见根 `version.json`）。
+**当前版本**：v1.12.0（见根 `version.json`）。
 **当前阶段**：小程序 + H5（微信内）前端、后端管理/公开接口、管理后台均已完成，三容器已上服务器且推 `master` 即自动部署；微信支付/公众号授权/短信/OSS 待真实配置上线验证。
 ⚠️ **小程序包不随自动部署**，欠账（合法域名、待真机验证项、未接的微信原生能力、审核合规）单独记在 [`docs/WEAPP-TODO.md`](docs/WEAPP-TODO.md)。
