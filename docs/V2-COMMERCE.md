@@ -151,6 +151,7 @@ Worker 与 API 共享部署配置和数据库。首次启用 `commerce` profile 
 
 ## 本地验证
 
+- 2026-10-26 对已推送提交 `cc6020ff9643264b604ad0c2e63102cfeea3b2ce` 另做隔离验证：`git archive` 导出提交，不包含工作区未提交的播放器改动及仓库 `.env`。该提交独立通过类型检查、前端 **14 项**回归、后端 **63 项**回归、部署脚本 **10 项**回归、后端语法检查及小程序/H5/后台构建；小程序产物中课程/商城分包和官方物流插件声明正确。小程序与 H5 共用产物目录，按顺序构建。前端复用已安装依赖，后台在导出目录独立 `npm ci`；后台依赖包含本地 Vben workspaces，不能直接共享另一个工作区的 `node_modules`，否则可能把源码和 Vue 类型路径解析回原目录。此验证覆盖已提交的候选代码，不代表真机或正式发布通过。
 - `python -m unittest discover -s tests -v`：临时 SQLite/临时文件，覆盖交易幂等、金额篡改、并发库存、部分退款及运费、权益独立、进度、账号合并、后台权限、任务恢复、私有凭证、真实 RSA/AESGCM 通知验真；同时回归既有音频流水线。
 - `python -m compileall app`、前端 `npm run type-check`、`npm run build:weapp`、`npm run build:h5`、后台 `npm run build`。
 - 支付与物流适配器回归：`node --test scripts/tests/commerce-payment.test.cjs`，**7 项**通过。执行真实小程序适配器并模拟平台和服务端，验证 POST 补查、服务端未确认时不报成功、用户取消支付、物流令牌及插件异常。物流入口使用官方 `Taro.requirePlugin('logisticsPlugin').openWaybillTracking({waybillToken})`，小程序配置声明官方插件 `wx9ad912bf20548d92` 的 `2.1.5` 版；H5 不声明插件。需在目标 AppID 中已添加该插件，使用真机预览验证；开发者工具不能模拟物流查询。不产生真实资金交易。
