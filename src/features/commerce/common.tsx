@@ -10,7 +10,7 @@ import TabBar from '@/components/TabBar';
 import MiniPlayer from '@/components/MiniPlayer';
 import './commerce.scss';
 
-export function useData<T>(path: string, initial: T) {
+export function useData<T>(path: string, initial: T, fetcher?: (path: string) => Promise<T>) {
   const [data, setData] = useState<T>(initial);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -18,10 +18,10 @@ export function useData<T>(path: string, initial: T) {
   const load = useCallback(async () => {
     const current = ++request.current;
     setLoading(true);
-    try { const value = await commerceApi<T>(path); if (current === request.current) { setData(value); setError(''); } }
+    try { const value = await (fetcher ? fetcher(path) : commerceApi<T>(path)); if (current === request.current) { setData(value); setError(''); } }
     catch (e: any) { if (current === request.current) setError(e.message || '加载失败'); }
     finally { if (current === request.current) setLoading(false); }
-  }, [path]);
+  }, [path, fetcher]);
   const shown = useRef(false);
   useDidShow(() => { if (shown.current) load(); else shown.current = true; });
   useEffect(() => { setData(initial); load(); return () => { request.current++; }; }, [load]);

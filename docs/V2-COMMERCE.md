@@ -137,6 +137,7 @@ Worker 与 API 共享部署配置和数据库。首次启用 `commerce` profile 
 - `python -m unittest discover -s tests -v`：临时 SQLite/临时文件，覆盖交易幂等、金额篡改、并发库存、部分退款及运费、权益独立、进度、账号合并、后台权限、任务恢复、私有凭证、真实 RSA/AESGCM 通知验真；同时回归既有音频流水线。
 - `python -m compileall app`、前端 `npm run type-check`、`npm run build:weapp`、`npm run build:h5`、后台 `npm run build`。
 - 支付适配器回归：`node --test scripts/tests/commerce-payment.test.cjs`，执行真实小程序支付适配器并模拟平台和服务端，验证 POST 补查、服务端未确认时不报成功、用户取消支付；不产生真实资金交易。
+- 学习进度回归：`node --test scripts/tests/lesson-progress.test.cjs`，**7 项**通过。章节播放器独立会话，销毁前关闭事件写入；同账号同章节请求串行，重进或刷新播放地址等待已排队的保存，避免旧位置覆盖暂停位置。覆盖迟到事件、慢请求、向后拖动、同章节重建、网络失败重试及账号切换。保存失败显示重试入口；离线退出后的恢复、真机后台生命周期仍需验收，不提供离线媒体下载。
 - 后端全套 **63 项**临时 SQLite/文件回归通过；其中课程商城及共用退款兼容 **51 项**在一次性 MySQL **8.0.46** 实际执行通过，包含迁移、库存、权益、租约、历史查询及退款异常恢复。租约故障注入在 `backend/tests/commerce_lease_cases.py`；退款回归在 `backend/tests/commerce_refund_cases.py`，覆盖正确查询路径、明确未受理与网络异常的区别、无通知补查、受理结果不确定、错误订单/金额/币种拒绝入账、未审核申请拦截、异常状态可追踪、真实 RSA/AESGCM 验真及重复通知、旧音乐会员退款同步兼容。MySQL 时间测试使用秒级基准与明确已到期任务。小程序支付适配器 **3 项**回归、前端类型检查及各端构建此前通过；本轮后端语法检查通过。
 - 启动本地 Uvicorn 临时数据库服务，通过 HTTP 请求新订单详情、库存和旧会员退款同步接口，确认新业务退款入账、库存恢复及旧接口成功响应；渠道请求均为替身，明确禁止真实退款提交，不连接生产数据库或支付渠道。
 - 发布检查回归：`python -m unittest discover -s scripts/tests -p test_deploy_runtime.py -v`，**10 项**通过；在命令替身环境执行真实脚本函数，覆盖沿用 Worker profile、停止的 Worker 仍纳入下次更新、双队列检查、API 正常但 Worker 异常、启动中和旧版回滚。不执行部署、生产迁移或外部通知。
