@@ -77,10 +77,8 @@ def accept_refund(raw, headers, db):
     if not sale:
         raise HTTPException(404, "退款记录不存在")
     order = db.get(Order, sale.order_id)
-    if (data.get("out_trade_no") != order.order_no or data.get("transaction_id") != order.transaction_id
-            or data.get("amount", {}).get("refund") != sale.amount_fen
-            or data.get("amount", {}).get("total") != order.amount_fen):
-        raise HTTPException(409, "退款金额或订单不匹配")
+    # 官方退款通知的 amount 不含 currency；查询/申请应答则必须返回 CNY。
+    aftersales.validate_native_refund(order, sale, data, require_currency=False)
     if data.get("refund_status") == "SUCCESS":
         aftersales.finalize(db, sale.id)
         db.commit()

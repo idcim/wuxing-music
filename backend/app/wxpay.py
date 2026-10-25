@@ -33,6 +33,10 @@ class WxPayError(Exception):
     pass
 
 
+class RefundNotFound(WxPayError):
+    """渠道明确返回退款单不存在；查询网络异常不能视作未受理。"""
+
+
 def _headers(cfg: dict, method: str, url_path: str, body: str = "") -> dict:
     return {
         "Authorization": _authorization(cfg, method, url_path, body),
@@ -185,10 +189,13 @@ def refund(
 
 
 def query_refund(cfg: dict, *, out_refund_no: str) -> dict:
-    """查询单笔退款（GET /v3/refund/domestic/refunds/out_refund_no/{out_refund_no}）。
+    """查询单笔退款（GET /v3/refund/domestic/refunds/{out_refund_no}）。
     用于退款处理中时手动同步状态。"""
     _require(cfg, "wx_mch_id", "wx_key_pem", "wx_cert_serial")
-    url_path = f"/v3/refund/domestic/refunds/out_refund_no/{out_refund_no}"
+    from urllib.parse import quote
+    if not out_refund_no:
+        raise WxPayError("缺少商户退款单号")
+    url_path = f"/v3/refund/domestic/refunds/{quote(out_refund_no, safe='')}"
     try:
         resp = httpx.get(
             f"{WXPAY_BASE}{url_path}",
@@ -196,6 +203,13 @@ def query_refund(cfg: dict, *, out_refund_no: str) -> dict:
         )
     except httpx.HTTPError as e:
         raise WxPayError(f"调用微信退款查询失败：{e}")
+    if resp.status_code == 404:
+        try:
+            missing = resp.json().get("code") == "RESOURCE_NOT_EXISTS"
+        except (ValueError, AttributeError):
+            missing = False
+        if missing:
+            raise RefundNotFound("微信退款单不存在")
     if resp.status_code != 200:
         raise WxPayError(f"微信退款查询返回 {resp.status_code}：{resp.text}")
     return resp.json()

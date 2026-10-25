@@ -192,12 +192,10 @@ def sync_refund(
 
     try:
         resp = wxpay.query_refund(cfg, out_refund_no="RF" + o.order_no)
+    except wxpay.RefundNotFound:
+        return ok({**_to_dict(o), "refund_state": "NOT_SUBMITTED"})
     except wxpay.WxPayError as e:
         msg = str(e)
-        # 404 / RESOURCE_NOT_EXISTS：微信侧还没有这笔退款单——多半是只点了
-        # 「发起退款」还没点「确认退款」，这是正常状态不是错误，别吓管理员
-        if "返回 404" in msg or "RESOURCE_NOT_EXISTS" in msg:
-            return ok({**_to_dict(o), "refund_state": "NOT_SUBMITTED"})
         logger.warning("微信退款查询失败 订单 %s：%s", o.order_no, msg)
         raise HTTPException(status_code=400, detail=f"微信退款查询失败：{msg}")
 

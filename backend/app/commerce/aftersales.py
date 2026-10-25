@@ -106,10 +106,22 @@ def finalize(db, sale_id):
     db.flush()
 
 
+def validate_native_refund(order, sale, data, *, require_currency=True):
+    amount = data.get("amount") if isinstance(data, dict) else None
+    if (not isinstance(amount, dict) or data.get("out_refund_no") != sale.refund_no
+            or data.get("out_trade_no") != order.order_no or data.get("transaction_id") != order.transaction_id
+            or type(amount.get("refund")) is not int or amount.get("refund") != sale.amount_fen
+            or type(amount.get("total")) is not int or amount.get("total") != order.amount_fen
+            or ((require_currency or "currency" in amount) and amount.get("currency") != "CNY")):
+        raise HTTPException(409, "退款订单、金额或币种不匹配")
+
+
 def run_refund(db, sale_id):
     sale = db.get(AfterSale, sale_id)
     if not sale or sale.state == "refunded":
         return
+    if sale.state != "refunding":
+        raise RuntimeError("售后尚未获准退款")
     order = db.get(Order, sale.order_id)
     if order.provider == "virtual":
         from .models import Payment
@@ -133,15 +145,19 @@ def run_refund(db, sale_id):
             raise RetryLater("数字支付退款已受理，等待渠道确认")
     else:
         cfg = pay_cfg(db)
-        result = wxpay.refund(cfg, transaction_id=order.transaction_id, out_refund_no=sale.refund_no,
-            refund_fen=sale.amount_fen, total_fen=order.amount_fen, reason=sale.reason,
-            notify_url=cfg["notify_url"].replace("/wxpay", "/refund"))
+        try:
+            result = wxpay.query_refund(cfg, out_refund_no=sale.refund_no)
+        except wxpay.RefundNotFound:
+            result = wxpay.refund(cfg, transaction_id=order.transaction_id, out_refund_no=sale.refund_no,
+                refund_fen=sale.amount_fen, total_fen=order.amount_fen, reason=sale.reason,
+                notify_url=cfg["notify_url"].replace("/wxpay", "/refund"))
+        validate_native_refund(order, sale, result)
         if result.get("status") == "SUCCESS":
             finalize(db, sale.id)
         elif result.get("status") == "PROCESSING":
             raise RetryLater("退款已受理，等待渠道确认")
         else:
-            raise RuntimeError("退款状态异常，需人工核对")
+            raise RuntimeError(f"退款状态 {result.get('status', 'UNKNOWN')}，需在商户平台核对")
     db.commit()
 
 

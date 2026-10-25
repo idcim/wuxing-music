@@ -41,9 +41,10 @@ from app.commerce import admin, aftersales, attachments, callbacks, catalog, com
 from app.commerce.migrate import upgrade
 from app.commerce.models import Address, AfterSale, Base, Course, Enrollment, Event, Job, Lesson, MediaAsset, Order, OrderItem, Payment, Product, Progress, SchemaVersion, Shipment, Sku, WorkerHeartbeat
 from commerce_lease_cases import LeaseCases
+from commerce_refund_cases import RefundCases
 
 
-class CommerceTests(LeaseCases, unittest.TestCase):
+class CommerceTests(LeaseCases, RefundCases, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.mysql_engine = None
@@ -565,7 +566,8 @@ class CommerceTests(LeaseCases, unittest.TestCase):
             aftersales.review(db, sale["id"], schemas.ReviewIn(action="approve"), "tester")
             db.commit()
         with patch.object(aftersales, "pay_cfg", return_value={"notify_url": "https://test.invalid/wxpay"}), \
-                patch.object(aftersales.wxpay, "refund", return_value={"status": "PROCESSING"}):
+                patch.object(aftersales.wxpay, "query_refund", return_value=self.refund_result(sale["id"], "PROCESSING")), \
+                patch.object(aftersales.wxpay, "refund", side_effect=AssertionError("已受理退款不应重提")):
             for _ in range(4):
                 with self.sessions() as db:
                     db.query(Job).filter_by(key=f"refund:{sale['id']}").one().run_at = datetime.utcnow() - timedelta(seconds=1)
@@ -577,7 +579,8 @@ class CommerceTests(LeaseCases, unittest.TestCase):
                     self.assertEqual(db.get(AfterSale, sale["id"]).state, "refunding")
                     self.assertEqual(db.get(Order, order["id"]).refund_fen, 0)
         with patch.object(aftersales, "pay_cfg", return_value={"notify_url": "https://test.invalid/wxpay"}), \
-                patch.object(aftersales.wxpay, "refund", return_value={"status": "SUCCESS"}):
+                patch.object(aftersales.wxpay, "query_refund", return_value=self.refund_result(sale["id"])), \
+                patch.object(aftersales.wxpay, "refund", side_effect=AssertionError("已受理退款不应重提")):
             with self.sessions() as db:
                 db.query(Job).filter_by(key=f"refund:{sale['id']}").one().run_at = datetime.utcnow() - timedelta(seconds=1)
                 db.commit()
