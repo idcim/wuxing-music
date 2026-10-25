@@ -1,6 +1,6 @@
 # 五行律音 2.0 · 课程与实物商城候选版
 
-源码版本：`2.0.0-rc.1`。候选功能已按授权合入 master 触发自动部署，线上生效以健康接口的 commit 为准；尚未发布新版小程序、未在生产执行新增数据库迁移。**用户于 2026-10-26 确认新增业务已完成真单验证**；本分支此后修正的物流入口和学习进度仍需对应包预览复核。已通过一次性 MySQL 8.0 测试，仍需生产数据副本迁移预演。展示与售卖默认关闭。
+源码版本：`2.0.0-rc.1`。候选功能已按授权合入 master 触发自动部署，线上生效以健康接口的 commit 为准；尚未发布新版小程序；生产初始化现已纳入部署依赖链，是否完成以实际部署后的配置及 Worker 状态为准。**用户于 2026-10-26 确认新增业务已完成真单验证**；本分支此后修正的物流入口和学习进度仍需对应包预览复核。已通过一次性 MySQL 8.0 测试，仍需生产数据副本迁移预演。展示与售卖默认关闭。
 
 **已验证基础（2026-10-25 用户确认）**：现版本真实支付、退款和 OSS 已通过实机使用，作为 2.0 复用基础，不再列为未跑通的前置条件。新增业务的交易验收结论另按下述确认记录，私有课件、候选包变更和发布验收分别跟踪。
 
@@ -115,25 +115,31 @@
 
 售后图片使用 `COMMERCE_PRIVATE_DIR`，不放公开 `uploads`。限制图片体积/像素、重新编码清除元数据，仅可引用本人的上传记录，读取使用短时签名。目录需持久化、备份并限制宿主机访问。长期留存、孤立上传清理策略在正式运营前需结合售后保留期配置。
 
-## 部署顺序（本轮未执行生产操作）
+## 自动部署顺序
 
-先在测试环境备份与预演，确认现有 `user` 等表已存在。新域使用独立 metadata，后端启动不会隐式建这些表。当前结构版本为 **v4**：v1 增加新业务表、外键与草稿，v2 增加 Worker 心跳表，v3 显式为 `course_media` 增加 `playback_version`（旧行默认为空），v4 新增物流查询缓存/限频表，不改写已有会员订单、运营内容或售卖设置。曾应用 v1/v2/v3 的环境也需显式运行升级；检查实际列后再执行 ALTER，允许 DDL 完成但版本记录尚未提交时重跑。升级前新业务接口返回未就绪，Worker 健康检查不通过。不要用删除新财务表的方式回滚。
+按用户要求，备份、v4 迁移和 Worker 首次启动已纳入部署文件。沿用现有 1Panel 自动部署任务即可，无需另填数据库账号，也不需要管理员逐条执行初始化命令。`docker compose up -d --build` 同样遵守下列依赖顺序：
+
+1. `database-prepare` 使用 `backend/.env` 已有的数据库连接，检查事务备份条件，将 MySQL 客户端配置写入专用临时凭证卷；不输出密码。未支持的连接参数或非 InnoDB 表会停止部署。
+2. `database-backup` 用官方 MySQL 8.0 客户端做单库事务快照，包含表、触发器、存储过程和事件，压缩后校验 gzip 并生成 SHA-256。默认文件保存在服务器 `/var/backups/wuxing-music`，目录 700、文件 600，不在站点或 Git 中；可由 `WUXING_BACKUP_DIR` 指定受控路径。备份失败、超时（默认 30 分钟）或写入失败会阻止迁移。请监控备份容量并按运维保留政策归档，脚本不自动删除历史备份。
+3. `commerce-init` 必须取得本次备份成功凭据后才执行幂等迁移。当前结构 **v4**；迁移可重复执行，不覆盖运营内容、会员订单或已有展示／售卖设置。首次只录入可编辑草稿，仍须运营审核。
+4. 两个独立 Worker 在迁移完成后启动；API 仅在两者均健康后启动，后台和 H5 再启动。`commerce-media-worker` 只收尾旧任务，上传仍直接保存 OSS 原文件，不恢复转码。
+
+临时数据库账号配置在备份结束（含失败）时删除，错误详情仅留在受限凭证卷，部署日志只输出不含账号的结果和备份文件名。数据库备份中的加密物流账号仍需原有 `JWT_SECRET` 才能使用；部署环境配置应按既有运维机制另行保管，不能把密钥贴到聊天或日志中。
+
+Compose 的完成依赖保证服务器仍在执行旧版部署脚本副本时，首次升级也不会绕过备份和迁移。后续 `scripts/auto-deploy.sh` 默认自动纳入版本声明的 Worker，并以成功标记区分“代码已拉取”和“发布已完成”；失败后即使 HEAD 已对齐，下一轮也会重试。`WUXING_COMMERCE=1` 仍兼容；新版本不接受 `0` 跳过必要任务服务，业务开放由后台开关控制。
+
+部署失败时只恢复旧应用容器，跳过初始化依赖链；**不会逆向迁移或自动恢复覆盖生产数据库**。新增结构只向前演进；如需数据恢复，应由运维核对备份并在维护窗口执行。备份失败时新应用不会启动，不能将 API 健康误报为迁移成功。
+
+可用以下只读命令检查结果：
 
 ```bash
-# 仓库根目录：测试环境先运行；生产操作须按发布流程执行。
-docker compose build api
-docker compose run --rm api python -m app.commerce.migrate
-docker compose --profile commerce up -d api commerce-worker commerce-media-worker
-docker compose --profile commerce ps
-docker compose --profile commerce exec -T commerce-worker python -m app.commerce.monitor --check
-docker compose --profile commerce exec -T commerce-media-worker python -m app.commerce.monitor --check
+docker compose ps -a
+docker compose logs --tail=60 database-prepare database-backup commerce-init
+docker compose exec -T commerce-worker python -m app.commerce.monitor --check
+docker compose exec -T commerce-media-worker python -m app.commerce.monitor --check
 ```
 
-单独本地开发可在 `backend/` 运行 `python -m app.commerce.migrate`；分别以 `python -m app.commerce.worker --queue transactions` 和 `python -m app.commerce.worker --queue media` 启动两个进程。不带参数仍支持单进程处理所有任务，适合本地调试。只使用测试数据库。
-
-Worker 与 API 共享部署配置和数据库。首次启用 `commerce` profile 需显式执行并确认迁移；自动发布不隐式迁移数据库。后续 `scripts/auto-deploy.sh` 默认 `WUXING_COMMERCE=auto`，发现已有 Worker 后会将两个任务服务一并更新，并在 API 与 Worker 均健康后才报告成功。初次发布可在完成迁移后显式设置 `WUXING_COMMERCE=1`；`0` 仅用于已停止任务服务、关闭新业务售卖的环境。容器健康失败应由部署平台接入现有告警渠道；本轮没有配置或发送外部通知。
-
-部署变量模板见 `backend/.env.example`，真实密钥仅配置部署环境。新售卖能力没有 `DEBUG=true` 免付兜底。密钥或准入缺失就拒绝支付，不能临时复制会员支付来绕过数字内容渠道。
+本地独立调试仍可用 `python -m app.commerce.migrate`；这个直接命令不替代部署备份链。正式迁移及真实配置是否生效，须以服务器输出、公开 `commerce_ready` 和后台任务状态为准；本地演练不表示已完成生产操作。新售卖能力没有 `DEBUG=true` 免付兜底，后台能力与素材未核验前保持售卖关闭。
 
 ## 推进与待验收
 
@@ -164,6 +170,8 @@ Worker 与 API 共享部署配置和数据库。首次启用 `commerce` profile 
 下一次发布的执行顺序：先完成候选包学习/物流复核及运营验收，再对生产数据副本预演迁移与恢复，按部署章节启用双 Worker 并确认健康，最后以已验证配置小范围试售及独立小程序发布。主分支合入触发自动部署，新增结构迁移、Worker 启用及小程序发布仍需分别验收，不能据此宣称正式商用上线完成。
 
 ## 本地验证
+
+- 自动部署链验证（2026-10-26）：部署脚本与初始化代码 **21 项**回归通过，覆盖备份／压缩失败阻断、临时凭证清理、成功凭据匹配、失败后同 HEAD 重试、应用回滚跳过初始化及恢复到上次成功版本。使用实际后端 Docker 镜像和隔离 MySQL **8.0.46** 执行完整 Compose 依赖链，**9 项**检查通过：备份失败不建新结构；正常执行 v4 迁移、双 Worker 健康后才启动 API；公开配置就绪且售卖仍关闭；实际生成的压缩 SQL 已导入另一独立 MySQL，恢复旧记录与迁移前结构；检查 SHA-256、凭证清理和下一次发布的重新备份／幂等迁移。报告 `v2-automatic-deployment-rehearsal-20261026.json` 保存在本地验证产物目录。全部为合成数据，测试容器与卷已清理；生产是否执行成功仍须部署后核验。
 
 - 后台物流账号配置验证：后端 **85 项**回归、后台构建及语法检查通过；新增覆盖加密落库、脱敏读取、保存后立即用于签名查询、空值保留、禁用不回退环境、旧页面并发冲突、字段错误不回显凭证、权限隔离、初始化前保存、加密密钥轮换后拒绝查询及后台修复。启动本地 Uvicorn，经实际 HTTP 保存和读取合成账号，确认接口不返回凭证、数据库无明文，服务已停止。本轮未调用真实快递100、未修改生产账号；复用既有 setting 表，无额外结构迁移，schema 仍为 v4。
 
