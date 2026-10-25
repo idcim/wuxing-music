@@ -2,6 +2,7 @@
 
 运行：python -m unittest discover -s tests -v
 """
+from pathlib import Path
 import os
 import math
 import shutil
@@ -167,36 +168,49 @@ class AudioPipelineTests(unittest.TestCase):
         with open(path, "wb") as f:
             f.write(b"x" * 2048)
 
-    def test_replacing_source_during_conversion_rejects_old_result(self):
+    def test_replacing_source_during_upload_rejects_old_result(self):
         track_id = self.create()
         self.source_file()
-
-        def encode(src, dst, **kwargs):
-            with open(dst, "wb") as f:
-                f.write(b"encoded")
+        def upload(*args):
             with patch.object(audio_norm, "enqueue"):
-                r = self.client.put(f"/api/admin/tracks/{track_id}", json={
-                    "element_id": "木", "title": "已换音源", "audio_url": "/uploads/new.wav",
-                })
-            self.assertEqual(r.status_code, 200)
-
-        with self.sessions() as db, patch.object(audio_norm.shutil, "which", return_value="ffmpeg"), patch.object(
-            audio_norm, "_probe_audio",
-        ), patch.object(audio_norm, "_encode_aac", side_effect=encode):
-            result = audio_norm.process_track(db, {"provider": "local"}, db.get(Track, track_id))
+                response = self.client.put(f"/api/admin/tracks/{track_id}", json={
+                    "element_id": "木", "title": "已换音源", "audio_url": "/uploads/new.wav"})
+            self.assertEqual(response.status_code, 200)
+        with self.sessions() as db, patch.object(audio_norm, "_upload_oss", side_effect=upload), patch.object(storage, "_oss_public_url", return_value="https://oss.test/original.wav"):
+            result = audio_norm.process_track(db, {"provider": "oss"}, db.get(Track, track_id))
         self.assertTrue(result.startswith("skip:曲目已更新"), result)
         with self.sessions() as db:
-            track = db.get(Track, track_id)
-            self.assertEqual(track.audio_url, "/uploads/new.wav")
-            self.assertEqual(track.preview_url, "")
-            self.assertTrue(track.audio_pending)
+            self.assertEqual(db.get(Track, track_id).audio_url, "/uploads/new.wav")
 
-    def test_missing_ffmpeg_is_reported_instead_of_ready(self):
-        track_id = self.create()
+    def test_missing_ffmpeg_does_not_block_original_file(self):
+        track_id = self.create(is_premium=True)
         self.source_file()
         with self.sessions() as db, patch.object(audio_norm.shutil, "which", return_value=None):
-            result = audio_norm.process_track(db, {"provider": "local"}, db.get(Track, track_id))
-        self.assertTrue(result.startswith("error:"), result)
+            result = audio_norm.process_track(db, {"provider": "local", "aac_enabled": True}, db.get(Track, track_id))
+        self.assertTrue(result.startswith("skip:"), result)
+        with self.sessions() as db:
+            db.get(Track, track_id).audio_pending = False
+            db.commit()
+        self.assertEqual(self.client.get("/api/admin/tracks").json()["data"]["items"][0]["process_state"], "ready")
+
+    def test_upload_cannot_escape_local_upload_directory(self):
+        with tempfile.TemporaryDirectory() as outside:
+            file = Path(outside) / "outside.wav"
+            file.write_bytes(b"not a repository file")
+            track_id = self.create(audio_url="/uploads/" + os.path.relpath(file, self.tmp.name))
+            with self.sessions() as db, patch.object(audio_norm, "_upload_oss") as upload:
+                result = audio_norm.process_track(db, {"provider": "oss"}, db.get(Track, track_id))
+                self.assertTrue(result.startswith("error:"))
+                upload.assert_not_called()
+
+    def test_member_track_without_preview_does_not_expose_original_to_guest(self):
+        from fastapi import HTTPException
+        from app.routers import mp
+        track_id = self.create(is_premium=True, is_online=True)
+        with self.sessions() as db, patch.object(mp, "_optional_user", return_value=None):
+            with self.assertRaises(HTTPException) as caught:
+                mp.mp_play_url(track_id, SimpleNamespace(), db=db)
+            self.assertEqual(caught.exception.status_code, 403)
 
     def test_worker_exception_also_retries_and_records_failure(self):
         track_id = self.create()
@@ -237,30 +251,19 @@ class AudioPipelineTests(unittest.TestCase):
         self.assertEqual(len(page["items"]), 20)
         self.assertGreater(page["latestSeq"], 50)
 
-    def test_partial_failure_keeps_finished_stage_and_retries_only_missing_output(self):
+    def test_original_upload_failure_can_retry_without_encoding(self):
         track_id = self.create()
         self.source_file()
-        calls = []
-
-        def encode(src, dst, **kwargs):
-            calls.append(kwargs.get("clip_sec", 0))
-            if len(calls) == 2:
-                raise RuntimeError("试听暂时失败")
-            with open(dst, "wb") as f:
-                f.write(b"encoded")
-
-        with patch.object(audio_norm.shutil, "which", return_value="ffmpeg"), patch.object(
-            audio_norm, "_probe_audio",
-        ), patch.object(audio_norm, "_encode_aac", side_effect=encode):
+        with patch.object(audio_norm, "_upload_oss", side_effect=[RuntimeError("OSS 暂时失败"), None]) as upload, patch.object(storage, "_oss_public_url", return_value="https://oss.test/original.wav"), patch.object(audio_norm, "_encode_aac", side_effect=AssertionError("禁止转码")):
             with self.sessions() as db:
-                result = audio_norm.process_track(db, {"provider": "local", "aac_enabled": True}, db.get(Track, track_id))
-            self.assertTrue(result.startswith("error:"), result)
+                first = audio_norm.process_track(db, {"provider": "oss", "aac_enabled": True}, db.get(Track, track_id))
+            self.assertTrue(first.startswith("error:"))
             with self.sessions() as db:
-                self.assertTrue(db.get(Track, track_id).aac_url)
+                second = audio_norm.process_track(db, {"provider": "oss", "aac_enabled": True}, db.get(Track, track_id))
+                self.assertEqual(db.get(Track, track_id).aac_url, "")
                 self.assertEqual(db.get(Track, track_id).preview_url, "")
-                result = audio_norm.process_track(db, {"provider": "local", "aac_enabled": True}, db.get(Track, track_id))
-            self.assertEqual(result, "done:preview")
-        self.assertEqual(calls, [0, 30, 30])
+            self.assertEqual(second, "done:master")
+            self.assertEqual(upload.call_count, 2)
 
     def test_oss_download_uses_authenticated_source_and_retries(self):
         calls = []
@@ -284,33 +287,19 @@ class AudioPipelineTests(unittest.TestCase):
         with open(target, "rb") as f:
             self.assertEqual(f.read(), b"master bytes")
 
-    @unittest.skipUnless(shutil.which("ffmpeg"), "本地无 ffmpeg")
-    def test_real_ffmpeg_generates_aac_and_preview_without_changing_master(self):
-        track_id = self.create(preview_sec=1)
-        source = os.path.join(self.tmp.name, "source.wav")
-        with wave.open(source, "wb") as f:
-            f.setparams((1, 2, 44100, 0, "NONE", "not compressed"))
-            f.writeframes(b"".join(
-                struct.pack("<h", int(8000 * math.sin(2 * math.pi * 440 * i / 44100)))
-                for i in range(88200)
-            ))
-        with open(source, "rb") as f:
-            original = f.read()
-        with patch.object(storage, "get_storage_cfg", return_value={"provider": "local", "aac_enabled": True}):
+    def test_worker_never_encodes_or_downloads_original_even_if_aac_enabled(self):
+        track_id = self.create(preview_sec=1, is_premium=True)
+        self.source_file()
+        source = Path(self.tmp.name) / "source.wav"
+        original = source.read_bytes()
+        with patch.object(storage, "get_storage_cfg", return_value={"provider": "local", "aac_enabled": True}), patch.object(audio_norm, "_encode_aac", side_effect=AssertionError("禁止转码")), patch.object(audio_norm, "_download_oss", side_effect=AssertionError("禁止下载")), patch.object(audio_norm, "_probe_audio", side_effect=AssertionError("禁止探测")):
             audio_norm.recover_pending()
             self.wait_worker()
         with self.sessions() as db:
             track = db.get(Track, track_id)
             self.assertFalse(track.audio_pending)
-            self.assertEqual(track.audio_error, "")
-            self.assertEqual(track.play_url, "")
-            for url in (track.aac_url, track.preview_url):
-                self.assertTrue(url)
-                path = os.path.join(self.tmp.name, url.removeprefix("/uploads/"))
-                self.assertGreater(os.path.getsize(path), 0)
-                audio_norm._probe_audio(path)
-        with open(source, "rb") as f:
-            self.assertEqual(f.read(), original)
+            self.assertEqual((track.audio_error, track.aac_url, track.preview_url, track.play_url), ("", "", "", ""))
+        self.assertEqual(source.read_bytes(), original)
 
 
 if __name__ == "__main__":

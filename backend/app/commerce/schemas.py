@@ -114,6 +114,10 @@ class ProgressIn(Strict):
     position: int = Field(ge=0, le=86400)
 
 
+class MediaCompleteIn(Strict):
+    duration: int = Field(ge=1, le=86400)
+
+
 class AfterSaleIn(Strict):
     item_id: int
     quantity: int = Field(ge=1, le=99)

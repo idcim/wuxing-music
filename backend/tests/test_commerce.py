@@ -744,28 +744,6 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, unittest.TestCase):
             self.assertEqual(db.query(Enrollment).one().expires_at, end)
 
     @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "本机缺少 ffmpeg/ffprobe")
-    def test_course_audio_real_transcode_stays_private(self):
-        from app.commerce import media
-        source = Path(self.tmp.name) / "source.wav"
-        target = Path(self.tmp.name) / "play.m4a"
-        with wave.open(str(source), "wb") as file:
-            file.setparams((1, 2, 16000, 0, "NONE", "not compressed"))
-            file.writeframes(b"".join(struct.pack("<h", int(math.sin(i * 2 * math.pi * 440 / 16000) * 3000)) for i in range(32000)))
-        store = SimpleNamespace(head_object=lambda key: SimpleNamespace(content_length=source.stat().st_size),
-            get_object_acl=lambda key: SimpleNamespace(acl="private"))
-        with self.sessions() as db:
-            db.add(MediaAsset(id=200, kind="audio", name="source.wav", source_key="course/source/test.wav", state="processing"))
-            db.commit()
-            fake_oss = SimpleNamespace(resumable_download=lambda bucket, key, path: shutil.copyfile(source, path),
-                resumable_upload=lambda bucket, key, path, headers: (self.assertEqual(headers["x-oss-object-acl"], "private"), shutil.copyfile(path, target)))
-            with patch.object(media, "bucket", return_value=store), patch.dict(sys.modules, {"oss2": fake_oss}):
-                media.process(db, 200)
-            asset = db.get(MediaAsset, 200)
-            self.assertEqual(asset.state, "ready")
-            self.assertEqual(asset.duration, 2)
-            self.assertTrue(asset.playback_key.startswith("course/play/"))
-            self.assertGreater(target.stat().st_size, 100)
-
     def test_refund_user_signature_and_encrypted_credential(self):
         import hmac
         key = "test-session-key"

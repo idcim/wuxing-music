@@ -161,15 +161,9 @@ def media_sign(body: dict, _=Depends(require_perm("commerce:content")), db: Sess
 
 
 @api.post("/media/{ident}/complete")
-def media_complete(ident: int, _=Depends(require_perm("commerce:content")), db: Session = Depends(get_db)):
-    asset = require_row(db, MediaAsset, ident)
-    if asset.state == "uploading":
-        metadata = media.bucket().head_object(asset.source_key)
-        if not 0 < metadata.content_length <= media.MAX_SIZE:
-            raise HTTPException(422, "上传文件大小无效")
-        asset.state = "processing"
-        enqueue(db, f"media:{ident}", "media", {"asset_id": ident})
-        db.commit()
+def media_complete(ident: int, body: schemas.MediaCompleteIn, _=Depends(require_perm("commerce:content")), db: Session = Depends(get_db)):
+    require_row(db, MediaAsset, ident)
+    asset = media.complete_original(db, ident, body.duration)
     return ok(serialize(asset, ("source_key", "playback_key")))
 
 

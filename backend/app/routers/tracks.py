@@ -44,8 +44,7 @@ def _process_state(t: Track, norm: dict, aac_enabled: bool = False) -> str:
         return "error"
     if not t.audio_url:
         return "pending"
-    needs = (aac_enabled and not t.aac_url) or (t.is_premium and not t.preview_url)
-    return "pending" if needs else "ready"
+    return "ready"  # 上传即可使用；AAC/试听副本不再自动生成。
 
 
 # 可按表头排序的列白名单（前端 sort-change 传 prop，后端映射列，防注入）
@@ -115,14 +114,11 @@ def update_track(
     if not track:
         raise HTTPException(status_code=404, detail="曲目不存在")
     source_changed = track.audio_url != body.audio_url
-    preview_changed = track.preview_sec != body.preview_sec or track.is_premium != body.is_premium
     for k, v in body.model_dump().items():
         setattr(track, k, v)
     if source_changed:
         track.play_url = ""
         track.aac_url = ""
-        track.preview_url = ""
-    elif preview_changed:
         track.preview_url = ""
     audio_norm.mark_pending(track)
     db.commit()
@@ -149,7 +145,7 @@ def delete_track(
     return ok()
 
 
-# ── 音频后台处理（母版上 OSS / 可选 AAC / 会员试听）──
+# ── 音频后台处理（原文件上 OSS，不转码）──
 # 不存在 GET/POST /{track_id} 路由，/normalize-audio 不会被抢占，声明顺序无关。
 
 @router.post("/normalize-audio")
@@ -165,7 +161,7 @@ def normalize_track(
     db: Session = Depends(get_db),
     _: Admin = Depends(require_perm("tracks:edit")),
 ):
-    """单曲目处理（后台线程）：母版上 OSS、按设置补 AAC、会员曲目补试听。"""
+    """单曲目处理：仅将原文件上传 OSS，不生成播放或试听副本。"""
     track = db.query(Track).filter(Track.id == track_id).first()
     if not track:
         raise HTTPException(status_code=404, detail="曲目不存在")

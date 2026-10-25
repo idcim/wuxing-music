@@ -22,7 +22,7 @@ async function loadOptions() {
   const names = ['categories', 'teachers', 'courses', 'products'];
   const all = await Promise.all(names.map(name => commerce.get(`/catalog/${name}?size=100`)));
   names.forEach((name, index) => options.value[name] = all[index].items);
-  options.value.media = await commerce.get('/media');
+    options.value.media = (await commerce.get('/media?state=ready&size=100')).items;
 }
 function choices(field: Field) {
   if (field.options) return field.options;

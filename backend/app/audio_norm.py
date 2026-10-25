@@ -1,21 +1,8 @@
-"""曲库音频管线的后台处理。
+"""曲库原文件上传与持久历史。
 
-每条曲目的流水线（幂等，缺啥补啥）：
-1. 母版暂存在服务端本地且存储是 OSS → 母版推 OSS、改写 audio_url、删本地暂存；
-2. 存储设置开启 aac_enabled 且有 ffmpeg → 生成 AAC 192k 完整版副本；默认关闭，
-   新上传曲目直接播放母版，已有 AAC 副本仍可继续使用；
-3. 会员曲目且无 preview_url → 生成 preview_sec 秒的试听剪辑，不受 AAC 开关影响。
-
-（16-bit PCM 副本已退役：它本是给「PC 只能解 PCM」准备的，PC 根因是 OSS
-referer 白名单，修好后 BGM 在 PC 直接能播 AAC，PCM 副本不再需要。）
-
-两个触发口：
-- 后台「曲目 → 全部处理」按钮 → 全量扫描；
-- 曲目保存（新建/编辑且有音频地址）→ 自动排队单条。OSS 音频由浏览器直传，
-  需要 AAC 或试听时管线回源下载母版；本地存储上传仍先落服务端暂存。
-
-进程内单 worker 线程：部署是单容器，线程队列够用；多实例部署时才需要换真队列。
-母版内容永不被修改（本地暂存的「修改」只是搬到 OSS，字节不动）。
+当前暂停自动转码：后台只将本地原文件上传 OSS，已上传文件直接跳过。
+不生成 16-bit、AAC 或试听副本；旧转换工具函数保留但不由任务入口调用。
+保存曲目和全量扫描沿用持久任务、重试、版本校验与历史，原文件内容不改写。
 """
 import logging
 import os
@@ -169,168 +156,35 @@ def _probe_audio(src_path: str) -> None:
 
 
 def process_track(db, cfg: dict, track: Track, dry: bool = False) -> str:
-    """单条曲目的完整管线（幂等，缺啥补啥）。返回 done:明细 / skip:原因 / dry:明细 / error:原因。
-
-    母版内容永不修改；「master」阶段只是把本地暂存的母版原样搬上 OSS。
-    磁盘占用：一份母版 + 正在生成的副本，处理完即清理。
-    """
-    provider = cfg.get("provider", "local")
-    track_id = track.id
-    revision = track.audio_revision or 0
+    """只将本地原文件搬到 OSS；不下载、不探测、不生成任何播放副本。"""
     url = track.audio_url or ""
     if not url:
         return "skip:无音频地址"
-
-    # ── 定位母版与派生地址 ──
-    key = None          # 对象键（OSS 或本地相对 uploads 的路径，两者同构）
-    local_master = None  # 母版暂存在服务端本地的绝对路径
-    if url.startswith("/uploads/"):
-        key = url[len("/uploads/"):]
-        p = os.path.join(storage.UPLOAD_DIR, key)
-        if not os.path.exists(p):
-            return f"error:本地文件不存在 {url}"
-        local_master = p
-    elif url.startswith("http"):
-        if provider != "oss":
-            return "skip:外链非本店 OSS"
-        key = _oss_key_from_url(cfg, url)
-        if not key:
-            return "skip:外链非本店 OSS"
-    else:
-        return "skip:地址形态未知"
-
-    key_noext = f"{os.path.splitext(key)[0]}-r{revision}"
-    aac_key = f"aac/{key_noext}.m4a"
-    preview_key = f"prev/{key_noext}.m4a"
-
-    def _dest_url(k: str) -> str:
-        return (f"/uploads/{k}" if provider != "oss" else storage._oss_public_url(cfg, k))
-
-    def _dest_path(k: str) -> str:
-        return os.path.join(storage.UPLOAD_DIR, k)
-
-    def _save(values: dict) -> bool:
-        # 每阶段单独提交；后续阶段失败只重试缺失产物，不重复几十分钟的完整转码。
-        db.rollback()
-        changed = db.query(Track).filter(
-            Track.id == track_id, Track.audio_revision == revision,
-        ).update(values, synchronize_session=False)
-        db.commit()
-        return bool(changed)
-
-    # ── 决定要做哪些阶段 ──
-    stages: list[str] = []
-    if local_master and provider == "oss":
-        stages.append("master")
-    ffmpeg_ok = bool(shutil.which("ffmpeg"))
-    if cfg.get("aac_enabled", False) and not track.aac_url and ffmpeg_ok:
-        stages.append("aac")
-    # 会员曲目的试听剪辑：非会员只能拿到这一段（版权保护，见 app/streaming.py）
-    if track.is_premium and ffmpeg_ok and not track.preview_url and (track.preview_sec or 30) > 0:
-        stages.append("preview")
-
-    missing_ffmpeg = not ffmpeg_ok and (
-        (cfg.get("aac_enabled", False) and not track.aac_url)
-        or (track.is_premium and not track.preview_url)
-    )
-    if not stages:
-        return "error:服务器未安装 ffmpeg，无法生成 AAC 或会员试听" if missing_ffmpeg else "skip:已就绪"
-    if dry:
-        return "dry:" + "+".join(stages)
-
-    # 释放读事务，避免长时间下载/转码持有数据库连接与旧事务快照。
-    preview_sec = track.preview_sec or 30
-    db.rollback()
-
-    tmpdir = tempfile.mkdtemp(prefix="wavpipe-")
-    done: list[str] = []
-    failed: list[str] = ["服务器未安装 ffmpeg，无法生成 AAC 或会员试听"] if missing_ffmpeg else []
+    if cfg.get("provider", "local") != "oss" or not url.startswith("/uploads/"):
+        return "skip:原文件已保存，自动转码已停用"
+    key = url[len("/uploads/"):]
+    root = os.path.realpath(storage.UPLOAD_DIR)
+    source = os.path.realpath(os.path.join(root, key))
     try:
-        # ── 准备源文件：本地暂存直接用；OSS 母版下载到临时目录（带续传）──
-        src = local_master
-        if not src:
-            src = os.path.join(tmpdir, "src" + os.path.splitext(key)[1])
-            _download_oss(cfg, key, src)
-
-        # 先确认源文件是音频，坏文件直接给可读结论，不必逐阶段炸 ffmpeg
-        try:
-            _probe_audio(src)
-        except RuntimeError as e:
-            return f"error:{e}"
-
-        # 各阶段互相隔离：一个失败不影响其它的落库
-
-        # ── AAC 副本 ──
-        if "aac" in stages:
-            try:
-                if provider == "oss":
-                    aac_tmp = os.path.join(tmpdir, "a.m4a")
-                    _encode_aac(src, aac_tmp)
-                    _upload_oss(cfg, aac_key, aac_tmp)
-                else:
-                    dest = _dest_path(aac_key)
-                    os.makedirs(os.path.dirname(dest), exist_ok=True)
-                    # 同理：编码到同目录临时文件再原子改名，避免半截产物被当成品
-                    _encode_aac(src, dest + ".part")
-                    os.replace(dest + ".part", dest)
-                if not _save({"aac_url": _dest_url(aac_key)}):
-                    return "skip:曲目已更新，交由新任务处理"
-                done.append("aac")
-            except Exception as e:  # noqa: BLE001
-                failed.append(f"aac: {e}")
-
-        # ── 试听剪辑（会员曲目，preview_sec 秒的 AAC）──
-        if "preview" in stages:
-            try:
-                if provider == "oss":
-                    prev_tmp = os.path.join(tmpdir, "p.m4a")
-                    _encode_aac(src, prev_tmp, bitrate="128k", clip_sec=preview_sec)
-                    _upload_oss(cfg, preview_key, prev_tmp)
-                else:
-                    dest = _dest_path(preview_key)
-                    os.makedirs(os.path.dirname(dest), exist_ok=True)
-                    _encode_aac(src, dest + ".part", bitrate="128k", clip_sec=preview_sec)
-                    os.replace(dest + ".part", dest)
-                if not _save({"preview_url": _dest_url(preview_key)}):
-                    return "skip:曲目已更新，交由新任务处理"
-                done.append("preview")
-            except Exception as e:  # noqa: BLE001
-                failed.append(f"preview: {e}")
-
-        # ── 母版上 OSS（本地暂存 → OSS，字节原样），最后删本地暂存 ──
-        if "master" in stages:
-            try:
-                _upload_oss(cfg, key, local_master)
-                if not _save({"audio_url": storage._oss_public_url(cfg, key)}):
-                    return "skip:曲目已更新，交由新任务处理"
-                done.append("master")
-            except Exception as e:  # noqa: BLE001
-                failed.append(f"master: {e}")
-
-        if done:
-            # 保存期间可能更换音源/试听长度：只允许当前代次写回，旧任务不得覆盖新曲目。
-            # 地址落库后才清理暂存；仍被其它曲目引用的文件必须保留。
-            if "master" in done and not db.query(Track.id).filter(Track.audio_url == url).first():
-                try:
-                    os.remove(local_master)
-                except OSError:
-                    pass
-        else:
-            db.rollback()
-        if failed:
-            tail = f"（已完成 {'+'.join(done)}）" if done else ""
-            logger.warning("音频管线部分失败 track=%s：%s", track.id, "; ".join(failed))
-            return f"error:{'；'.join(failed)}{tail}"
-        return "done:" + "+".join(done)
-    except Exception as e:  # noqa: BLE001
+        if os.path.commonpath([root, source]) != root:
+            return "error:原文件路径超出上传目录"
+    except ValueError:
+        return "error:原文件路径无效"
+    if not os.path.isfile(source):
+        return "error:本地原文件不存在"
+    if dry:
+        return "dry:master"
+    ident, revision = track.id, track.audio_revision or 0
+    db.rollback()
+    try:
+        _upload_oss(cfg, key, source)
+        changed = db.query(Track).filter(Track.id == ident, Track.audio_revision == revision).update(
+            {"audio_url": storage._oss_public_url(cfg, key)}, synchronize_session=False)
+        db.commit()
+        return "done:master" if changed else "skip:曲目已更新，交由新任务处理"
+    except Exception as exc:
         db.rollback()
-        logger.warning("音频管线失败 track=%s：%s", track.id, e)
-        return f"error:{e}"
-    finally:
-        # tmpdir 仅来自上面的 mkdtemp；确认在系统临时目录内后清理 SDK 断点子目录。
-        temp_root = os.path.abspath(tempfile.gettempdir())
-        if os.path.commonpath([temp_root, os.path.abspath(tmpdir)]) == temp_root:
-            shutil.rmtree(tmpdir, ignore_errors=True)
+        return f"error:{exc}"
 
 
 # ── 后台 worker ──

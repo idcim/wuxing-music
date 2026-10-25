@@ -2,8 +2,6 @@ import base64
 import hashlib
 import hmac
 import json
-import subprocess
-import tempfile
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -11,8 +9,8 @@ from pathlib import Path
 from fastapi import HTTPException
 
 from app.config import settings
-from .models import MediaAsset
-from .common import guard_claim
+from .models import Job, MediaAsset
+from .common import guard_claim, record
 
 MAX_SIZE = 2 * 1024**3
 
@@ -37,7 +35,7 @@ def bucket():
 def upload_policy(db, name, kind):
     bucket()  # 签发前验证桶 ACL，而不是相信后台勾选。
     ext = Path(name).suffix.lower()
-    allowed = {"video": {".mp4", ".mov", ".mkv"}, "audio": {".mp3", ".wav", ".m4a"}}
+    allowed = {"video": {".mp4"}, "audio": {".mp3", ".wav", ".m4a"}}
     if kind not in allowed or ext not in allowed[kind]:
         raise HTTPException(422, "不支持的课程媒体格式")
     key = "course/source/" + uuid.uuid4().hex + ext
@@ -61,44 +59,37 @@ def signed_url(asset):
     return store.sign_url("GET", asset.playback_key, 900)
 
 
-def process(db, asset_id):
-    asset = db.get(MediaAsset, asset_id)
-    if not asset or asset.state == "ready":
-        return
-    source_key, kind = asset.source_key, asset.kind
-    # 释放读事务及连接；下载、转码与上传可能持续很久。
-    db.commit()
+def complete_original(db, asset_id, duration):
+    # 与旧 Worker 按相同顺序锁定任务；终止旧租约，迟到结果不能覆盖原文件。
+    job = db.query(Job).filter_by(key=f"media:{asset_id}").populate_existing().with_for_update().first()
+    asset = db.query(MediaAsset).filter_by(id=asset_id).populate_existing().with_for_update().one()
+    if asset.state == "ready":
+        return asset
+    allowed = {"video": {".mp4"}, "audio": {".mp3", ".wav", ".m4a"}}
+    if Path(asset.source_key).suffix.lower() not in allowed.get(asset.kind, set()):
+        raise HTTPException(409, "已停用转码，请上传可直接播放的 MP4 视频或 MP3/M4A/WAV 音频")
     store = bucket()
-    metadata = store.head_object(source_key)
-    if metadata.content_length > MAX_SIZE:
-        raise RuntimeError("媒体超过 2GB")
-    if store.get_object_acl(source_key).acl not in ("private", "default"):
-        raise RuntimeError("课件源对象不是私有")
-    with tempfile.TemporaryDirectory(prefix="course-") as folder:
-        source = str(Path(folder) / ("source" + Path(source_key).suffix))
-        target = str(Path(folder) / ("play.mp4" if kind == "video" else "play.m4a"))
-        import oss2
-        oss2.resumable_download(store, source_key, source)
-        probe = subprocess.run(["ffprobe", "-v", "error", "-show_format", "-show_streams", "-of", "json", source],
-                               check=True, capture_output=True, text=True, timeout=90)
-        info = json.loads(probe.stdout)
-        duration = int(float(info["format"]["duration"]))
-        if not 0 < duration <= 86400:
-            raise RuntimeError("媒体时长不合法")
-        command = ["ffmpeg", "-nostdin", "-y", "-v", "error", "-threads", "2", "-i", source]
-        if kind == "video":
-            # 手机裁剪/录屏可能产生奇数尺寸；补齐边缘后再编码，保留原画面。
-            command += ["-map", "0:v:0", "-map", "0:a:0?", "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2",
-                        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast", "-crf", "23"]
-        else:
-            command += ["-map", "0:a:0", "-vn"]
-        command += ["-c:a", "aac", "-b:a", "160k", "-threads", "2", "-movflags", "+faststart", target]
-        subprocess.run(command, check=True, capture_output=True, timeout=1800)
-        key = "course/play/" + uuid.uuid4().hex + Path(target).suffix
-        oss2.resumable_upload(store, key, target, headers={"x-oss-object-acl": "private"})
-        guard_claim(db)
-        asset = db.get(MediaAsset, asset_id)
-        if asset is None:
-            raise RuntimeError("媒体资产已不存在，无法发布处理结果")
-        asset.playback_key, asset.duration, asset.size, asset.state, asset.error = key, duration, metadata.content_length, "ready", ""
+    metadata = store.head_object(asset.source_key)
+    if not 0 < metadata.content_length <= MAX_SIZE:
+        raise HTTPException(422, "上传文件大小无效")
+    if store.get_object_acl(asset.source_key).acl not in ("private", "default"):
+        raise HTTPException(409, "课件源对象不是私有")
+    asset.playback_key, asset.duration, asset.size = asset.source_key, duration, metadata.content_length
+    asset.state, asset.error = "ready", ""
+    if job and job.state != "done":
+        record(db, f"job:{job.id}", "transcoding_stopped", {"previous_state": job.state, "previous_error": job.error})
+        job.state, job.lease_until, job.error = "done", None, ""
+    record(db, f"media:{asset.id}", "original_ready", {"duration": duration, "size": asset.size})
+    db.commit()
+    return asset
+
+
+def process(db, asset_id):
+    """仅收尾旧的排队任务，不下载、探测或转换媒体。"""
+    guard_claim(db)
+    asset = db.get(MediaAsset, asset_id)
+    if asset and asset.state != "ready":
+        asset.state = "uploading"
+        asset.error = "自动转码已停用；原文件保留在 OSS，请确认格式和时长后使用原文件"
+        record(db, f"media:{asset.id}", "transcoding_stopped")
         db.commit()

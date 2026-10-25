@@ -9,7 +9,7 @@
         <el-button plain :loading="normRunning" @click="onNormalize">
           {{ normRunning ? normText || '修复中…' : '全部处理' }}
         </el-button>
-        <span class="hint">默认直接播放母版；按存储设置补 AAC，会员曲目补试听，单行「处理」可单独执行</span>
+        <span class="hint">原文件直传 OSS，不生成 16-bit、AAC 或试听副本；已有版本保留</span>
       </div>
 
       <BusinessTable :data="rows" v-loading="loading" border @sort-change="onSort">
@@ -105,8 +105,8 @@
               <el-input v-model="form.audio_url" placeholder="或填 CDN 地址" />
             </div>
             <div class="hint">
-              OSS 配置下音频直接上传 OSS，默认播放原始母版；保存后仅按存储设置补 AAC，
-              会员曲目补试听剪辑。后台处理无需等待，保存后可离开页面。
+              OSS 配置下音频原样上传 OSS，保存后直接使用原文件；
+              已停用自动转码和试听生成，已有试听文件继续保留。
             </div>
             <el-progress
               v-if="audioUploading"
@@ -452,7 +452,7 @@ async function pollNorm() {
       const skip = summary?.skipped ?? fresh.filter((r: any) => String(r.result).startsWith('skip:')).length;
       normJob = 0;
       ElMessageBox.alert(
-        `处理 ${conv} 条（母版上 OSS / 可选 AAC / 会员试听），无需处理或跳过 ${skip} 条` +
+        `处理 ${conv} 条（原文件上 OSS，不转码），无需处理或跳过 ${skip} 条` +
         (failed ? `，失败 ${failed} 条。完整记录请到「音频任务历史」查看。` : ''),
         '全部处理完成'
       );
@@ -467,7 +467,7 @@ async function pollNorm() {
 
 async function onNormalize() {
   await ElMessageBox.confirm(
-    '扫描全部曲目，按需搬运本地母版、补会员试听；仅在存储设置开启时补 AAC。任务在后台执行，期间可正常操作后台。',
+    '扫描全部曲目，仅将本地原文件搬运至 OSS，不转码、不生成试听。已有 OSS 文件直接保留。',
     '全部处理',
     { type: 'info', confirmButtonText: '开始处理' }
   );

@@ -87,7 +87,7 @@ docker compose logs -f
 之后**只要 `git push` 到 GitHub `master`，1 分钟内服务器自动拉取重建**。
 日志在 `/var/log/wuxing-deploy.log`。可覆盖的环境变量（分支 `WUXING_BRANCH`、健康地址 `WUXING_HEALTH_URL`、是否回滚 `WUXING_ROLLBACK` 等）见脚本头部注释。
 
-课程商城 2.0 使用可选 `commerce` profile，首次启用前需完成备份、结构 v2 迁移及业务验收，具体顺序见 [2.0 部署记录](V2-COMMERCE.md)。交易 `commerce-worker` 与转码 `commerce-media-worker` 独立运行，均有数据库心跳健康检查。自动发布默认 `WUXING_COMMERCE=auto`，已有任务服务会随 API 一起更新并检查健康；未启用时不自动开启。首次显式启用可设为 `1`，但不会代为运行数据库迁移。任务服务离线或积压可在后台“课件与任务”查看，部署平台应监控容器 unhealthy 状态。
+课程商城 2.0 使用可选 `commerce` profile，首次启用前需完成备份、结构 v2 迁移及业务验收，具体顺序见 [2.0 部署记录](V2-COMMERCE.md)。交易 `commerce-worker` 与旧媒体任务兼容进程 `commerce-media-worker` 独立运行，均有数据库心跳健康检查。自动发布默认 `WUXING_COMMERCE=auto`，已有任务服务会随 API 一起更新并检查健康；未启用时不自动开启。首次显式启用可设为 `1`，但不会代为运行数据库迁移。任务服务离线或积压可在后台“课件与任务”查看，部署平台应监控容器 unhealthy 状态。
 
 ### 2.0 本地 MySQL 备份恢复演练
 
@@ -149,9 +149,9 @@ H5 已作为 `wuxing-h5` 服务并入 `docker-compose.yml`——`docker compose 
 - [ ] **本地中转的 body 上限**：OSS 音频直传不经过后端；使用本地存储或服务器中转兜底时，
       需把仓库内 `admin/nginx.conf`、1Panel 外层 vhost 的 `client_max_body_size` 与后端
       `UPLOAD_MAX_MB` 一并配够，并加长 `proxy_read_timeout`，否则大文件会被 413 或超时。
-- [ ] **OSS 直传与可选 AAC**：后台 → 设置 → 存储设置 选 OSS 并填全 endpoint / bucket / accessKey。
-      音频由浏览器直传 OSS，完整版 AAC 开关默认关闭，播放器直接使用母版；开启 AAC 或会员曲目
-      需要试听剪辑时，后台管线会通过鉴权源站断点下载母版再处理，保存后无需等待。
+- [ ] **OSS 原文件直传（已暂停转码）**：后台 → 设置 → 存储设置 选 OSS 并填全 endpoint / bucket / accessKey。
+      音频由浏览器原样直传 OSS，保存后直接使用，不再自动生成 16-bit、AAC 或试听剪辑。
+      已有播放副本和试听文件继续保留，没有试听文件的会员曲目不向游客开放完整音频。
       待处理标记与任务历史存数据库，重启后继续；成功、失败和重试可在「音频任务历史」分页查看。
       已丢失的旧版通知无法恢复。实现和验证边界见 [AUDIO-TASKS.md](AUDIO-TASKS.md)。
 - [ ] **OSS 桶 CORS**：允许管理后台域名发起直传 `POST`，并允许 H5 域名的 `GET`（含 `Range` 请求头）。

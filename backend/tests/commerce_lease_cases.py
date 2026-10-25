@@ -104,16 +104,8 @@ class LeaseCases:
                 asset.state, asset.playback_key = "ready", "winner-key"
                 other.commit()
 
-        def head_object(_):
-            self.assertFalse(db.in_transaction(), "长时间媒体处理期间不保留数据库读事务")
-            return SimpleNamespace(content_length=128)
-
-        store = SimpleNamespace(head_object=head_object,
-            get_object_acl=lambda _: SimpleNamespace(acl="private"))
-        sdk = SimpleNamespace(resumable_download=lambda *args, **kwargs: None, resumable_upload=takeover)
-        with self.sessions() as db, patch.object(media, "bucket", return_value=store), \
-                patch.dict("sys.modules", {"oss2": sdk}), \
-                patch.object(media.subprocess, "run", return_value=SimpleNamespace(stdout=json.dumps({"format": {"duration": "10"}}))):
+        takeover()
+        with self.sessions() as db:
             db.info["commerce_claim"] = (ident, 1, lease)
             with self.assertRaises(common.LeaseLost):
                 media.process(db, 100)

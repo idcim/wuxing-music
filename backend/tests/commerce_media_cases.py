@@ -1,75 +1,78 @@
-"""真实视频转码与持久任务回归；OSS 使用本地文件替身。"""
-import hashlib
-import json
-from pathlib import Path
-import shutil
-import subprocess
-import sys
+"""仅上传 OSS 原文件：禁止下载、探测及转码，保留私有授权和旧任务历史。"""
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from app.commerce import media, worker
-from app.commerce.models import Job, MediaAsset
+from app.commerce import common, media, worker
+from app.commerce.models import Event, Job, MediaAsset
 
 
 class MediaCases:
-    def test_course_video_worker_handles_odd_dimensions_and_silent_video(self):
-        for ident, dimensions, with_audio in ((200, "321x241", True), (201, "320x240", False)):
-            with self.subTest(dimensions=dimensions, audio=with_audio):
-                source = Path(self.tmp.name) / f"video-{ident}.mkv"
-                target = Path(self.tmp.name) / f"play-{ident}.mp4"
-                command = ["ffmpeg", "-nostdin", "-y", "-v", "error", "-f", "lavfi", "-i",
-                           f"testsrc=size={dimensions}:rate=12:duration=2"]
-                if with_audio:
-                    command += ["-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100:duration=2"]
-                command += ["-c:v", "ffv1", "-pix_fmt", "yuv444p"]
-                if with_audio:
-                    command += ["-c:a", "pcm_s16le", "-shortest"]
-                subprocess.run([*command, str(source)], check=True, capture_output=True, timeout=30)
-                original = hashlib.sha256(source.read_bytes()).hexdigest()
-                store = SimpleNamespace(head_object=lambda key: SimpleNamespace(content_length=source.stat().st_size),
-                                        get_object_acl=lambda key: SimpleNamespace(acl="private"))
-
-                def upload(bucket, key, path, headers):
-                    self.assertTrue(key.startswith("course/play/"))
-                    self.assertTrue(key.endswith(".mp4"))
-                    self.assertEqual(headers["x-oss-object-acl"], "private")
-                    shutil.copyfile(path, target)
-
-                fake_oss = SimpleNamespace(resumable_download=lambda bucket, key, path: shutil.copyfile(source, path),
-                                           resumable_upload=upload)
+    def test_course_original_ready_without_conversion_or_worker(self):
+        for ident, kind, extension in ((200, "video", "mp4"), (201, "audio", "wav")):
+            with self.subTest(kind=kind):
+                key = f"course/source/original-{ident}.{extension}"
                 with self.sessions() as db:
-                    db.add(MediaAsset(id=ident, kind="video", name=source.name,
-                                      source_key=f"course/source/{source.name}", state="uploading"))
+                    db.add(MediaAsset(id=ident, name=f"original.{extension}", kind=kind, source_key=key))
                     db.commit()
-                with patch.object(media, "bucket", return_value=store), patch.dict(sys.modules, {"oss2": fake_oss}):
-                    response = self.client.post(f"/api/admin/commerce/media/{ident}/complete")
+                store = SimpleNamespace(head_object=lambda _: SimpleNamespace(content_length=1024),
+                                        get_object_acl=lambda _: SimpleNamespace(acl="private"),
+                                        sign_url=lambda method, object_key, ttl: f"https://private.test/{object_key}?signed=1")
+                with patch.object(media, "bucket", return_value=store), patch("subprocess.run", side_effect=AssertionError("不得运行转码或探测")):
+                    response = self.client.post(f"/api/admin/commerce/media/{ident}/complete", json={"duration": 123})
                     self.assertEqual(response.status_code, 200, response.text)
-                    self.assertEqual(response.json()["data"]["state"], "processing")
-                    self.assertFalse(target.exists(), "上传完成请求不得执行转码")
-                    self.assertTrue(worker.run_one(self.sessions, queue="media"))
-                with self.sessions() as db:
-                    asset = db.get(MediaAsset, ident)
-                    task = db.query(Job).filter_by(key=f"media:{ident}").one()
-                    self.assertEqual(asset.state, "ready", task.error)
-                    self.assertEqual(task.state, "done", task.error)
-                    self.assertEqual(asset.duration, 2)
-                    self.assertTrue(asset.playback_key.startswith("course/play/"))
-                info = json.loads(subprocess.run(["ffprobe", "-v", "error", "-show_streams", "-of", "json", str(target)],
-                                                 check=True, capture_output=True, text=True, timeout=30).stdout)
-                video = next(stream for stream in info["streams"] if stream["codec_type"] == "video")
-                self.assertEqual(video["codec_name"], "h264")
-                self.assertEqual(video["pix_fmt"], "yuv420p")
-                width, height = map(int, dimensions.split("x"))
-                self.assertGreaterEqual(video["width"], width)
-                self.assertGreaterEqual(video["height"], height)
-                self.assertEqual(video["width"] % 2, 0)
-                self.assertEqual(video["height"] % 2, 0)
-                audio = [stream for stream in info["streams"] if stream["codec_type"] == "audio"]
-                self.assertEqual(len(audio), int(with_audio))
-                if audio:
-                    self.assertEqual(audio[0]["codec_name"], "aac")
-                output = target.read_bytes()
-                self.assertGreater(output.find(b"moov"), 0)
-                self.assertGreater(output.find(b"mdat"), output.find(b"moov"), "MP4 索引必须提前以便在线播放")
-                self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(), original)
+                    self.assertEqual(response.json()["data"]["state"], "ready")
+                    with self.sessions() as db:
+                        asset = db.get(MediaAsset, ident)
+                        self.assertEqual((asset.playback_key, asset.duration, asset.size), (key, 123, 1024))
+                        self.assertIn(key, media.signed_url(asset))
+                        self.assertEqual(db.query(Job).filter_by(kind="media").count(), 0)
+                    again = self.client.post(f"/api/admin/commerce/media/{ident}/complete", json={"duration": 99})
+                    self.assertEqual(again.json()["data"]["duration"], 123)
+                items = self.client.get("/api/admin/commerce/media").json()["data"]["items"]
+                self.assertTrue(all("source_key" not in item and "playback_key" not in item for item in items))
+
+    def test_original_confirmation_fences_old_running_conversion(self):
+        lease = datetime.utcnow().replace(microsecond=0) + timedelta(hours=1)
+        with self.sessions() as db:
+            asset = db.get(MediaAsset, 100)
+            asset.state, asset.source_key = "processing", "course/source/old.mp4"
+            job = Job(key="media:100", kind="media", payload={"asset_id": 100}, state="running", attempts=1, lease_until=lease)
+            db.add(job); db.commit(); ident = job.id
+        store = SimpleNamespace(head_object=lambda _: SimpleNamespace(content_length=50), get_object_acl=lambda _: SimpleNamespace(acl="private"))
+        with patch.object(media, "bucket", return_value=store):
+            response = self.client.post("/api/admin/commerce/media/100/complete", json={"duration": 42})
+            self.assertEqual(response.status_code, 200, response.text)
+        with self.sessions() as db:
+            self.assertEqual(db.get(Job, ident).state, "done")
+            self.assertIsNone(db.get(Job, ident).lease_until)
+            self.assertTrue(db.query(Event).filter_by(subject=f"job:{ident}", action="transcoding_stopped").first())
+            db.info["commerce_claim"] = (ident, 1, lease)
+            with self.assertRaises(common.LeaseLost):
+                media.process(db, 100)
+            self.assertEqual(db.get(MediaAsset, 100).playback_key, "course/source/old.mp4")
+
+    def test_legacy_media_queue_stops_without_storage_or_encoding(self):
+        with self.sessions() as db:
+            db.get(MediaAsset, 100).state = "processing"
+            db.add(Job(key="media:100", kind="media", payload={"asset_id": 100}, run_at=datetime.utcnow()-timedelta(minutes=1)))
+            db.commit()
+        with patch.object(media, "bucket", side_effect=AssertionError("旧任务不应访问 OSS")), patch("subprocess.run", side_effect=AssertionError("不应转码")):
+            self.assertTrue(worker.run_one(self.sessions, queue="media"))
+        with self.sessions() as db:
+            self.assertEqual(db.get(MediaAsset, 100).state, "uploading")
+            self.assertIn("转码已停用", db.get(MediaAsset, 100).error)
+            self.assertEqual(db.query(Job).filter_by(key="media:100").one().state, "done")
+
+    def test_original_upload_checks_size_privacy_format_and_duration(self):
+        with self.sessions() as db:
+            asset = db.get(MediaAsset, 100)
+            asset.state, asset.source_key = "uploading", "course/source/test.mp4"
+            db.commit()
+        for size, acl, expected in ((0, "private", 422), (50, "public-read", 409)):
+            with self.subTest(size=size, acl=acl), patch.object(media, "bucket", return_value=SimpleNamespace(
+                head_object=lambda _: SimpleNamespace(content_length=size), get_object_acl=lambda _: SimpleNamespace(acl=acl))):
+                self.assertEqual(self.client.post("/api/admin/commerce/media/100/complete", json={"duration": 10}).status_code, expected)
+        self.assertEqual(self.client.post("/api/admin/commerce/media/100/complete", json={"duration": 0}).status_code, 422)
+        with patch.object(media, "bucket", return_value=object()):
+            self.assertEqual(self.client.post("/api/admin/commerce/media/sign", json={"name": "test.mkv", "kind": "video"}).status_code, 422)
