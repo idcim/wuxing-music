@@ -87,7 +87,9 @@ def process(db, asset_id):
             raise RuntimeError("媒体时长不合法")
         command = ["ffmpeg", "-nostdin", "-y", "-v", "error", "-threads", "2", "-i", source]
         if kind == "video":
-            command += ["-map", "0:v:0", "-map", "0:a:0?", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast", "-crf", "23"]
+            # 手机裁剪/录屏可能产生奇数尺寸；补齐边缘后再编码，保留原画面。
+            command += ["-map", "0:v:0", "-map", "0:a:0?", "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2",
+                        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast", "-crf", "23"]
         else:
             command += ["-map", "0:a:0", "-vn"]
         command += ["-c:a", "aac", "-b:a", "160k", "-threads", "2", "-movflags", "+faststart", target]

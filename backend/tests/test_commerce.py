@@ -42,9 +42,10 @@ from app.commerce.migrate import upgrade
 from app.commerce.models import Address, AfterSale, Base, Course, Enrollment, Event, Job, Lesson, MediaAsset, Order, OrderItem, Payment, Product, Progress, SchemaVersion, Shipment, Sku, WorkerHeartbeat
 from commerce_lease_cases import LeaseCases
 from commerce_refund_cases import RefundCases
+from commerce_media_cases import MediaCases
 
 
-class CommerceTests(LeaseCases, RefundCases, unittest.TestCase):
+class CommerceTests(LeaseCases, RefundCases, MediaCases, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.mysql_engine = None
