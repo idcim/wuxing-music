@@ -1,5 +1,7 @@
 # 部署与配置说明
 
+课程商城 2.0 另需显式数据库迁移、独立 Worker 和私有课件存储，默认关闭；按 [2.0 部署顺序](V2-COMMERCE.md) 在测试环境预演后再发布。不要只推送代码就开启收款。
+
 monorepo：**小程序 / H5 前端（Taro）** + **后端 API（FastAPI）** + **管理后台（Vue3）**。
 后端与后台用 Docker 部署（`docker-compose.yml`），连**外部 MySQL**（1Panel 网络内）。
 

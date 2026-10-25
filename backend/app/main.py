@@ -288,6 +288,14 @@ app.include_router(upload.router)
 app.include_router(site.router)
 app.include_router(mp.router)
 
+# 新域使用独立 metadata，只由显式版本化迁移创建，不在生产启动时隐式迁移。
+from app.commerce import public as commerce_public, admin as commerce_admin, callbacks as commerce_callbacks
+app.include_router(commerce_public.router)
+app.include_router(commerce_admin.router)
+app.include_router(commerce_callbacks.router)
+from app.commerce.attachments import router as commerce_attachments
+app.include_router(commerce_attachments)
+
 # 本地上传文件的静态托管
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")

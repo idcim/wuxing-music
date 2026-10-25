@@ -15,6 +15,8 @@ import TabBar from '@/components/TabBar';
 import type { ElementId } from '@/types';
 import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
+import { isH5 } from '@/utils/platform';
+import { coursePath, shopPath, useCommerce } from '@/services/commerce';
 
 interface MenuItem {
   icon: IconName;
@@ -25,6 +27,7 @@ interface MenuItem {
 }
 
 export default function Profile() {
+  const commerceReady = useCommerce(s => !!s.config.commerce_ready);
   const element = useUserStore((s) => s.element);
   const isPremium = useUserStore((s) => s.isPremium);
   const user = useUserStore((s) => s.user);
@@ -64,7 +67,7 @@ export default function Profile() {
   };
   const goOrders = () => {
     if (!requireLogin()) return;
-    Taro.navigateTo({ url: '/pages/orders/index' });
+    Taro.navigateTo({ url: isH5 || !commerceReady ? '/pages/orders/index' : `${shopPath}/orders/index` });
   };
   const goAgent = () => {
     if (!requireLogin()) return;
@@ -107,6 +110,7 @@ export default function Profile() {
     { icon: 'user', text: '个人信息', onClick: goUserInfo },
     { icon: 'receipt', text: '我的订单', onClick: goOrders },
     { icon: 'history', text: '聆听历史', onClick: goHistory },
+    ...(!isH5 && commerceReady ? [{ icon: 'compass' as IconName, text: '我的课程', onClick: () => requireLogin() && Taro.navigateTo({ url: `${coursePath}/mine/index` }) }, { icon: 'user' as IconName, text: '收货地址', onClick: () => requireLogin() && Taro.navigateTo({ url: `${shopPath}/addresses/index` }) }] : []),
     ...(isAgent
       ? [{ icon: 'award' as IconName, text: '代理中心', onClick: goAgent, highlight: true }]
       : [])

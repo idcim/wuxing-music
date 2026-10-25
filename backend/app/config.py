@@ -38,6 +38,22 @@ class Settings(BaseSettings):
     # 更大的文件建议走 OSS 直传（/api/admin/upload/oss-sign），不受此限。
     upload_max_mb: int = 500
 
+    # 2.0 能力默认关闭；私有课件桶必须与公开音乐/图片桶分离。
+    commerce_private_endpoint: str = ""
+    commerce_private_bucket: str = ""
+    commerce_private_key_id: str = ""
+    commerce_private_key_secret: str = ""
+    commerce_public_base: str = ""
+    commerce_wxpay_public_key: str = ""
+    commerce_wxpay_public_key_id: str = ""
+    commerce_virtual_approved: bool = False
+    commerce_virtual_ios_approved: bool = False
+    commerce_virtual_offer_id: str = ""
+    commerce_virtual_app_key: str = ""
+    commerce_push_token: str = ""
+    commerce_push_aes_key: str = ""
+    commerce_shipping_approved: bool = False
+
     # CORS 允许的后台前端地址
     cors_origins: list[str] = [
         "http://localhost:5173",

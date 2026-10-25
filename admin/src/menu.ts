@@ -19,7 +19,11 @@ export const NAV_MAIN: NavItem[] = [
   { path: '/cdkeys', title: '兑换码', perm: 'cdkeys:view', icon: 'Ticket' },
   { path: '/quiz', title: '测评管理', perm: 'quiz:view', icon: 'EditPen' },
   { path: '/orders', title: '订单管理', perm: 'orders:view', icon: 'List' },
-  { path: '/users', title: '用户', perm: 'users:view', icon: 'User' }
+  { path: '/users', title: '用户', perm: 'users:view', icon: 'User' },
+  { path: '/commerce-catalog', title: '课程与商品', perm: 'commerce:view', icon: 'Goods' },
+  { path: '/commerce-trades', title: '课程商城交易', perm: 'commerce:view', icon: 'List' },
+  { path: '/commerce-media', title: '课件与任务', perm: 'commerce:view', icon: 'VideoCamera' },
+  { path: '/commerce-settings', title: '课程商城配置', perm: 'commerce:view', icon: 'Setting' }
 ];
 
 /** 代理分成：独立子菜单，所有相关内容都在这一组里。

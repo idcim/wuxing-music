@@ -21,6 +21,10 @@ export default defineAppConfig({
     'pages/h5play/index',
     'pages/webview/index'
   ],
+  subPackages: process.env.TARO_ENV === 'weapp' ? [
+    { root: 'packages/courses', pages: ['list/index', 'detail/index', 'mine/index', 'learn/index'] },
+    { root: 'packages/shop', pages: ['list/index', 'detail/index', 'cart/index', 'checkout/index', 'addresses/index', 'orders/index', 'order/index', 'aftersale/index'] },
+  ] : [],
   window: {
     backgroundTextStyle: 'light',
     navigationBarBackgroundColor: '#03050a',

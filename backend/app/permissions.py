@@ -9,6 +9,15 @@ GET /api/admin/permissions 拉取后渲染角色的勾选矩阵、并据此显�
 """
 
 PERMISSION_GROUPS: list[dict] = [
+    {"module": "commerce", "label": "课程与商城", "items": [
+        {"key": "commerce:view", "label": "查看内容、交易和任务"},
+        {"key": "commerce:content", "label": "编辑课程与商品"},
+        {"key": "commerce:inventory", "label": "规格与库存管理"},
+        {"key": "commerce:ship", "label": "发货"},
+        {"key": "commerce:aftersales", "label": "审核售后及退货验收"},
+        {"key": "commerce:payments", "label": "退款、支付核验与任务重试"},
+        {"key": "commerce:settings", "label": "运营配置与售卖开关"},
+    ]},
     {
         "module": "dashboard",
         "label": "仪表盘",

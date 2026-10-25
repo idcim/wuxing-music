@@ -10,6 +10,8 @@ import { fmtTime } from '@/utils/format';
 import { resolveUrl } from '@/utils/url';
 import Icon from '@/components/Icon';
 import SleepTimer from '@/components/SleepTimer';
+import Playlist from '@/components/Playlist';
+import { isH5 } from '@/utils/platform';
 import UpgradePrompt from '@/components/UpgradePrompt';
 import type { ElementId } from '@/types';
 import type { IconName } from '@/components/Icon/paths';
@@ -19,7 +21,9 @@ const TAB_ROUTES = new Set([
   'pages/home/index',
   'pages/explore/index',
   'pages/member/index',
-  'pages/profile/index'
+  'pages/profile/index',
+  'packages/courses/list/index',
+  'packages/shop/list/index'
 ]);
 
 function currentPageHasTabBar(): boolean {
@@ -45,6 +49,7 @@ export default function MiniPlayer() {
   const getElementOfTrack = useContentStore((s) => s.getElementOfTrack);
 
   const [timerOpen, setTimerOpen] = useState(false);
+  const [listOpen, setListOpen] = useState(false);
 
   // 升级引导已抽到 UpgradePrompt（全屏播放器页不渲染 MiniPlayer，那边也要能弹）。
   // 无曲目时本组件不出现，但仍要把引导挂上——试听到限那一刻是有曲目的，
@@ -113,6 +118,7 @@ export default function MiniPlayer() {
           </View>
         </View>
 
+        {!isH5 && <View className="mini-player__timer" onClick={() => setListOpen(true)}><Icon name="listMusic" size={28} color="#94a3b8" strokeWidth={1.6} /></View>}
         <View
           className="mini-player__timer"
           style={timerVal ? { color: el.primary } : undefined}
@@ -157,6 +163,7 @@ export default function MiniPlayer() {
     </View>
 
     {/* 抽屉放到 .mini-player(fixed) 之外，否则 fixed 嵌套 fixed 会相对父级定位、被导航栏遮挡 */}
+    {!isH5 && <Playlist open={listOpen} onClose={() => setListOpen(false)} />}
     <SleepTimer open={timerOpen} onClose={() => setTimerOpen(false)} />
     <UpgradePrompt />
     </Fragment>
