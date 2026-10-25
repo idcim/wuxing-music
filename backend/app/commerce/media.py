@@ -55,26 +55,46 @@ def upload_policy(db, name, kind):
 
 def signed_url(asset):
     store = bucket()
-    if store.get_object_acl(asset.playback_key).acl not in ("private", "default"):
+    version = asset.playback_version
+    if not version and object_version(store.head_object(asset.playback_key)):
+        raise HTTPException(409, "课件尚未固定播放版本，请在后台确认课件版本")
+    params = {"versionId": version} if version else {}
+    if store.get_object_acl(asset.playback_key, **({"params": dict(params)} if params else {})).acl not in ("private", "default"):
         raise HTTPException(409, "课件对象访问权限异常")
-    return store.sign_url("GET", asset.playback_key, 900)
+    return store.sign_url("GET", asset.playback_key, 900, **({"params": params} if params else {}))
+
+
+def object_version(metadata):
+    version = getattr(metadata, "headers", {}).get("x-oss-version-id", "")
+    if version == "null":
+        raise HTTPException(409, "课件为可覆盖的 null 版本，请恢复 OSS 版本控制并重新上传课件")
+    return version
 
 
 def complete_original(db, asset_id, duration):
     # 与旧 Worker 按相同顺序锁定任务；终止旧租约，迟到结果不能覆盖原文件。
     job = db.query(Job).filter_by(key=f"media:{asset_id}").populate_existing().with_for_update().first()
     asset = db.query(MediaAsset).filter_by(id=asset_id).populate_existing().with_for_update().one()
-    if asset.state == "ready":
+    already_ready = asset.state == "ready"
+    if already_ready and asset.playback_version:
         return asset
     allowed = {"video": {".mp4"}, "audio": {".mp3", ".wav", ".m4a"}}
-    if Path(asset.source_key).suffix.lower() not in allowed.get(asset.kind, set()):
+    if not already_ready and Path(asset.source_key).suffix.lower() not in allowed.get(asset.kind, set()):
         raise HTTPException(409, "已停用转码，请上传可直接播放的 MP4 视频或 MP3/M4A/WAV 音频")
     store = bucket()
-    metadata = store.head_object(asset.source_key)
+    key = asset.playback_key if already_ready else asset.source_key
+    metadata = store.head_object(key)
+    version = object_version(metadata)
     if not 0 < metadata.content_length <= MAX_SIZE:
         raise HTTPException(422, "上传文件大小无效")
-    if store.get_object_acl(asset.source_key).acl not in ("private", "default"):
+    if store.get_object_acl(key, **({"params": {"versionId": version}} if version else {})).acl not in ("private", "default"):
         raise HTTPException(409, "课件源对象不是私有")
+    asset.playback_version = version
+    if already_ready:
+        if version:
+            record(db, f"media:{asset.id}", "version_pinned")
+            db.commit()
+        return asset
     asset.playback_key, asset.duration, asset.size = asset.source_key, duration, metadata.content_length
     asset.state, asset.error = "ready", ""
     if job and job.state != "done":

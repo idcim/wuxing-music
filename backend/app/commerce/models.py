@@ -5,7 +5,7 @@ from sqlalchemy.orm import Mapped, declarative_base, mapped_column
 from app.models import User
 
 Base = declarative_base()
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class Row:
@@ -57,6 +57,7 @@ class MediaAsset(Row, Base):
     name: Mapped[str] = mapped_column(String(255))
     source_key: Mapped[str] = mapped_column(String(512), default="")
     playback_key: Mapped[str] = mapped_column(String(512), default="")
+    playback_version: Mapped[str] = mapped_column(String(1024), default="", server_default="")
     state: Mapped[str] = mapped_column(String(16), default="uploading")
     duration: Mapped[int] = mapped_column(default=0)
     size: Mapped[int] = mapped_column(default=0)

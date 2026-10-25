@@ -191,6 +191,21 @@ def rehearse(folder, container, password, port):
         check_equal(snapshot(legacy_restore), migrated, "重复迁移")
         print("旧库恢复升级与重复迁移通过；备份恢复 2.0 交易与任务", flush=True)
         unpaid_id = seed_commerce(legacy_restore)
+        # 模拟已运营的 v2：实际移除新增列和版本记录，再验证 v3 ALTER 与重入。
+        before_upgrade = snapshot(legacy_restore)
+        with legacy_restore.begin() as connection:
+            old_media = list(connection.execute(text("SELECT id, state, duration, playback_key FROM course_media ORDER BY id")))
+            connection.exec_driver_sql("ALTER TABLE course_media DROP COLUMN playback_version")
+            connection.execute(text("DELETE FROM commerce_schema_version WHERE version = 3"))
+        upgrade(legacy_restore)
+        upgrade(legacy_restore)
+        unchanged = set(before_upgrade) - {"course_media", "commerce_schema_version"}
+        check_equal(snapshot(legacy_restore, unchanged), {name: before_upgrade[name] for name in unchanged}, "v2 升级 v3 非媒体业务")
+        with legacy_restore.begin() as connection:
+            restored_media = list(connection.execute(text("SELECT id, state, duration, playback_key FROM course_media ORDER BY id")))
+            if old_media != restored_media or connection.execute(text("SELECT COUNT(*) FROM course_media WHERE playback_version <> ''")).scalar():
+                raise RuntimeError("v2 升级 v3 改写了已有课件")
+            connection.execute(text("UPDATE course_media SET playback_version = 'synthetic-pinned-version' WHERE id = 100"))
         current = snapshot(legacy_restore)
         v2_dump = copy_database(names[1], names[2], folder / "commerce.sql")
         check_equal(snapshot(v2_restore), current, "2.0 完整备份恢复")
@@ -215,7 +230,7 @@ def rehearse(folder, container, password, port):
                 "checks": ["legacy_restore_exact", "migration_preserves_legacy", "migration_reentrant",
                            "v2_restore_exact", "v2_migration_preserves_operations", "progress_restored",
                            "expired_lease_recovers", "unpaid_order_closed", "reserved_inventory_released",
-                           "failed_history_preserved"]}
+                           "failed_history_preserved", "v2_media_version_upgrade", "v2_upgrade_preserves_other_domains"]}
     finally:
         for engine in engines:
             engine.dispose()

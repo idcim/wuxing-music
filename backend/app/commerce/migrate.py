@@ -1,18 +1,24 @@
 """显式版本化迁移：python -m app.commerce.migrate。执行前备份并预演。"""
 from datetime import datetime
+from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from .models import Base, Category, Course, Lesson, Product, SCHEMA_VERSION, SchemaVersion, Sku, Teacher
 
 
 def upgrade(engine):
-    # 此版本只创建独立新表，不修改音乐会员财务数据。DDL 可重复执行。
+    # 仅更新课程商城结构，不修改音乐会员财务数据。DDL 可重复执行。
     Base.metadata.create_all(engine)
+    if "playback_version" not in {column["name"] for column in inspect(engine).get_columns("course_media")}:
+        # MySQL 的 DDL 会隐式提交；先检查实际结构，允许中断后安全重跑。
+        with engine.begin() as connection:
+            connection.exec_driver_sql("ALTER TABLE course_media ADD COLUMN playback_version VARCHAR(1024) NOT NULL DEFAULT ''")
     with Session(engine) as db:
+        for version in range(2, SCHEMA_VERSION + 1):
+            if not db.get(SchemaVersion, version):
+                db.add(SchemaVersion(version=version))
         if db.get(SchemaVersion, 1):
-            if not db.get(SchemaVersion, SCHEMA_VERSION):
-                db.add(SchemaVersion(version=SCHEMA_VERSION))
-                db.commit()
+            db.commit()
             return
         categories = [Category(kind=kind, name=name, sort=i) for i, (kind, name) in enumerate([
             ("course", "声乐课程"), ("physical", "咖啡"), ("physical", "五行茶"),
@@ -41,7 +47,6 @@ def upgrade(engine):
             db.add(Sku(product_id=product.id, name="250g 单袋（示例规格）" if name == "咖啡" else "100g 单盒（示例规格）",
                 price_fen=6800 if name == "咖啡" else 8800, stock=0))
         db.add(SchemaVersion(version=1, applied_at=datetime.utcnow()))
-        db.add(SchemaVersion(version=SCHEMA_VERSION))
         db.commit()
 
 
