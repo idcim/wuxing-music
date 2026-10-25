@@ -5,7 +5,7 @@ from sqlalchemy.orm import Mapped, declarative_base, mapped_column
 from app.models import User
 
 Base = declarative_base()
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 class Row:
@@ -197,6 +197,17 @@ class Shipment(Row, Base):
     tracking_no: Mapped[str] = mapped_column(String(80))
     sync_state: Mapped[str] = mapped_column(String(16), default="pending")
     error: Mapped[str] = mapped_column(Text, default="")
+
+
+class LogisticsQuery(Base):
+    __tablename__ = "commerce_logistics_query"
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), default="")
+    token: Mapped[str] = mapped_column(String(32), default="")
+    data: Mapped[dict] = mapped_column(JSON, default=dict)
+    queried_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    next_query_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    error: Mapped[str] = mapped_column(String(255), default="")
 
 
 class AfterSale(Row, Base):

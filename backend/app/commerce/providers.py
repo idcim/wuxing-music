@@ -25,7 +25,8 @@ def capabilities():
             and settings.commerce_push_token and settings.commerce_push_aes_key and settings.commerce_public_base),
         course_ios=bool(settings.commerce_virtual_ios_approved),
         private_media=bool(settings.commerce_private_bucket and settings.commerce_private_endpoint and settings.commerce_private_key_id and settings.commerce_private_key_secret),
-        shipping=bool(settings.commerce_shipping_approved))
+        shipping=bool(settings.commerce_shipping_approved),
+        logistics=bool(settings.commerce_logistics_provider == "kuaidi100" and settings.commerce_logistics_customer and settings.commerce_logistics_key))
 
 
 def pay_cfg(db, require_enabled=False):

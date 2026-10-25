@@ -39,13 +39,14 @@ from app.security import get_current_admin
 from app.routers.mp import get_current_user
 from app.commerce import admin, aftersales, attachments, callbacks, catalog, common, lifecycle, monitor, providers, public, schemas, trading, worker
 from app.commerce.migrate import upgrade
-from app.commerce.models import Address, AfterSale, Base, Course, Enrollment, Event, Job, Lesson, MediaAsset, Order, OrderItem, Payment, Product, Progress, SchemaVersion, Shipment, Sku, WorkerHeartbeat
+from app.commerce.models import Address, AfterSale, Base, Course, Enrollment, Event, Job, Lesson, MediaAsset, Order, OrderItem, Payment, Product, Progress, SCHEMA_VERSION, SchemaVersion, Shipment, Sku, WorkerHeartbeat
 from commerce_lease_cases import LeaseCases
 from commerce_refund_cases import RefundCases
 from commerce_media_cases import MediaCases
+from commerce_logistics_cases import LogisticsCases
 
 
-class CommerceTests(LeaseCases, RefundCases, MediaCases, unittest.TestCase):
+class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.mysql_engine = None
@@ -156,6 +157,7 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, unittest.TestCase):
         with self.sessions() as db:
             db.delete(db.get(SchemaVersion, 2))
             db.delete(db.get(SchemaVersion, 3))
+            db.delete(db.get(SchemaVersion, 4))
             db.get(Product, 100).title = "运营已修改商品"
             db.commit()
         WorkerHeartbeat.__table__.drop(self.engine)
@@ -174,7 +176,7 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, unittest.TestCase):
 
     def test_v2_upgrade_adds_media_version_without_rewriting_assets(self):
         with self.engine.begin() as connection:
-            connection.execute(text("DELETE FROM commerce_schema_version WHERE version = 3"))
+            connection.execute(text("DELETE FROM commerce_schema_version WHERE version >= 3"))
             connection.exec_driver_sql("ALTER TABLE course_media DROP COLUMN playback_version")
         self.assertFalse(self.client.get("/api/admin/commerce/status").json()["data"]["migrated"])
         upgrade(self.engine)
@@ -183,7 +185,7 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, unittest.TestCase):
             self.assertTrue(common.migrated(db))
             asset = db.get(MediaAsset, 100)
             self.assertEqual((asset.state, asset.duration, asset.playback_version), ("ready", 100, ""))
-            self.assertEqual(db.query(SchemaVersion).count(), 3)
+            self.assertEqual(db.query(SchemaVersion).count(), SCHEMA_VERSION)
 
     def test_worker_heartbeat_detects_missing_queue_and_stale_process(self):
         transaction_monitor = monitor.WorkerMonitor(self.sessions, hostname="transactions", queue="transactions")

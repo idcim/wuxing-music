@@ -12,6 +12,8 @@ import time
 import uuid
 from datetime import datetime, timedelta
 from contextlib import contextmanager
+from types import SimpleNamespace
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -163,8 +165,8 @@ def rehearse(folder, container, password, port):
     os.environ["DATABASE_URL"] = url.set(database=names[0]).render_as_string(hide_password=False)
     sys.path.insert(0, str(ROOT / "backend"))
     from app.commerce.migrate import upgrade
-    from app.commerce.models import SCHEMA_VERSION, Job, Order, Progress, SchemaVersion, Sku
-    from app.commerce import worker
+    from app.commerce.models import SCHEMA_VERSION, Job, LogisticsQuery, Order, Progress, SchemaVersion, Shipment, Sku
+    from app.commerce import logistics, worker
     from sqlalchemy.orm import Session, sessionmaker
 
     def copy_database(source_name, target_name, path):
@@ -177,6 +179,19 @@ def rehearse(folder, container, password, port):
             docker(*prefix, "-i", container, "mysql", "-uroot", "--default-character-set=utf8mb4",
                    target_name, stdin=input_file, stdout=subprocess.PIPE)
         return {"bytes": path.stat().st_size, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+
+    def query_logistics(engine, cached):
+        response = SimpleNamespace(raise_for_status=lambda: None, json=lambda: {
+            "status": "200", "com": "shunfeng", "nu": "SYNTHETIC001", "state": "0",
+            "data": [{"time": "2026-10-26 10:00:00", "context": "合成运输轨迹"}]})
+        with patch.object(logistics.settings, "commerce_logistics_customer", "rehearsal-customer"), \
+             patch.object(logistics.settings, "commerce_logistics_key", "rehearsal-key"), \
+             patch.object(logistics.settings, "commerce_logistics_provider", "kuaidi100"), \
+             patch.object(logistics.httpx, "post", return_value=response) as post, Session(engine) as db:
+            shipment = db.query(Shipment).one()
+            result = logistics.trace(db, db.get(Order, shipment.order_id), shipment)
+            if result["cached"] != cached or not result["events"] or post.call_count != (0 if cached else 1):
+                raise RuntimeError("物流查询缓存恢复或限频失败")
 
     try:
         print("MySQL 已就绪；备份恢复旧业务数据并执行真实迁移", flush=True)
@@ -191,12 +206,13 @@ def rehearse(folder, container, password, port):
         check_equal(snapshot(legacy_restore), migrated, "重复迁移")
         print("旧库恢复升级与重复迁移通过；备份恢复 2.0 交易与任务", flush=True)
         unpaid_id = seed_commerce(legacy_restore)
-        # 模拟已运营的 v2：实际移除新增列和版本记录，再验证 v3 ALTER 与重入。
+        # 模拟已运营的 v2：实际移除新增列、缓存表和版本记录，再验证升级与重入。
         before_upgrade = snapshot(legacy_restore)
+        LogisticsQuery.__table__.drop(legacy_restore)
         with legacy_restore.begin() as connection:
             old_media = list(connection.execute(text("SELECT id, state, duration, playback_key FROM course_media ORDER BY id")))
             connection.exec_driver_sql("ALTER TABLE course_media DROP COLUMN playback_version")
-            connection.execute(text("DELETE FROM commerce_schema_version WHERE version = 3"))
+            connection.execute(text("DELETE FROM commerce_schema_version WHERE version >= 3"))
         upgrade(legacy_restore)
         upgrade(legacy_restore)
         unchanged = set(before_upgrade) - {"course_media", "commerce_schema_version"}
@@ -206,11 +222,13 @@ def rehearse(folder, container, password, port):
             if old_media != restored_media or connection.execute(text("SELECT COUNT(*) FROM course_media WHERE playback_version <> ''")).scalar():
                 raise RuntimeError("v2 升级 v3 改写了已有课件")
             connection.execute(text("UPDATE course_media SET playback_version = 'synthetic-pinned-version' WHERE id = 100"))
+        query_logistics(legacy_restore, cached=False)
         current = snapshot(legacy_restore)
         v2_dump = copy_database(names[1], names[2], folder / "commerce.sql")
         check_equal(snapshot(v2_restore), current, "2.0 完整备份恢复")
         upgrade(v2_restore)
         check_equal(snapshot(v2_restore), current, "2.0 恢复后重复迁移")
+        query_logistics(v2_restore, cached=True)
         with Session(v2_restore) as db:
             if not db.get(SchemaVersion, SCHEMA_VERSION) or db.query(Progress).one().position != 37:
                 raise RuntimeError("结构版本或学习进度恢复失败")
@@ -230,7 +248,8 @@ def rehearse(folder, container, password, port):
                 "checks": ["legacy_restore_exact", "migration_preserves_legacy", "migration_reentrant",
                            "v2_restore_exact", "v2_migration_preserves_operations", "progress_restored",
                            "expired_lease_recovers", "unpaid_order_closed", "reserved_inventory_released",
-                           "failed_history_preserved", "v2_media_version_upgrade", "v2_upgrade_preserves_other_domains"]}
+                           "failed_history_preserved", "v2_media_version_upgrade", "v2_upgrade_preserves_other_domains",
+                           "logistics_cache_restored", "logistics_cooldown_prevents_requery"]}
     finally:
         for engine in engines:
             engine.dispose()

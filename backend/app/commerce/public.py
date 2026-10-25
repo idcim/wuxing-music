@@ -287,12 +287,18 @@ def cancel(ident: int, user: User = Depends(get_current_user), db: Session = Dep
 
 @api.get("/orders/{ident}/logistics")
 def logistics(ident: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    from .shipping import trace
+    from .logistics import trace
+    throttle(user.id, "logistics", 30)
     order = owned_order(db, user.id, ident)
     shipment = db.query(Shipment).filter_by(order_id=ident).first()
     if not shipment:
         raise HTTPException(409, "尚未发货")
-    return ok({**serialize(shipment), "trace": trace(db, order, shipment)})
+    identity = (shipment.carrier, shipment.tracking_no)
+    result = trace(db, order, shipment)
+    db.refresh(shipment)
+    if identity != (shipment.carrier, shipment.tracking_no):
+        raise HTTPException(409, "运单已更新，请刷新后重新查询")
+    return ok({**serialize(shipment), "trace": result})
 
 
 @api.post("/orders/{ident}/receive")

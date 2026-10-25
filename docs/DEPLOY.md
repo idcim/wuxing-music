@@ -87,7 +87,7 @@ docker compose logs -f
 之后**只要 `git push` 到 GitHub `master`，1 分钟内服务器自动拉取重建**。
 日志在 `/var/log/wuxing-deploy.log`。可覆盖的环境变量（分支 `WUXING_BRANCH`、健康地址 `WUXING_HEALTH_URL`、是否回滚 `WUXING_ROLLBACK` 等）见脚本头部注释。
 
-课程商城 2.0 使用可选 `commerce` profile，首次启用前需完成备份、结构 v3 迁移（含课件播放版本列）及业务验收，具体顺序见 [2.0 部署记录](V2-COMMERCE.md)。交易 `commerce-worker` 与旧媒体任务兼容进程 `commerce-media-worker` 独立运行，均有数据库心跳健康检查。自动发布默认 `WUXING_COMMERCE=auto`，已有任务服务会随 API 一起更新并检查健康；未启用时不自动开启。首次显式启用可设为 `1`，但不会代为运行数据库迁移。任务服务离线或积压可在后台“课件与任务”查看，部署平台应监控容器 unhealthy 状态。
+课程商城 2.0 使用可选 `commerce` profile，首次启用前需完成备份、结构 v4 迁移（含课件播放版本列、物流缓存与限频表）及业务验收，具体顺序见 [2.0 部署记录](V2-COMMERCE.md)。交易 `commerce-worker` 与旧媒体任务兼容进程 `commerce-media-worker` 独立运行，均有数据库心跳健康检查。自动发布默认 `WUXING_COMMERCE=auto`，已有任务服务会随 API 一起更新并检查健康；未启用时不自动开启。首次显式启用可设为 `1`，但不会代为运行数据库迁移。任务服务离线或积压可在后台“课件与任务”查看，部署平台应监控容器 unhealthy 状态。
 
 ### 2.0 本地 MySQL 备份恢复演练
 
