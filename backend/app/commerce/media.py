@@ -43,13 +43,14 @@ def upload_policy(db, name, kind):
     db.add(asset)
     db.commit()
     policy = {"expiration": (datetime.utcnow() + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
-              "conditions": [["eq", "$key", key], ["eq", "$x-oss-object-acl", "private"], ["content-length-range", 1, MAX_SIZE]]}
+              "conditions": [["eq", "$key", key], ["eq", "$x-oss-object-acl", "private"],
+                             ["eq", "$x-oss-forbid-overwrite", "true"], ["content-length-range", 1, MAX_SIZE]]}
     encoded = base64.b64encode(json.dumps(policy).encode()).decode()
     endpoint = settings.commerce_private_endpoint.replace("https://", "").replace("http://", "").rstrip("/")
     return {"id": asset.id, "host": f"https://{settings.commerce_private_bucket}.{endpoint}", "fields": {
         "key": key, "policy": encoded, "OSSAccessKeyId": settings.commerce_private_key_id,
         "Signature": base64.b64encode(hmac.new(settings.commerce_private_key_secret.encode(), encoded.encode(), hashlib.sha1).digest()).decode(),
-        "x-oss-object-acl": "private", "success_action_status": "200"}}
+        "x-oss-object-acl": "private", "x-oss-forbid-overwrite": "true", "success_action_status": "200"}}
 
 
 def signed_url(asset):

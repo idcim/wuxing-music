@@ -1,4 +1,8 @@
 """仅上传 OSS 原文件：禁止下载、探测及转码，保留私有授权和旧任务历史。"""
+import base64
+import hashlib
+import hmac
+import json
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -8,6 +12,21 @@ from app.commerce.models import Event, Job, MediaAsset
 
 
 class MediaCases:
+    def test_original_upload_policy_binds_private_non_overwriting_object(self):
+        config = SimpleNamespace(commerce_private_bucket="private-test", commerce_private_endpoint="https://oss.example.test",
+                                 commerce_private_key_id="test-id", commerce_private_key_secret="synthetic-test-secret")
+        with patch.object(media, "bucket", return_value=object()), patch.object(media, "settings", config):
+            tickets = [self.client.post("/api/admin/commerce/media/sign", json={"name": "lesson.mp4", "kind": "video"}).json()["data"] for _ in range(2)]
+        self.assertNotEqual(tickets[0]["fields"]["key"], tickets[1]["fields"]["key"])
+        for ticket in tickets:
+            fields = ticket["fields"]
+            conditions = json.loads(base64.b64decode(fields["policy"]))["conditions"]
+            for key, value in (("key", fields["key"]), ("x-oss-object-acl", "private"), ("x-oss-forbid-overwrite", "true")):
+                self.assertEqual(fields[key], value)
+                self.assertIn(["eq", "$" + key, value], conditions)
+            expected = base64.b64encode(hmac.new(config.commerce_private_key_secret.encode(), fields["policy"].encode(), hashlib.sha1).digest()).decode()
+            self.assertEqual(fields["Signature"], expected)
+
     def test_course_original_ready_without_conversion_or_worker(self):
         for ident, kind, extension in ((200, "video", "mp4"), (201, "audio", "wav")):
             with self.subTest(kind=kind):
