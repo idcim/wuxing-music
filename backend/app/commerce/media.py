@@ -12,6 +12,7 @@ from fastapi import HTTPException
 
 from app.config import settings
 from .models import MediaAsset
+from .common import guard_claim
 
 MAX_SIZE = 2 * 1024**3
 
@@ -64,17 +65,20 @@ def process(db, asset_id):
     asset = db.get(MediaAsset, asset_id)
     if not asset or asset.state == "ready":
         return
+    source_key, kind = asset.source_key, asset.kind
+    # 释放读事务及连接；下载、转码与上传可能持续很久。
+    db.commit()
     store = bucket()
-    metadata = store.head_object(asset.source_key)
+    metadata = store.head_object(source_key)
     if metadata.content_length > MAX_SIZE:
         raise RuntimeError("媒体超过 2GB")
-    if store.get_object_acl(asset.source_key).acl not in ("private", "default"):
+    if store.get_object_acl(source_key).acl not in ("private", "default"):
         raise RuntimeError("课件源对象不是私有")
     with tempfile.TemporaryDirectory(prefix="course-") as folder:
-        source = str(Path(folder) / ("source" + Path(asset.source_key).suffix))
-        target = str(Path(folder) / ("play.mp4" if asset.kind == "video" else "play.m4a"))
+        source = str(Path(folder) / ("source" + Path(source_key).suffix))
+        target = str(Path(folder) / ("play.mp4" if kind == "video" else "play.m4a"))
         import oss2
-        oss2.resumable_download(store, asset.source_key, source)
+        oss2.resumable_download(store, source_key, source)
         probe = subprocess.run(["ffprobe", "-v", "error", "-show_format", "-show_streams", "-of", "json", source],
                                check=True, capture_output=True, text=True, timeout=90)
         info = json.loads(probe.stdout)
@@ -82,7 +86,7 @@ def process(db, asset_id):
         if not 0 < duration <= 86400:
             raise RuntimeError("媒体时长不合法")
         command = ["ffmpeg", "-nostdin", "-y", "-v", "error", "-threads", "2", "-i", source]
-        if asset.kind == "video":
+        if kind == "video":
             command += ["-map", "0:v:0", "-map", "0:a:0?", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast", "-crf", "23"]
         else:
             command += ["-map", "0:a:0", "-vn"]
@@ -90,5 +94,9 @@ def process(db, asset_id):
         subprocess.run(command, check=True, capture_output=True, timeout=1800)
         key = "course/play/" + uuid.uuid4().hex + Path(target).suffix
         oss2.resumable_upload(store, key, target, headers={"x-oss-object-acl": "private"})
+        guard_claim(db)
+        asset = db.get(MediaAsset, asset_id)
+        if asset is None:
+            raise RuntimeError("媒体资产已不存在，无法发布处理结果")
         asset.playback_key, asset.duration, asset.size, asset.state, asset.error = key, duration, metadata.content_length, "ready", ""
         db.commit()

@@ -9,4 +9,5 @@ export const stateLabel = (value: string) => ({ draft: '草稿', published: '已
   pending: '待处理', initiating: '发起中', issued: '已发起', paid: '已支付', closed: '已关闭', closing: '关单确认中', unshipped: '待发货', shipped: '已发货', received: '已收货',
   requested: '待审核', awaiting_return: '待寄回', returning: '待验收', refunding: '退款中', refunded: '已退款', rejected: '未通过', failed: '失败', running: '处理中', done: '已完成', synced: '已同步', unpaid: '待付款',
   waiting: '等待确认', manual_retry: '手动重试', created: '已创建', updated: '已更新', saved: '已保存',
+  lease_lost: '过期执行已丢弃',
 } as Record<string, string>)[value] || value;

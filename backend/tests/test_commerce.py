@@ -40,9 +40,10 @@ from app.routers.mp import get_current_user
 from app.commerce import admin, aftersales, attachments, callbacks, catalog, common, lifecycle, monitor, providers, public, schemas, trading, worker
 from app.commerce.migrate import upgrade
 from app.commerce.models import Address, AfterSale, Base, Course, Enrollment, Event, Job, Lesson, MediaAsset, Order, OrderItem, Payment, Product, Progress, SchemaVersion, Shipment, Sku, WorkerHeartbeat
+from commerce_lease_cases import LeaseCases
 
 
-class CommerceTests(unittest.TestCase):
+class CommerceTests(LeaseCases, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.mysql_engine = None

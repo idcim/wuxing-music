@@ -6,6 +6,7 @@ from app.config import settings
 from app.models import User
 from app.routers.mp import _get_access_token
 from .models import Order, OrderItem, Shipment
+from .common import guard_claim
 
 
 def call(db, action, payload):
@@ -22,6 +23,10 @@ def call(db, action, payload):
 
 def sync(db, shipment_id):
     shipment = db.get(Shipment, shipment_id)
+    if shipment is None:
+        raise RuntimeError("发货记录不存在")
+    if shipment.sync_state == "synced":
+        return
     order = db.get(Order, shipment.order_id)
     user = db.get(User, order.user_id)
     lines = db.query(OrderItem).filter_by(order_id=order.id).all()
@@ -32,6 +37,7 @@ def sync(db, shipment_id):
             item_desc="、".join(f"{i.title}×{i.quantity - i.refund_quantity}" for i in lines)[:120],
             contact=dict(receiver_contact=order.address["phone"]))],
         upload_time=datetime.now(timezone.utc).isoformat(), payer=dict(openid=order.payer_openid)))
+    guard_claim(db)
     shipment.sync_state, shipment.error = "synced", ""
     db.commit()
 
@@ -53,6 +59,7 @@ def confirm_receipt(db, order):
     if data.get("order_state") not in (3, 4, 6):
         raise RuntimeError("微信尚未确认收货，请在微信组件中完成确认")
     from .common import record
+    guard_claim(db)
     order.fulfillment = "received"
     record(db, order.order_no, "receipt_verified")
     db.commit()

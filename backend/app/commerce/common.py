@@ -18,6 +18,24 @@ class RetryLater(RuntimeError):
     """渠道正常处理中；继续持久补查，不消耗异常重试次数。"""
 
 
+class LeaseLost(RuntimeError):
+    """旧执行已失去租约，必须放弃本地写入，不能覆盖接管者的结果。"""
+
+
+def guard_claim(db):
+    claim = db.info.get("commerce_claim")
+    if claim is None:
+        return  # 普通 API/回调事务不属于后台任务。
+    ident, attempt, lease_until = claim
+    # 不刷新整个 ORM 对象，以免覆盖业务事务中尚未提交的字段修改。
+    with db.no_autoflush:
+        owned = db.query(Job.id).filter(Job.id == ident, Job.state == "running",
+            Job.attempts == attempt, Job.lease_until == lease_until,
+            Job.lease_until > datetime.utcnow()).with_for_update().first()
+    if owned is None:
+        raise LeaseLost("任务租约已到期或已由其他执行接管")
+
+
 def ok(data=None):
     return {"code": 0, "data": data, "msg": "ok"}
 

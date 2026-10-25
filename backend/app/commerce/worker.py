@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import or_, update
 
 from app.database import SessionLocal
-from .common import RetryLater, migrated, record
+from .common import LeaseLost, RetryLater, guard_claim, migrated, record
 from .models import Job, MediaAsset, Order, Payment, Shipment
 
 
@@ -46,6 +46,7 @@ def perform(db, job):
             trading.release_closed(db, order)
             db.commit()
         elif job.kind == "close":
+            guard_claim(db)
             db.execute(update(Order).where(Order.id == order.id, Order.status == "pending").values(status="closing"))
             db.commit()
             if providers.close_payment(db, order):
@@ -59,6 +60,48 @@ def perform(db, job):
         raise RuntimeError("未知任务类型")
 
 
+def discard(db):
+    db.rollback()
+    ident, attempt, lease_until = db.info["commerce_claim"]
+    record(db, f"job:{ident}", "lease_lost", {"attempt": attempt,
+        "lease_until": lease_until.isoformat(), "reason": "租约失效，旧执行结果已丢弃"})
+    db.commit()
+
+
+def complete(db, outcome, error=""):
+    """归属校验与任务状态、资产状态、审计在同一事务内完成。"""
+    try:
+        guard_claim(db)
+    except LeaseLost:
+        discard(db)
+        return False
+    ident = db.info["commerce_claim"][0]
+    job = db.get(Job, ident)
+    payload = job.payload if isinstance(job.payload, dict) else {}
+    job.error, job.lease_until = error[:1500], None
+    if outcome == "done":
+        job.state = "done"
+        record(db, f"job:{ident}", "done", {"kind": job.kind})
+    elif outcome == "waiting":
+        job.state, job.attempts = "pending", max(0, job.attempts - 1)
+        job.run_at = datetime.utcnow() + timedelta(seconds=60)
+        record(db, f"job:{ident}", "waiting", {"reason": job.error})
+    else:
+        job.state = "failed" if job.attempts >= 3 else "pending"
+        job.run_at = datetime.utcnow() + timedelta(seconds=60 * job.attempts)
+        if job.kind == "media":
+            asset = db.get(MediaAsset, payload["asset_id"]) if payload.get("asset_id") is not None else None
+            if asset and asset.state != "ready":
+                asset.state, asset.error = ("failed" if job.state == "failed" else "processing"), job.error
+        if job.kind == "shipping":
+            shipment = db.get(Shipment, payload["shipment_id"]) if payload.get("shipment_id") is not None else None
+            if shipment and shipment.sync_state != "synced":
+                shipment.sync_state, shipment.error = "failed", job.error
+        record(db, f"job:{ident}", job.state, {"error": job.error})
+    db.commit()
+    return True
+
+
 def run_one(sessions=SessionLocal, monitor=None, queue="all"):
     if queue not in ("all", "media", "transactions"):
         raise ValueError("未知任务队列")
@@ -66,8 +109,10 @@ def run_one(sessions=SessionLocal, monitor=None, queue="all"):
         if not migrated(db):
             return False
         now = datetime.utcnow()
+        eligible = or_(Job.state == "pending", (Job.state == "running") &
+            or_(Job.lease_until.is_(None), Job.lease_until < now))
         candidate = db.query(Job).filter(Job.run_at <= now,
-            or_(Job.state == "pending", (Job.state == "running") & (Job.lease_until < now)))
+            eligible)
         if queue == "media":
             candidate = candidate.filter(Job.kind == "media")
         elif queue == "transactions":
@@ -75,45 +120,36 @@ def run_one(sessions=SessionLocal, monitor=None, queue="all"):
         job = candidate.order_by(Job.run_at, Job.id).first()
         if not job:
             return False
-        claimed = db.execute(update(Job).where(Job.id == job.id,
-            or_(Job.state == "pending", (Job.state == "running") & (Job.lease_until < now)))
-            .values(state="running", attempts=Job.attempts + 1, lease_until=now + timedelta(hours=2))).rowcount
+        ident, attempt = job.id, job.attempts + 1
+        # MySQL DATETIME 为秒级；明确对齐精度，以便跨事务精确比较执行归属。
+        lease_until = now.replace(microsecond=0) + timedelta(hours=2)
+        claimed = db.execute(update(Job).where(Job.id == ident, Job.run_at <= now,
+            Job.attempts == attempt - 1, eligible)
+            .values(state="running", attempts=attempt, lease_until=lease_until)).rowcount
         if not claimed:
             db.rollback()
             return False
-        ident = job.id
         db.commit()
+        db.info["commerce_claim"] = (ident, attempt, lease_until)
         if monitor:
             monitor.active(ident)
         try:
+            guard_claim(db)
+            # 首次验证后释放行锁，外部网络与长转码期间不占据任务锁。
+            db.commit()
             job = db.get(Job, ident)
             perform(db, job)
-            job.state, job.error, job.lease_until = "done", "", None
-            record(db, f"job:{ident}", "done", {"kind": job.kind})
-            db.commit()
+            complete(db, "done")
+        except LeaseLost:
+            discard(db)
         except RetryLater as exc:
             db.rollback()
-            job = db.get(Job, ident)
-            job.state, job.error, job.lease_until = "pending", str(exc)[:1500], None
-            job.attempts = max(0, job.attempts - 1)
-            job.run_at = datetime.utcnow() + timedelta(seconds=60)
-            record(db, f"job:{ident}", "waiting", {"reason": job.error})
-            db.commit()
+            complete(db, "waiting", str(exc))
         except Exception as exc:
             db.rollback()
-            job = db.get(Job, ident)
-            job.state = "failed" if job.attempts >= 3 else "pending"
-            job.error = str(exc)[:1500]
-            job.run_at, job.lease_until = datetime.utcnow() + timedelta(seconds=60 * job.attempts), None
-            if job.kind == "media":
-                asset = db.get(MediaAsset, job.payload["asset_id"])
-                asset.state, asset.error = ("failed" if job.state == "failed" else "processing"), job.error
-            if job.kind == "shipping":
-                shipment = db.get(Shipment, job.payload["shipment_id"])
-                shipment.sync_state, shipment.error = "failed", job.error
-            record(db, f"job:{ident}", job.state, {"error": job.error})
-            db.commit()
+            complete(db, "error", str(exc))
         finally:
+            db.info.pop("commerce_claim", None)
             if monitor:
                 monitor.active(None)
         return True

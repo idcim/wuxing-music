@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy import update
 
 from .catalog import has_access
-from .common import enabled, enqueue, record, require_row, serialize
+from .common import enabled, enqueue, guard_claim, record, require_row, serialize
 from .models import Address, Course, Enrollment, InventoryLog, Order, OrderItem, Payment, Product, Sku
 
 
@@ -97,6 +97,7 @@ def grant(db, uid, course_id, source, days):
 
 
 def settle_paid(db, order_id, transaction_id, amount_fen):
+    guard_claim(db)
     order = db.query(Order).filter_by(id=order_id).populate_existing().with_for_update().one()
     if amount_fen != order.amount_fen or not transaction_id:
         raise HTTPException(409, "支付金额或交易标识不匹配")
@@ -132,6 +133,7 @@ def settle_paid(db, order_id, transaction_id, amount_fen):
 
 
 def release_closed(db, order):
+    guard_claim(db)
     count = db.execute(update(Order).where(Order.id == order.id, Order.status.in_(["pending", "closing"]))
         .values(status="closed")).rowcount
     if not count:

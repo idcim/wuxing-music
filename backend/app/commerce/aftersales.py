@@ -4,7 +4,7 @@ from sqlalchemy import update
 
 from app import wxpay
 from app.models import User
-from .common import RetryLater, enqueue, record
+from .common import RetryLater, enqueue, guard_claim, record
 from .models import AfterSale, Enrollment, InventoryLog, Order, OrderItem, Sku
 from .providers import pay_cfg, virtual_request
 from .attachments import normalize
@@ -71,6 +71,7 @@ def review(db, sale_id, body, operator):
 
 
 def finalize(db, sale_id):
+    guard_claim(db)
     sale = db.query(AfterSale).filter_by(id=sale_id).populate_existing().with_for_update().one()
     if sale.state == "refunded":
         return
