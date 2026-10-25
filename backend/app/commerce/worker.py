@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import or_, update
 
 from app.database import SessionLocal
-from .common import migrated, record
+from .common import RetryLater, migrated, record
 from .models import Job, MediaAsset, Order, Payment, Shipment
 
 
@@ -32,6 +32,8 @@ def perform(db, job):
             if job.kind == "close":
                 trading.release_closed(db, order)
                 db.commit()
+            elif order.expires_at > datetime.utcnow():
+                raise RetryLater("等待用户发起支付")
             return
         result = providers.query_payment(db, order)
         if result.get("paid"):
@@ -50,9 +52,9 @@ def perform(db, job):
                 trading.release_closed(db, order)
                 db.commit()
             else:
-                raise RuntimeError("渠道尚未确认关闭，保留预占库存")
+                raise RetryLater("渠道尚未确认关闭，保留预占库存")
         else:
-            raise RuntimeError("支付结果待确认")
+            raise RetryLater("支付结果待确认")
     else:
         raise RuntimeError("未知任务类型")
 
@@ -80,6 +82,14 @@ def run_one(sessions=SessionLocal):
             perform(db, job)
             job.state, job.error, job.lease_until = "done", "", None
             record(db, f"job:{ident}", "done", {"kind": job.kind})
+            db.commit()
+        except RetryLater as exc:
+            db.rollback()
+            job = db.get(Job, ident)
+            job.state, job.error, job.lease_until = "pending", str(exc)[:1500], None
+            job.attempts = max(0, job.attempts - 1)
+            job.run_at = datetime.utcnow() + timedelta(seconds=60)
+            record(db, f"job:{ident}", "waiting", {"reason": job.error})
             db.commit()
         except Exception as exc:
             db.rollback()

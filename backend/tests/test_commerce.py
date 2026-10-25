@@ -52,7 +52,8 @@ class CommerceTests(unittest.TestCase):
         if url.host not in ("127.0.0.1", "localhost") or url.database != "wuxing_v2_test":
             raise RuntimeError("仅允许显式指定本机一次性 wuxing_v2_test 测试实例")
         cls.mysql_database = "wuxing_v2_test_" + uuid.uuid4().hex
-        cls.mysql_admin = create_engine(url.set(database=None))
+        # URL.set(None) 会保留原值；显式清除库名后才可在全新实例创建临时库。
+        cls.mysql_admin = create_engine(url._replace(database=None))
         with cls.mysql_admin.begin() as connection:
             connection.execute(text(f"CREATE DATABASE `{cls.mysql_database}` CHARACTER SET utf8mb4"))
         cls.mysql_engine = create_engine(url.set(database=cls.mysql_database))
@@ -291,6 +292,102 @@ class CommerceTests(unittest.TestCase):
             self.assertEqual((job.state, job.attempts), ("failed", 3))
             self.assertIn("未知任务类型", job.error)
         self.assertEqual(len(self.client.get("/api/admin/commerce/jobs").json()["data"]), 1)
+
+    def test_worker_waits_for_late_payment_without_exhausting_retries(self):
+        order = self.order().json()["data"]
+        ident = order["id"]
+
+        def due_check():
+            with self.sessions() as db:
+                job = db.query(Job).filter_by(key=f"check:{ident}").one()
+                job.run_at = datetime.utcnow() - timedelta(seconds=1)
+                db.commit()
+
+        # 首次补查早于用户发起支付，仍需留下自动补查任务。
+        due_check()
+        self.assertTrue(worker.run_one(self.sessions))
+        with self.sessions() as db:
+            job = db.query(Job).filter_by(key=f"check:{ident}").one()
+            self.assertEqual((job.state, job.attempts), ("pending", 0))
+            db.query(Payment).filter_by(order_id=ident).one().state = "issued"
+            db.commit()
+        with patch.object(providers, "query_payment", return_value={"paid": False, "exists": True}):
+            for _ in range(4):
+                due_check()
+                self.assertTrue(worker.run_one(self.sessions))
+                with self.sessions() as db:
+                    job = db.query(Job).filter_by(key=f"check:{ident}").one()
+                    self.assertEqual((job.state, job.attempts), ("pending", 0))
+                    self.assertEqual(db.get(Sku, 100).reserved, 1)
+        with patch.object(providers, "query_payment", return_value={"paid": True,
+                "transaction_id": "late-payment", "amount_fen": order["amount_fen"]}):
+            due_check()
+            self.assertTrue(worker.run_one(self.sessions))
+        with self.sessions() as db:
+            self.assertEqual(db.get(Order, ident).status, "paid")
+            self.assertEqual(db.query(Job).filter_by(key=f"check:{ident}").one().state, "done")
+            self.assertEqual((db.get(Sku, 100).stock, db.get(Sku, 100).reserved), (4, 0))
+
+    def test_close_keeps_inventory_until_channel_confirms_outcome(self):
+        order = self.order().json()["data"]
+        ident = order["id"]
+        with self.sessions() as db:
+            db.query(Job).filter_by(kind="payment").delete()
+            db.query(Payment).filter_by(order_id=ident).one().state = "issued"
+            db.get(Order, ident).expires_at = datetime.utcnow() - timedelta(minutes=1)
+            db.commit()
+        with patch.object(providers, "query_payment", return_value={"paid": False, "exists": True}), \
+                patch.object(providers, "close_payment", return_value=False):
+            for _ in range(4):
+                with self.sessions() as db:
+                    db.query(Job).filter_by(key=f"close:{ident}").one().run_at = datetime.utcnow() - timedelta(seconds=1)
+                    db.commit()
+                self.assertTrue(worker.run_one(self.sessions))
+                with self.sessions() as db:
+                    self.assertEqual(db.get(Order, ident).status, "closing")
+                    self.assertEqual(db.get(Sku, 100).reserved, 1)
+                    job = db.query(Job).filter_by(key=f"close:{ident}").one()
+                    self.assertEqual((job.state, job.attempts), ("pending", 0))
+        # 渠道关单未确认期间才收到支付结果，仍正常结算且仅扣一次库存。
+        with patch.object(providers, "query_payment", return_value={"paid": True,
+                "transaction_id": "payment-during-close", "amount_fen": order["amount_fen"]}):
+            with self.sessions() as db:
+                db.query(Job).filter_by(key=f"close:{ident}").one().run_at = datetime.utcnow() - timedelta(seconds=1)
+                db.commit()
+            self.assertTrue(worker.run_one(self.sessions))
+        with self.sessions() as db:
+            self.assertEqual(db.get(Order, ident).status, "paid")
+            self.assertEqual((db.get(Sku, 100).stock, db.get(Sku, 100).reserved), (4, 0))
+
+    def test_refund_processing_waits_without_becoming_failed(self):
+        order = self.order(quantity=2).json()["data"]
+        self.paid(order["id"])
+        sale = self.client.post(f"/api/mp/v2/orders/{order['id']}/aftersales", json=dict(
+            item_id=order["items"][0]["id"], quantity=1, kind="refund", reason="不再需要")).json()["data"]
+        with self.sessions() as db:
+            aftersales.review(db, sale["id"], schemas.ReviewIn(action="approve"), "tester")
+            db.commit()
+        with patch.object(aftersales, "pay_cfg", return_value={"notify_url": "https://test.invalid/wxpay"}), \
+                patch.object(aftersales.wxpay, "refund", return_value={"status": "PROCESSING"}):
+            for _ in range(4):
+                with self.sessions() as db:
+                    db.query(Job).filter_by(key=f"refund:{sale['id']}").one().run_at = datetime.utcnow() - timedelta(seconds=1)
+                    db.commit()
+                self.assertTrue(worker.run_one(self.sessions))
+                with self.sessions() as db:
+                    job = db.query(Job).filter_by(key=f"refund:{sale['id']}").one()
+                    self.assertEqual((job.state, job.attempts), ("pending", 0))
+                    self.assertEqual(db.get(AfterSale, sale["id"]).state, "refunding")
+                    self.assertEqual(db.get(Order, order["id"]).refund_fen, 0)
+        with patch.object(aftersales, "pay_cfg", return_value={"notify_url": "https://test.invalid/wxpay"}), \
+                patch.object(aftersales.wxpay, "refund", return_value={"status": "SUCCESS"}):
+            with self.sessions() as db:
+                db.query(Job).filter_by(key=f"refund:{sale['id']}").one().run_at = datetime.utcnow() - timedelta(seconds=1)
+                db.commit()
+            self.assertTrue(worker.run_one(self.sessions))
+        with self.sessions() as db:
+            self.assertEqual(db.get(AfterSale, sale["id"]).state, "refunded")
+            self.assertEqual(db.get(Order, order["id"]).refund_fen, 1000)
 
     def test_private_evidence_upload_ownership_and_signature(self):
         data = io.BytesIO()

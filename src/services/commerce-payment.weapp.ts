@@ -25,7 +25,7 @@ export async function payCommerceOrder(id: number, kind: string): Promise<void> 
     await Taro.requestPayment(result.payParams);
   }
   for (let i = 0; i < 6; i++) {
-    const order = await commerceApi(`/orders/${id}/sync`);
+    const order = await commerceApi(`/orders/${id}/sync`, 'POST');
     if (order.status === 'paid') return;
     await new Promise(resolve => setTimeout(resolve, 1000));
   }

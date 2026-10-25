@@ -4,7 +4,7 @@ from sqlalchemy import update
 
 from app import wxpay
 from app.models import User
-from .common import enqueue, record
+from .common import RetryLater, enqueue, record
 from .models import AfterSale, Enrollment, InventoryLog, Order, OrderItem, Sku
 from .providers import pay_cfg, virtual_request
 from .attachments import normalize
@@ -129,7 +129,7 @@ def run_refund(db, sale_id):
         if query_payment(db, order).get("refunded"):
             finalize(db, sale.id)
         else:
-            raise RuntimeError("数字支付退款待渠道确认；iOS 请按渠道退款流程处理")
+            raise RetryLater("数字支付退款已受理，等待渠道确认")
     else:
         cfg = pay_cfg(db)
         result = wxpay.refund(cfg, transaction_id=order.transaction_id, out_refund_no=sale.refund_no,
@@ -138,7 +138,7 @@ def run_refund(db, sale_id):
         if result.get("status") == "SUCCESS":
             finalize(db, sale.id)
         elif result.get("status") == "PROCESSING":
-            raise RuntimeError("退款已受理，等待渠道确认")
+            raise RetryLater("退款已受理，等待渠道确认")
         else:
             raise RuntimeError("退款状态异常，需人工核对")
     db.commit()

@@ -14,6 +14,10 @@ DEFAULTS = dict(courses_visible=False, shop_visible=False, courses_sale=False, s
                 return_address="", course_policy="", physical_policy="")
 
 
+class RetryLater(RuntimeError):
+    """渠道正常处理中；继续持久补查，不消耗异常重试次数。"""
+
+
 def ok(data=None):
     return {"code": 0, "data": data, "msg": "ok"}
 
