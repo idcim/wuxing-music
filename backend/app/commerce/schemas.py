@@ -6,6 +6,13 @@ class Strict(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
+class LogisticsConfigIn(Strict):
+    enabled: bool = Field(strict=True)
+    customer: str = Field(default="", max_length=256, pattern=r"^[!-~]*$")
+    key: str = Field(default="", max_length=256, pattern=r"^[!-~]*$")
+    revision: int = Field(default=0, ge=0, strict=True)
+
+
 class CategoryIn(Strict):
     kind: Literal["course", "physical"]
     name: str = Field(min_length=1, max_length=80)
