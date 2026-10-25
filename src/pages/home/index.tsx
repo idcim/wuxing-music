@@ -17,6 +17,7 @@ import CdkeyModal from '@/components/CdkeyModal';
 import type { ElementId } from '@/types';
 import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
+import { isH5 } from '@/utils/platform';
 
 const TIMER_OPTS = [15, 30, 45, 60];
 
@@ -106,6 +107,7 @@ export default function Home() {
         </View>
       </View>
 
+      {!isH5 && <View className="home__actions" onClick={() => Taro.navigateTo({ url: '/pages/explore/index' })}><Text>探律 · 五行音乐分类 →</Text></View>}
       {/* 会员状态条 */}
       {isPremium && membership && membership.type !== 'free' && (
         <View

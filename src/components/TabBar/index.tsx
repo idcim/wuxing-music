@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { WUXING } from '@/constants/wuxing';
@@ -12,10 +12,11 @@ import Playlist from '@/components/Playlist';
 import type { ElementId } from '@/types';
 import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
+import { useCommerce, coursePath, shopPath } from '@/services/commerce';
 
-export type TabKey = 'home' | 'explore' | 'member' | 'profile';
+export type TabKey = 'home' | 'explore' | 'course' | 'shop' | 'member' | 'profile';
 
-const TABS: { key: TabKey; text: string; path: string; icon: IconName }[] = [
+const LEGACY_TABS: { key: TabKey; text: string; path: string; icon: IconName }[] = [
   { key: 'home', text: '归处', path: '/pages/home/index', icon: 'home' },
   { key: 'explore', text: '探律', path: '/pages/explore/index', icon: 'compass' },
   { key: 'member', text: '会员', path: '/pages/member/index', icon: 'crown' },
@@ -30,6 +31,14 @@ interface Props {
 const normalize = (p = '') => p.replace(/^\/+/, '').replace(/\/+$/, '');
 
 export default function TabBar({ active }: Props) {
+  const commerceConfig = useCommerce(s => s.config);
+  useEffect(() => { if (!isH5) useCommerce.getState().load(); }, []);
+  const TABS = isH5 ? LEGACY_TABS : [
+    { key: 'home' as const, text: '音乐', path: '/pages/home/index', icon: 'music2' as IconName },
+    ...(commerceConfig.courses_visible ? [{ key: 'course' as const, text: '课程', path: `${coursePath}/list/index`, icon: 'compass' as IconName }] : []),
+    ...(commerceConfig.shop_visible ? [{ key: 'shop' as const, text: '商城', path: `${shopPath}/list/index`, icon: 'gift' as IconName }] : []),
+    ...LEGACY_TABS.slice(2).map(tab => tab.key === 'profile' ? { ...tab, text: '我的' } : tab),
+  ];
   const element = useUserStore((s) => s.element) || ('木' as ElementId);
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const getElementOfTrack = useContentStore((s) => s.getElementOfTrack);
@@ -84,8 +93,9 @@ export default function TabBar({ active }: Props) {
   return (
     <Fragment>
       <View className="tabbar">
-        {TABS.slice(0, 2).map(renderTab)}
-        <View className="tabbar__player">
+        {!isH5 && TABS.map(renderTab)}
+        {isH5 && TABS.slice(0, 2).map(renderTab)}
+        {isH5 && <View className="tabbar__player">
           <View
             className="tabbar__player-button"
             style={{ background: playerEl.primary, boxShadow: `0 ${rpx(8)} ${rpx(32)} ${playerEl.glow}` }}
@@ -94,7 +104,8 @@ export default function TabBar({ active }: Props) {
             <Icon name="listMusic" size={38} color="#0a0e1a" strokeWidth={1.8} />
           </View>
         </View>
-        {TABS.slice(2).map(renderTab)}
+        }
+        {isH5 && TABS.slice(2).map(renderTab)}
       </View>
       <Playlist open={listOpen} onClose={() => setListOpen(false)} />
     </Fragment>

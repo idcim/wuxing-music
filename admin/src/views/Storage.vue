@@ -10,9 +10,9 @@
           </el-radio-group>
         </el-form-item>
 
-        <el-form-item label="完整版 AAC">
-          <el-switch v-model="form.aac_enabled" />
-          <div class="hint">默认关闭，直接播放原始母版；开启后后台生成 AAC 192k 副本。会员试听剪辑始终按需生成。</div>
+        <el-form-item label="自动转码">
+          <el-switch :model-value="false" disabled />
+          <div class="hint">已停用。上传文件原样保存，不生成 16-bit、AAC 或试听副本；已有文件保留。</div>
         </el-form-item>
 
         <template v-if="form.provider === 'oss'">

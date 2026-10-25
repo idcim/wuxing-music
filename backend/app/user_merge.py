@@ -114,6 +114,9 @@ def merge_users(
 
     detail: dict = {"moved": {}, "filled": [], "membership": "keep"}
 
+    from app.commerce.lifecycle import merge as merge_commerce
+    merge_commerce(db, keep.id, drop.id)
+
     # 1) 归属数据改指向
     for model, col in _OWNED:
         n = (

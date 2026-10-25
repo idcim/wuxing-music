@@ -63,6 +63,8 @@ uvicorn app.main:app --reload --port 8000
 
 启动时自动建表 + 写入种子数据（五行/曲目/套餐/测评题/测试兑换码/管理员）。
 
+上述自动初始化只适用于现有音乐业务。课程商城 2.0 使用独立版本迁移，当前为结构 v3（新增课件播放版本列）；必须先备份并在测试环境预演 `python -m app.commerce.migrate`。生产按 [2.0 部署顺序](../docs/V2-COMMERCE.md) 执行。交易和媒体分别启动 `python -m app.commerce.worker --queue transactions`、`python -m app.commerce.worker --queue media`，媒体队列仅用于收尾旧任务，新课件上传直接就绪且不转码。`python -m app.commerce.monitor --check` 以退出码检查本机 Worker 心跳；后台“课件与任务”显示两类队列的运行状态及积压。
+
 - API 文档：http://localhost:8000/docs
 - 健康检查：http://localhost:8000/api/health
 - 默认管理员：`admin` / `admin123`（可由 `.env` 覆盖）
