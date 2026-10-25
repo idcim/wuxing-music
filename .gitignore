@@ -16,3 +16,4 @@ SLEEP.md
 /.env.local
 /.env.*.local
 private-commerce/
+/scripts/tests/__pycache__/
