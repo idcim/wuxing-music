@@ -16,6 +16,7 @@ const widgetLabels = { fullscreen: '全屏按钮', globalSearch: '菜单搜索',
       <el-form-item label="侧边栏宽度"><el-input-number :model-value="preferences.sidebar.width" :min="180" :max="360" :step="8" @update:model-value="(value: unknown) => updatePreferences({sidebar:{width:Number(value) || 224}})" /></el-form-item>
       <el-form-item label="折叠后悬停展开"><el-switch :model-value="preferences.sidebar.expandOnHover" @update:model-value="(value: unknown) => updatePreferences({sidebar:{expandOnHover:!!value}})" /></el-form-item>
       <el-form-item label="多标签栏"><el-switch :model-value="preferences.tabbar.enable" @update:model-value="(value: unknown) => updatePreferences({tabbar:{enable:!!value}})" /></el-form-item>
+      <el-form-item label="保留标签页状态"><el-switch :model-value="preferences.tabbar.keepAlive" @update:model-value="(value: unknown) => updatePreferences({tabbar:{keepAlive:!!value}})" /><p>切换菜单保留表单和筛选；关闭标签、刷新当前页或关闭此开关会重建页面。未保存内容请先保存。</p></el-form-item>
       <el-form-item v-for="(label,key) in widgetLabels" :key="key" :label="label"><el-switch :model-value="preferences.widget[key]" @update:model-value="(value: unknown) => updatePreferences({widget:{[key]:!!value}})" /></el-form-item>
       <el-form-item label="页面标题跟随菜单"><el-switch :model-value="preferences.app.dynamicTitle" @update:model-value="(value: unknown) => updatePreferences({app:{dynamicTitle:!!value}})" /></el-form-item>
       <el-divider content-position="left">版本更新</el-divider>

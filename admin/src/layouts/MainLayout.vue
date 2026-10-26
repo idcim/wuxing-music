@@ -14,6 +14,7 @@ import NotifyBell from '@/components/NotifyBell.vue';
 import CheckUpdates from '@/components/shell/CheckUpdates.vue';
 import MenuSearch from '@/components/shell/MenuSearch.vue';
 import ShellPreferences from '@/components/shell/ShellPreferences.vue';
+import RouteCache from '@/components/shell/RouteCache';
 
 const route = useRoute();
 const router = useRouter();
@@ -132,7 +133,11 @@ function logout() {
         <el-dropdown class="admin-tabs__more" @command="tabCommand"><el-button text aria-label="标签页操作"><el-icon><Icons.MoreFilled /></el-icon></el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="refresh">刷新当前标签</el-dropdown-item><el-dropdown-item command="left">关闭左侧标签</el-dropdown-item><el-dropdown-item command="right">关闭右侧标签</el-dropdown-item><el-dropdown-item command="others">关闭其他标签</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
       </div>
     </template>
-    <template #content><router-view :key="refreshKey" /></template>
+    <template #content>
+      <router-view v-slot="{ Component }">
+        <RouteCache :key="auth.username" :view="Component" :path="route.path" :paths="tabs.filter(tab => NAV_ALL.some(item => item.path === tab.path && visible(item))).map(tab => tab.path)" :revision="refreshKey" :enabled="preferences.tabbar.keepAlive" />
+      </router-view>
+    </template>
   </VbenAdminLayout>
   <CheckUpdates ref="updates" />
 </template>

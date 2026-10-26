@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { useActivePolling } from '@/composables/useActivePolling';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { commerce, stateLabel } from '@/api/commerce';
 import { useAuthStore } from '@/stores/auth';
@@ -40,8 +41,8 @@ async function useOriginal(asset: any) {
 const states = computed(() => tab.value === 'media' ? ['uploading', 'processing', 'ready', 'failed'] : ['pending', 'running', 'failed', 'done']);
 const jobKinds: Record<string, string> = { media: '媒体处理', payment: '支付补查', close: '关单', refund: '退款', shipping: '发货同步', receipt: '收货核对', course_delivery: '课程交付' };
 let loadId = 0;
-let timer: ReturnType<typeof setInterval>;
 async function load() {
+  if (!polling.isActive()) return;
   const id = ++loadId, selectedTab = tab.value;
   const params = new URLSearchParams({ page: String(page.value), size: '20', q: keyword.value.trim() });
   if (selectedTab === 'events') { params.set('subject', eventSubject.value); params.set('action', eventAction.value); }
@@ -92,8 +93,7 @@ async function retry(job: any) {
 }
 const canRetry = (job: any) => auth.can(job.kind === 'media' ? 'commerce:content' : ['shipping','receipt'].includes(job.kind) ? 'commerce:ship' : 'commerce:payments');
 watch(tab, () => { page.value = 1; state.value = ''; keyword.value = ''; jobKind.value = ''; eventAction.value = ''; refresh(); });
-onMounted(() => { refresh(); timer = setInterval(refresh, 15000); });
-onUnmounted(() => { clearInterval(timer); loadId++; });
+const polling = useActivePolling(refresh, 15000, () => { loadId++; loading.value = false; });
 </script>
 <template>
   <BusinessPage title="课件与任务" description="课件原样上传私有 OSS，不转码、不生成副本；支付、退款和发货同步继续后台执行。">
