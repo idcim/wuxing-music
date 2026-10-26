@@ -253,8 +253,12 @@ def pay(ident: int, body: schemas.PayIn, user: User = Depends(get_current_user),
             row.state = "created"
         db.commit()
         raise
-    db.execute(update(Payment).where(Payment.id == row.id, Payment.state == "initiating")
-        .values(params={**params, "platform": body.platform}, state="issued", error=""))
+    issued = db.execute(update(Payment).where(Payment.id == row.id, Payment.state == "initiating")
+        .values(params={**params, "platform": body.platform}, state="issued", error="")).rowcount
+    if issued != 1:
+        # 网络调用期间补查或通知可能已经确认支付；不能再把旧参数发给客户端。
+        db.rollback()
+        raise HTTPException(409, "支付状态已更新，请刷新订单")
     db.commit()
     return ok(params)
 

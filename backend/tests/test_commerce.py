@@ -359,6 +359,25 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, Logisti
             self.assertEqual(db.query(Payment).filter_by(order_id=ident).one().state, "initiating")
             self.assertEqual(db.get(Sku, 100).reserved, 1)
 
+    def test_payment_confirmed_during_preparation_does_not_return_old_params(self):
+        ident = self.order().json()["data"]["id"]
+
+        def settle_during_preparation(*_args, **_kwargs):
+            with self.sessions() as db:
+                order = db.get(Order, ident)
+                trading.settle_paid(db, ident, "paid-before-params", order.amount_fen)
+                db.commit()
+            return {"provider": "wxpay", "payParams": {"package": "stale-prepay"}}
+
+        with patch.object(providers, "preflight"), patch.object(providers, "create_payment", side_effect=settle_during_preparation):
+            response = self.client.post(f"/api/mp/v2/orders/{ident}/pay", json={})
+        self.assertEqual(response.status_code, 409)
+        self.assertNotIn("stale-prepay", response.text)
+        with self.sessions() as db:
+            self.assertEqual(db.get(Order, ident).status, "paid")
+            self.assertEqual(db.query(Payment).filter_by(order_id=ident).one().state, "paid")
+            self.assertEqual((db.get(Sku, 100).stock, db.get(Sku, 100).reserved), (4, 0))
+
     def test_course_access_separate_progress_and_refund_sources(self):
         with self.sessions() as db:
             self.assertFalse(catalog.has_access(db, 1, 100))
