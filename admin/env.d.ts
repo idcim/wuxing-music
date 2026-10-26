@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+declare const __ADMIN_BUILD_ID__: string;
 
 declare module '*.vue' {
   import type { DefineComponent } from 'vue';
