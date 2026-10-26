@@ -332,6 +332,33 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, Logisti
         with self.sessions() as db:
             self.assertEqual(db.query(Payment).filter_by(order_id=ident).one().state, "created")
 
+    def test_virtual_payment_setup_failure_can_retry_without_duplicate_order(self):
+        ident = self.order(kind="course").json()["data"]["id"]
+        with patch.object(providers, "preflight"), patch.object(providers, "create_payment", side_effect=RuntimeError("微信登录暂不可用")):
+            with self.assertRaisesRegex(RuntimeError, "微信登录暂不可用"):
+                self.client.post(f"/api/mp/v2/orders/{ident}/pay", json={"code": "expired-code"})
+        with self.sessions() as db:
+            row = db.query(Payment).filter_by(order_id=ident).one()
+            self.assertEqual(row.state, "created")
+            self.assertEqual(db.get(Order, ident).status, "pending")
+        params = {"provider": "virtual", "payParams": {"signData": "test-sign-data"}}
+        with patch.object(providers, "preflight"), patch.object(providers, "create_payment", return_value=params):
+            response = self.client.post(f"/api/mp/v2/orders/{ident}/pay", json={"code": "fresh-code"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"], params)
+        with self.sessions() as db:
+            self.assertEqual(db.query(Payment).filter_by(order_id=ident).one().state, "issued")
+            self.assertEqual(db.query(Order).filter_by(id=ident).count(), 1)
+
+    def test_physical_payment_setup_network_failure_waits_for_reconciliation(self):
+        ident = self.order().json()["data"]["id"]
+        with patch.object(providers, "preflight"), patch.object(providers, "create_payment", side_effect=RuntimeError("微信预支付请求超时")):
+            with self.assertRaisesRegex(RuntimeError, "微信预支付请求超时"):
+                self.client.post(f"/api/mp/v2/orders/{ident}/pay", json={})
+        with self.sessions() as db:
+            self.assertEqual(db.query(Payment).filter_by(order_id=ident).one().state, "initiating")
+            self.assertEqual(db.get(Sku, 100).reserved, 1)
+
     def test_course_access_separate_progress_and_refund_sources(self):
         with self.sessions() as db:
             self.assertFalse(catalog.has_access(db, 1, 100))

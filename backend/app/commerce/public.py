@@ -247,7 +247,9 @@ def pay(ident: int, body: schemas.PayIn, user: User = Depends(get_current_user),
         params = providers.create_payment(db, order, body.code, body.platform)
     except Exception as exc:
         row.error = str(exc)[:500]
-        if isinstance(exc, HTTPException):
+        # 数字课程只在客户端发起渠道支付；此处失败时没有预支付单，允许重试。
+        # 实物预支付的网络异常可能已在微信侧建单，仍须等待补查。
+        if isinstance(exc, HTTPException) or order.provider == "virtual":
             row.state = "created"
         db.commit()
         raise
