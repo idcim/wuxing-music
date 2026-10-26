@@ -17,22 +17,24 @@ from app.config import settings
 from app.models import User
 from app.routers.mp import _get_access_token, _mp_cfg, _pay_cfg, _site_name
 from .models import Course, OrderItem, Payment
+from .runtime_settings import resolve
 
 
 def capabilities(db=None):
     from .logistics_settings import configured
-    return dict(physical_payment=bool(settings.commerce_wxpay_public_key and settings.commerce_wxpay_public_key_id and settings.commerce_public_base),
-        course_payment=bool(settings.commerce_virtual_approved and settings.commerce_virtual_offer_id and settings.commerce_virtual_app_key
-            and settings.commerce_push_token and settings.commerce_push_aes_key and settings.commerce_public_base),
-        course_ios=bool(settings.commerce_virtual_ios_approved),
-        private_media=bool(settings.commerce_private_bucket and settings.commerce_private_endpoint and settings.commerce_private_key_id and settings.commerce_private_key_secret),
-        shipping=bool(settings.commerce_shipping_approved),
+    cfg = resolve(db, settings)
+    return dict(physical_payment=bool(cfg.commerce_wxpay_public_key and cfg.commerce_wxpay_public_key_id and cfg.commerce_public_base),
+        course_payment=bool(cfg.commerce_virtual_approved and cfg.commerce_virtual_offer_id and cfg.commerce_virtual_app_key
+            and cfg.commerce_push_token and cfg.commerce_push_aes_key and cfg.commerce_public_base),
+        course_ios=bool(cfg.commerce_virtual_ios_approved),
+        private_media=bool(cfg.commerce_private_bucket and cfg.commerce_private_endpoint and cfg.commerce_private_key_id and cfg.commerce_private_key_secret),
+        shipping=bool(cfg.commerce_shipping_approved),
         logistics=configured(db))
 
 
 def pay_cfg(db, require_enabled=False):
     cfg = _pay_cfg(db)
-    if (require_enabled and not cfg.get("enabled")) or not capabilities()["physical_payment"]:
+    if (require_enabled and not cfg.get("enabled")) or not capabilities(db)["physical_payment"]:
         raise HTTPException(409, "实物支付尚未配置或验收")
     appid = _mp_cfg(db).get("app_id")
     if not appid:
@@ -40,17 +42,18 @@ def pay_cfg(db, require_enabled=False):
     if not all(cfg.get(key) for key in ("wx_mch_id", "wx_key_pem", "wx_cert_serial", "wx_api_key")) or len(cfg["wx_api_key"].encode()) != 32:
         raise HTTPException(409, "商户支付证书、序列号或 APIv3 密钥配置不完整")
     return {**cfg, "wx_app_id": appid,
-        "notify_url": settings.commerce_public_base.rstrip("/") + "/api/mp/v2/callbacks/wxpay"}
+        "notify_url": resolve(db, settings).commerce_public_base.rstrip("/") + "/api/mp/v2/callbacks/wxpay"}
 
 
-def verify_notification(headers, body):
+def verify_notification(headers, body, db=None):
+    cfg = resolve(db, settings)
     try:
         timestamp = headers["wechatpay-timestamp"]
         if abs(time.time() - int(timestamp)) > 300:
             raise ValueError("timestamp")
-        if headers["wechatpay-serial"] != settings.commerce_wxpay_public_key_id:
+        if headers["wechatpay-serial"] != cfg.commerce_wxpay_public_key_id:
             raise ValueError("serial")
-        public_key = serialization.load_pem_public_key(settings.commerce_wxpay_public_key.encode())
+        public_key = serialization.load_pem_public_key(cfg.commerce_wxpay_public_key.encode())
         message = timestamp.encode() + b"\n" + headers["wechatpay-nonce"].encode() + b"\n" + body + b"\n"
         public_key.verify(base64.b64decode(headers["wechatpay-signature"], validate=True), message,
                           padding.PKCS1v15(), hashes.SHA256())
@@ -72,10 +75,11 @@ def wx_request(db, method, path, payload=None):
 
 def virtual_request(db, path, payload, session_key=None):
     # 停止新售卖不阻断历史订单查单、履约与退款。
-    if not settings.commerce_virtual_app_key or not settings.commerce_virtual_offer_id:
+    cfg = resolve(db, settings)
+    if not cfg.commerce_virtual_app_key or not cfg.commerce_virtual_offer_id:
         raise HTTPException(409, "数字课程支付尚未获准或配置")
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-    signature = hmac.new(settings.commerce_virtual_app_key.encode(), (path + "&" + body).encode(), hashlib.sha256).hexdigest()
+    signature = hmac.new(cfg.commerce_virtual_app_key.encode(), (path + "&" + body).encode(), hashlib.sha256).hexdigest()
     params = {"access_token": _get_access_token(db), "pay_sig": signature}
     if session_key:
         params["signature"] = hmac.new(session_key.encode(), body.encode(), hashlib.sha256).hexdigest()
@@ -121,9 +125,9 @@ def preflight(db, order, platform="other"):
         raise HTTPException(409, "请使用有效微信账号登录")
     if order.provider == "wxpay":
         pay_cfg(db, require_enabled=True)
-        if not capabilities()["shipping"]:
+        if not capabilities(db)["shipping"]:
             raise HTTPException(409, "微信发货管理尚未验收")
-    elif not capabilities()["course_payment"] or (platform == "ios" and not capabilities()["course_ios"]):
+    elif not capabilities(db)["course_payment"] or (platform == "ios" and not capabilities(db)["course_ios"]):
         raise HTTPException(409, "当前终端暂未开放课程购买")
     else:
         item = db.query(OrderItem).filter_by(order_id=order.id).one()
@@ -138,7 +142,7 @@ def create_payment(db, order, code="", platform="other"):
         cfg = pay_cfg(db)
         return {"provider": "wxpay", "payParams": wxpay.create_jsapi_order(cfg, openid=order.payer_openid,
             order_no=order.order_no, amount_fen=order.amount_fen, description=f"{_site_name(db)} · 商品订单", app_id=cfg["wx_app_id"])}
-    if not capabilities()["course_payment"] or (platform == "ios" and not capabilities()["course_ios"]):
+    if not capabilities(db)["course_payment"] or (platform == "ios" and not capabilities(db)["course_ios"]):
         raise HTTPException(409, "当前终端暂未开放课程购买")
     if not code:
         raise HTTPException(422, "请更新微信登录凭证")
@@ -149,11 +153,12 @@ def create_payment(db, order, code="", platform="other"):
         raise HTTPException(401, "微信支付身份校验失败，请重新登录")
     db.query(Payment).filter_by(order_id=order.id).one().credential = credential_cipher().encrypt(session["session_key"].encode()).decode()
     item = db.query(OrderItem).filter_by(order_id=order.id).one()
-    signed = json.dumps(dict(offerId=settings.commerce_virtual_offer_id, buyQuantity=1, env=0,
+    cfg = resolve(db, settings)
+    signed = json.dumps(dict(offerId=cfg.commerce_virtual_offer_id, buyQuantity=1, env=0,
         currencyType="CNY", productId=item.payment_product, goodsPrice=item.price_fen,
         outTradeNo=order.order_no, attach=order.order_no), separators=(",", ":"), ensure_ascii=False)
     return dict(provider="virtual", payParams=dict(signData=signed, mode="short_series_goods",
-        paySig=hmac.new(settings.commerce_virtual_app_key.encode(), ("requestVirtualPayment&" + signed).encode(), hashlib.sha256).hexdigest(),
+        paySig=hmac.new(cfg.commerce_virtual_app_key.encode(), ("requestVirtualPayment&" + signed).encode(), hashlib.sha256).hexdigest(),
         signature=hmac.new(session["session_key"].encode(), signed.encode(), hashlib.sha256).hexdigest()))
 
 

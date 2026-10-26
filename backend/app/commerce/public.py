@@ -93,7 +93,7 @@ def claim(ident: int, user: User = Depends(get_current_user), db: Session = Depe
 def play(ident: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     lesson, asset = catalog.playable(db, user.id, ident)
     progress = db.query(Progress).filter_by(user_id=user.id, lesson_id=ident).first()
-    return ok(dict(url=media.signed_url(asset), expires_in=900, kind=asset.kind,
+    return ok(dict(url=media.signed_url(asset, db), expires_in=900, kind=asset.kind,
         duration=asset.duration, position=progress.position if progress else 0, title=lesson.title))
 
 

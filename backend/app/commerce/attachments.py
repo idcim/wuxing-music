@@ -17,15 +17,16 @@ from app.database import get_db
 from app.routers.mp import get_current_user
 from .common import ok, ready, require_row, throttle
 from .models import Attachment
+from .runtime_settings import resolve
 
 PRIVATE_DIR = Path(os.getenv("COMMERCE_PRIVATE_DIR", "private-commerce"))
 router = APIRouter(prefix="/api/mp/v2", dependencies=[Depends(ready)])
 
 
-def image_url(ident, base=""):
+def image_url(ident, base="", db=None):
     token = jwt.encode({"purpose": "commerce-image", "id": ident, "exp": datetime.utcnow() + timedelta(minutes=15)},
                        settings.jwt_secret, algorithm=settings.jwt_algorithm)
-    return (base or settings.commerce_public_base).rstrip("/") + f"/api/mp/v2/attachments/{ident}?token={token}"
+    return (resolve(db, settings).commerce_public_base or base).rstrip("/") + f"/api/mp/v2/attachments/{ident}?token={token}"
 
 
 def normalize(db, uid, urls):
@@ -41,10 +42,10 @@ def normalize(db, uid, urls):
     return result
 
 
-def sale_dict(sale):
+def sale_dict(sale, db=None):
     from .common import serialize
     row = serialize(sale)
-    row["images"] = [image_url(int(value.split(":")[1])) for value in sale.images if value.startswith("attachment:")]
+    row["images"] = [image_url(int(value.split(":")[1]), db=db) for value in sale.images if value.startswith("attachment:")]
     return row
 
 
@@ -69,7 +70,7 @@ async def upload_image(request: Request, file: UploadFile = File(...), user=Depe
     row = Attachment(user_id=user.id, key=key)
     db.add(row)
     db.commit()
-    return ok({"id": row.id, "url": image_url(row.id, str(request.base_url))})
+    return ok({"id": row.id, "url": image_url(row.id, str(request.base_url), db)})
 
 
 @router.get("/attachments/{ident}")

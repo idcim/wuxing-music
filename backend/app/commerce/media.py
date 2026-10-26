@@ -11,29 +11,32 @@ from fastapi import HTTPException
 from app.config import settings
 from .models import Job, MediaAsset
 from .common import guard_claim, record
+from .runtime_settings import resolve
 
 MAX_SIZE = 2 * 1024**3
 
 
-def bucket():
+def bucket(db=None, config=None):
     import oss2
-    if not all([settings.commerce_private_bucket, settings.commerce_private_endpoint,
-                settings.commerce_private_key_id, settings.commerce_private_key_secret]):
+    cfg = config or resolve(db, settings)
+    if not all([cfg.commerce_private_bucket, cfg.commerce_private_endpoint,
+                cfg.commerce_private_key_id, cfg.commerce_private_key_secret]):
         raise HTTPException(409, "请先配置独立的私有课程 OSS 桶")
-    endpoint = settings.commerce_private_endpoint
+    endpoint = cfg.commerce_private_endpoint
     if endpoint.startswith("http://"):
         raise HTTPException(409, "私有课件存储必须使用 HTTPS")
     if not endpoint.startswith("https://"):
         endpoint = "https://" + endpoint
-    result = oss2.Bucket(oss2.Auth(settings.commerce_private_key_id, settings.commerce_private_key_secret),
-                        endpoint, settings.commerce_private_bucket)
+    result = oss2.Bucket(oss2.Auth(cfg.commerce_private_key_id, cfg.commerce_private_key_secret),
+                        endpoint, cfg.commerce_private_bucket)
     if result.get_bucket_acl().acl != "private":
         raise HTTPException(409, "课件桶必须为 private，不能使用公开音乐桶")
     return result
 
 
 def upload_policy(db, name, kind):
-    bucket()  # 签发前验证桶 ACL，而不是相信后台勾选。
+    cfg = resolve(db, settings)
+    bucket(db, config=cfg)  # 签发前验证桶 ACL，而不是相信后台勾选。
     ext = Path(name).suffix.lower()
     allowed = {"video": {".mp4"}, "audio": {".mp3", ".wav", ".m4a"}}
     if kind not in allowed or ext not in allowed[kind]:
@@ -46,15 +49,15 @@ def upload_policy(db, name, kind):
               "conditions": [["eq", "$key", key], ["eq", "$x-oss-object-acl", "private"],
                              ["eq", "$x-oss-forbid-overwrite", "true"], ["content-length-range", 1, MAX_SIZE]]}
     encoded = base64.b64encode(json.dumps(policy).encode()).decode()
-    endpoint = settings.commerce_private_endpoint.replace("https://", "").replace("http://", "").rstrip("/")
-    return {"id": asset.id, "host": f"https://{settings.commerce_private_bucket}.{endpoint}", "fields": {
-        "key": key, "policy": encoded, "OSSAccessKeyId": settings.commerce_private_key_id,
-        "Signature": base64.b64encode(hmac.new(settings.commerce_private_key_secret.encode(), encoded.encode(), hashlib.sha1).digest()).decode(),
+    endpoint = cfg.commerce_private_endpoint.replace("https://", "").replace("http://", "").rstrip("/")
+    return {"id": asset.id, "host": f"https://{cfg.commerce_private_bucket}.{endpoint}", "fields": {
+        "key": key, "policy": encoded, "OSSAccessKeyId": cfg.commerce_private_key_id,
+        "Signature": base64.b64encode(hmac.new(cfg.commerce_private_key_secret.encode(), encoded.encode(), hashlib.sha1).digest()).decode(),
         "x-oss-object-acl": "private", "x-oss-forbid-overwrite": "true", "success_action_status": "200"}}
 
 
-def signed_url(asset):
-    store = bucket()
+def signed_url(asset, db=None):
+    store = bucket(db)
     version = asset.playback_version
     if not version and object_version(store.head_object(asset.playback_key)):
         raise HTTPException(409, "课件尚未固定播放版本，请在后台确认课件版本")
@@ -81,7 +84,7 @@ def complete_original(db, asset_id, duration):
     allowed = {"video": {".mp4"}, "audio": {".mp3", ".wav", ".m4a"}}
     if not already_ready and Path(asset.source_key).suffix.lower() not in allowed.get(asset.kind, set()):
         raise HTTPException(409, "已停用转码，请上传可直接播放的 MP4 视频或 MP3/M4A/WAV 音频")
-    store = bucket()
+    store = bucket(db)
     key = asset.playback_key if already_ready else asset.source_key
     metadata = store.head_object(key)
     version = object_version(metadata)

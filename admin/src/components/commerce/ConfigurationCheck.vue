@@ -18,8 +18,8 @@ onMounted(load);
 </script>
 <template>
   <section class="configuration-check" v-loading="loading">
-    <div class="configuration-check__heading"><h3>服务器配置加载自检</h3><el-button :loading="loading" @click="load">刷新配置自检</el-button></div>
-    <p>仅检查当前进程是否已加载参数和确认标记，不显示参数内容，不代表渠道已联调。服务器修改配置后需重新部署 API 与 Worker。已有真单验收结论继续保留。</p>
+    <div class="configuration-check__heading"><h3>配置加载自检</h3><el-button :loading="loading" @click="load">刷新配置自检</el-button></div>
+    <p>检查当前请求实际读取的渠道参数和开通标记，不显示凭证内容。后台渠道配置优先，保存后 API 与 Worker 自动读取。已有真单验收结论继续保留；这里的加载状态不替代渠道联调。</p>
     <el-alert v-if="error" :title="error" type="warning" :closable="false" />
     <el-collapse v-if="groups.length" v-model="expanded">
       <el-collapse-item v-for="group in groups" :key="group.key" :name="group.key">
