@@ -12,7 +12,7 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue';
 import App from './App.vue';
 import router from './router';
 import { useSiteStore } from './stores/site';
-import { initPreferences } from '@vben/preferences';
+import { initPreferences, updatePreferences } from '@vben/preferences';
 import { addCollection } from '@iconify/vue';
 import { icons as lucideIcons } from '@iconify-json/lucide';
 import { installBusinessComponents } from './components/business';
@@ -21,11 +21,18 @@ async function bootstrap() {
   await initPreferences({
     namespace: 'wuxing-admin-vben-v1',
     overrides: {
-      app: { defaultHomePath: '/dashboard', locale: 'zh-CN', enableCheckUpdates: false },
+      app: { defaultHomePath: '/dashboard', locale: 'zh-CN', enableCheckUpdates: true },
       theme: { mode: 'light', semiDarkSidebar: true },
       copyright: { enable: false },
     },
   });
+  // 旧迁移强制关闭过更新检查；一次性修复该值，保留其余个人偏好。
+  try {
+    if (!localStorage.getItem('wuxing-admin-shell-tools-v1')) {
+      updatePreferences({ app: { enableCheckUpdates: true } });
+      localStorage.setItem('wuxing-admin-shell-tools-v1', '1');
+    }
+  } catch { /* 浏览器禁用存储时仍使用本次会话的默认设置。 */ }
   addCollection(lucideIcons);
   const app = createApp(App);
 
