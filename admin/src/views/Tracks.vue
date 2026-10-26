@@ -167,7 +167,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref } from 'vue';
 import { Plus, Upload, Loading } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { listTracks, createTrack, updateTrack, deleteTrack, listElements, UPLOAD_URL, ossSign, normalizeAudio, normalizeAudioStatus, normalizeTrack } from '@/api';
@@ -411,6 +411,7 @@ let normTimer: ReturnType<typeof setInterval> | null = null;
 let normJob = 0;
 let polling = false;
 let disposed = false;
+let pollEpoch = 0;
 
 function stopPolling() {
   if (normTimer) clearInterval(normTimer);
@@ -418,16 +419,18 @@ function stopPolling() {
 }
 
 function ensurePolling() {
+  if (disposed) return;
   if (!normTimer) normTimer = setInterval(pollNorm, 3000);
   pollNorm();
 }
 
 async function pollNorm() {
   if (polling || disposed) return;
+  const epoch = pollEpoch;
   polling = true;
   try {
     const s = await normalizeAudioStatus();
-    if (disposed) return;
+    if (disposed || epoch !== pollEpoch) return;
     normQueuedIds.value = s.queuedIds || [];
     normCurrentId.value = s.currentId || 0;
     const activeBatch = s.batch?.job === normJob ? s.batch : null;
@@ -508,8 +511,11 @@ onMounted(async () => {
 });
 onUnmounted(() => {
   disposed = true;
+  pollEpoch++;
   stopPolling();
 });
+onDeactivated(() => { disposed = true; pollEpoch++; stopPolling(); });
+onActivated(() => { if (disposed) { disposed = false; load(); ensurePolling(); } });
 </script>
 
 <style scoped>

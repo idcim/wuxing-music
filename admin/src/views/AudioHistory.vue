@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue';
+import { ref } from 'vue';
+import { useActivePolling } from '@/composables/useActivePolling';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { listAudioHistory, normalizeTrack } from '@/api';
@@ -17,20 +18,21 @@ const job = ref<number | undefined>(route.query.job ? Number(route.query.job) : 
 const batch = ref<any>(null);
 const loading = ref(false);
 const retrying = ref<number[]>([]);
-let timer: ReturnType<typeof setInterval> | undefined;
 let disposed = false;
+let loadId = 0;
 
 async function load() {
   if (loading.value || disposed) return;
+  const id = ++loadId;
   loading.value = true;
   try {
     const data = await listAudioHistory({ page: page.value, size: size.value, outcome: outcome.value || undefined, job: job.value });
-    if (disposed) return;
+    if (disposed || id !== loadId) return;
     rows.value = data.items;
     total.value = data.total;
     batch.value = data.batch;
   } finally {
-    loading.value = false;
+    if (id === loadId) loading.value = false;
   }
 }
 function reset() { page.value = 1; load(); }
@@ -50,8 +52,7 @@ async function retry(row: any) {
     retrying.value = retrying.value.filter(id => id !== row.trackId);
   }
 }
-onMounted(() => { load(); timer = setInterval(() => load().catch(() => {}), 15000); });
-onUnmounted(() => { disposed = true; if (timer) clearInterval(timer); });
+useActivePolling(() => { disposed = false; return load(); }, 15000, () => { disposed = true; loadId++; loading.value = false; });
 </script>
 
 <template>
