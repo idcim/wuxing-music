@@ -108,6 +108,17 @@ def load(db=None, fallback=None):
 def resolve(db=None, fallback=None):
     value = load(db, fallback)
     values = dict(value["values"])
+    if db is not None and not value["error"]:
+        from app.storage import get_storage_cfg
+        storage = get_storage_cfg(db)
+        if storage.get("provider") == "oss":
+            values["private_endpoint"] = values["private_endpoint"] or storage.get("oss_endpoint", "")
+            if not values["private_key_id"] and not values["private_key_secret"]:
+                values["private_key_id"] = storage.get("oss_access_key_id", "")
+                values["private_key_secret"] = storage.get("oss_access_key_secret", "")
+            # 已公开的音乐桶绝不能作为付费课件桶使用。
+            if values["private_bucket"] and values["private_bucket"] == storage.get("oss_bucket"):
+                values["private_bucket"] = ""
     try:
         values["logistics_carriers"] = json.loads(values["logistics_carriers"] or "{}")
     except (TypeError, ValueError):
@@ -117,10 +128,13 @@ def resolve(db=None, fallback=None):
 
 def masked(db):
     value = load(db)
+    effective = resolve(db)
     return dict(revision=value["revision"], source=value["source"], error=value["error"],
                 last_saved=value["history"][-1] if value["history"] else None,
                 fields=[dict(name=name, label=label, group=group, type=kind, secret=secret,
-                    value="" if secret else value["values"][name], configured=bool(value["values"][name]))
+                    value="" if secret else value["values"][name], configured=bool(value["values"][name]),
+                    inherited=bool(name in ("private_endpoint", "private_key_id", "private_key_secret")
+                        and not value["values"][name] and getattr(effective, "commerce_" + name)))
                     for name, label, group, kind, secret in FIELDS])
 
 

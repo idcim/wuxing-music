@@ -172,6 +172,37 @@ class RuntimeSettingsCases:
             auth.assert_called_with(body["private_key_id"], body["private_key_secret"])
             self.assertEqual(bucket.call_args.args[1:], (body["private_endpoint"], body["private_bucket"]))
 
+    def test_private_course_bucket_reuses_storage_account_but_never_public_bucket(self):
+        storage = dict(provider="oss", oss_endpoint="https://oss-cn-hangzhou.aliyuncs.com",
+            oss_bucket="public-music-test", oss_access_key_id="shared-id",
+            oss_access_key_secret="shared-secret")
+        with self.sessions() as db:
+            db.add(Setting(key="storage_config", value=json.dumps(storage)))
+            db.commit()
+        body = self.channel_data()
+        body.update(private_endpoint="", private_key_id="", private_key_secret="")
+        self.channel_save(body)
+        with self.sessions() as db:
+            cfg = channel.resolve(db)
+            self.assertEqual(cfg.commerce_private_endpoint, storage["oss_endpoint"])
+            self.assertEqual(cfg.commerce_private_key_id, "shared-id")
+            self.assertEqual(cfg.commerce_private_key_secret, "shared-secret")
+            self.assertTrue(providers.capabilities(db)["private_media"])
+        response = self.client.get(PATH).json()["data"]
+        fields = {field["name"]: field for field in response["fields"]}
+        self.assertTrue(fields["private_key_secret"]["inherited"])
+        self.assertEqual(fields["private_key_secret"]["value"], "")
+        self.assertNotIn("shared-secret", json.dumps(response))
+        check = self.client.get("/api/admin/commerce/configuration-check").json()["data"]
+        media = next(group for group in check["groups"] if group["key"] == "private_media")
+        self.assertTrue(media["complete"])
+        self.assertTrue(any(item["source"] == "后台存储设置（共用账号）" for item in media["checks"]))
+        with self.sessions() as db:
+            config = channel.load(db)
+            config["values"]["private_bucket"] = "public-music-test"
+            with patch.object(channel, "load", return_value=config):
+                self.assertFalse(providers.capabilities(db)["private_media"])
+
     def test_channel_reuses_music_callback_domain_and_does_not_modify_music_or_sales(self):
         pay = {"notify_url": "https://music.example.test/api/mp/pay/callback", "wx_mch_id": "synthetic-existing"}
         with self.sessions() as db:

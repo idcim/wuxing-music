@@ -1,16 +1,21 @@
 """仅返回固定字段名称与存在性，帮助核对实际进程加载的配置；不调用外部渠道。"""
 from app.routers.mp import _mp_cfg, _pay_cfg
 from .logistics_settings import load as logistics_account
-from .runtime_settings import load
+from .runtime_settings import load, resolve
 
 
 def report(db):
     mp, pay = _mp_cfg(db), _pay_cfg(db)
     runtime = load(db)
+    effective = resolve(db)
     source = "后台渠道配置" if runtime["source"] == "admin" else "服务器配置 / 既有支付回调域名"
 
     def server(*names):
-        return [dict(name=name.upper(), present=bool(runtime["values"][name.removeprefix("commerce_")]), source=source) for name in names]
+        return [dict(name=name.upper(), present=bool(getattr(effective, name)),
+                     source="后台存储设置（共用账号）" if name.removeprefix("commerce_") in (
+                         "private_endpoint", "private_key_id", "private_key_secret")
+                         and not runtime["values"][name.removeprefix("commerce_")] and getattr(effective, name)
+                         else source) for name in names]
 
     def stored(config, names, source):
         return [dict(name=name, present=bool(config.get(name)), source=source) for name in names]
@@ -37,7 +42,7 @@ def report(db):
               "这里只检查许可标记是否启用；iOS 课程购买还要求数字支付参数完整。"),
         group("private_media", "私有课程 OSS", server("commerce_private_endpoint", "commerce_private_bucket",
               "commerce_private_key_id", "commerce_private_key_secret"),
-              "使用独立私有课程桶，不回退到公开图片或音乐桶；权限、版本控制与播放仍需实际验证。"),
+              "可复用原存储设置的 OSS 账号与 Endpoint，但须指定不同的私有课程桶；权限、版本控制与播放仍需实际验证。"),
         group("shipping", "微信发货与收货同步", server("commerce_shipping_approved") + stored(mp,
               ("app_id", "app_secret"), "后台小程序配置"),
               "复用现有小程序身份，仍需显式启用已验证的发货能力标记。"),
