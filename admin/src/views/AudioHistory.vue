@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useActivePolling } from '@/composables/useActivePolling';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
@@ -36,6 +36,13 @@ async function load() {
   }
 }
 function reset() { page.value = 1; load(); }
+// 从曲目任务跳到另一个批次时，缓存页也要应用新查询；普通菜单切回保留手动筛选。
+watch(() => route.path === '/audio-history' ? route.query.job : undefined, (value) => {
+  const requested = Number(value);
+  if (!Number.isSafeInteger(requested) || requested < 1) return;
+  job.value = requested; page.value = 1; loadId++; loading.value = false;
+  load().catch(() => {});
+});
 function resultLabel(r: any) {
   const labels: Record<string, string> = { done: '成功', error: '失败', skip: '跳过', retry: '自动重试' };
   return labels[r.outcome] || r.outcome;

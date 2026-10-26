@@ -93,3 +93,39 @@ test('缓存页面 mount/activate 只启动一次，隐藏停轮询，恢复及�
   } finally { app.unmount(); }
   await settle(); assert.equal(timers.size, 0); assert.equal(pauses['/a'], 2); assert.equal(pauses['/b'], 1);
 });
+
+test('音频历史缓存后，从其他页面进入指定批次应用新查询，普通切回保留手动筛选', async () => {
+  const { parse, compileScript } = adminRequire('@vue/compiler-sfc');
+  const source = fs.readFileSync(path.resolve(__dirname, '../../admin/src/views/AudioHistory.vue'), 'utf8');
+  const script = compileScript(parse(source).descriptor, { id: 'audio-history-regression' }).content;
+  const route = reactive({ path: '/audio-history', query: { job: '7' } });
+  const requests = [];
+  const polling = load('composables/useActivePolling.ts', { setInterval: () => 1, clearInterval: () => {} });
+  const exports = {};
+  const mocks = {
+    '@/composables/useActivePolling': polling,
+    'vue-router': { useRoute: () => route, useRouter: () => ({ replace: () => {} }) },
+    '@/api': { listAudioHistory: async params => { requests.push({ ...params }); return { items: [], total: 0, batch: null }; }, normalizeTrack: async () => {} },
+    '@/stores/auth': { useAuthStore: () => ({ can: () => true }) },
+    'element-plus': { ElMessage: { success: () => {} } },
+  };
+  const compiled = ts.transpileModule(script, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+  vm.runInNewContext(compiled, { exports, require: name => mocks[name] || adminRequire(name) });
+  const Page = exports.default; Page.render = () => h('div');
+  const state = reactive({ show: true }); const renderer = host(); let history;
+  const app = renderer.createApp({ setup: () => () => h(RouteCache, {
+    view: state.show ? h(Page, { ref: value => { if (value) history = value; } }) : h({ render: () => h('div') }),
+    path: state.show ? '/audio-history' : '/tracks', paths: ['/audio-history', '/tracks'],
+  }) });
+  app.mount(renderer.root);
+  try {
+    await settle(); assert.equal(requests.at(-1).job, 7);
+    state.show = false; route.path = '/tracks'; route.query = {}; await settle();
+    route.path = '/audio-history'; route.query = { job: '19' }; state.show = true; await settle();
+    assert.equal(requests.at(-1).job, 19);
+    history.$.setupState.job = 24;
+    state.show = false; route.path = '/tracks'; route.query = {}; await settle();
+    state.show = true; route.path = '/audio-history'; await settle();
+    assert.equal(requests.at(-1).job, 24);
+  } finally { app.unmount(); }
+});
