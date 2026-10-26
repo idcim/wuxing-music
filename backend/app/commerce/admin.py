@@ -38,6 +38,12 @@ def logistics_settings(_=Depends(require_perm("commerce:settings")), db: Session
     return ok(masked(db))
 
 
+@router.get("/configuration-check")
+def configuration_check(_=Depends(require_perm("commerce:settings")), db: Session = Depends(get_db)):
+    from .configuration_check import report
+    return ok(report(db))
+
+
 @router.post("/logistics/settings")
 async def logistics_settings_save(request: Request, admin=Depends(require_perm("commerce:settings")), db: Session = Depends(get_db)):
     from .logistics_settings import save

@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth';
 import ImageField from '@/components/commerce/ImageField.vue';
 import MarkdownEditor from '@/components/MarkdownEditor.vue';
 import LogisticsSettings from '@/components/commerce/LogisticsSettings.vue';
+import ConfigurationCheck from '@/components/commerce/ConfigurationCheck.vue';
 const auth = useAuthStore();
 const form = ref<any>({ provinces: [] }), caps = ref<Record<string, boolean>>({}), loading = ref(true), saving = ref(false);
 const migrated = ref(false);
@@ -30,6 +31,7 @@ onMounted(load);
 <template>
   <BusinessPage title="课程商城运营配置" description="展示与售卖分别控制；关闭售卖不影响已购课程、已支付订单和售后处理。">
     <LogisticsSettings v-if="auth.can('commerce:settings')" @saved="caps.logistics = $event" />
+    <ConfigurationCheck v-if="auth.can('commerce:settings')" />
     <el-alert v-if="!loading && !migrated" title="课程商城数据尚未初始化，其余运营配置暂未开放。物流账号可以先在上方保存。" type="info" :closable="false" />
     <BusinessForm v-if="migrated" v-loading="loading" :model="form" class="settings-panel" :disabled="!auth.can('commerce:settings')">
       <el-alert title="支付与私有存储密钥由技术人员在服务端配置；快递100账号可直接在上方保存。" :closable="false" style="margin-bottom:20px" />
