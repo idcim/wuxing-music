@@ -46,9 +46,10 @@ from commerce_media_cases import MediaCases
 from commerce_logistics_cases import LogisticsCases
 from commerce_logistics_settings_cases import LogisticsSettingsCases
 from commerce_configuration_cases import ConfigurationCases
+from commerce_runtime_settings_cases import RuntimeSettingsCases
 
 
-class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, LogisticsSettingsCases, ConfigurationCases, unittest.TestCase):
+class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, LogisticsSettingsCases, ConfigurationCases, RuntimeSettingsCases, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.mysql_engine = None

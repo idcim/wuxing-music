@@ -44,6 +44,27 @@ def configuration_check(_=Depends(require_perm("commerce:settings")), db: Sessio
     return ok(report(db))
 
 
+@router.get("/channel/settings")
+def channel_settings(_=Depends(require_perm("commerce:settings")), db: Session = Depends(get_db)):
+    from .runtime_settings import masked
+    return ok(masked(db))
+
+
+@router.post("/channel/settings")
+async def channel_settings_save(request: Request, admin=Depends(require_perm("commerce:settings")), db: Session = Depends(get_db)):
+    from .runtime_settings import RuntimeConfigIn, save
+    try:
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw.extend(chunk)
+            if len(raw) > 32768:
+                raise ValueError()
+        body = RuntimeConfigIn.model_validate(json.loads(raw))
+    except (ValidationError, ValueError, TypeError):
+        raise HTTPException(422, "渠道配置字段格式或大小不正确，请核对后重试") from None
+    return ok(save(db, body, admin.username))
+
+
 @router.post("/logistics/settings")
 async def logistics_settings_save(request: Request, admin=Depends(require_perm("commerce:settings")), db: Session = Depends(get_db)):
     from .logistics_settings import save
@@ -68,7 +89,7 @@ def settings(_=Depends(require_perm("commerce:view")), db: Session = Depends(get
 
 @api.post("/settings")
 def settings_save(body: schemas.ConfigIn, admin=Depends(require_perm("commerce:settings")), db: Session = Depends(get_db)):
-    caps = providers.capabilities()
+    caps = providers.capabilities(db)
     if body.courses_sale and (not caps["course_payment"] or not caps["private_media"]):
         raise HTTPException(409, "收费课程的数字支付与私有媒体尚未配置验收")
     if body.shop_sale and (not caps["physical_payment"] or not caps["shipping"] or not body.provinces):
@@ -156,7 +177,7 @@ def save_catalog(resource: str, ident: int, body: dict, admin=Depends(require_pe
 @api.post("/courses/{ident}/verify-price")
 def verify_price(ident: int, body: dict, admin=Depends(require_perm("commerce:payments")), db: Session = Depends(get_db)):
     course = require_row(db, Course, ident)
-    if not providers.capabilities()["course_payment"] or not course.payment_product:
+    if not providers.capabilities(db)["course_payment"] or not course.payment_product:
         raise HTTPException(409, "请先开通数字支付并绑定已发布的平台道具")
     if body.get("price_fen") != course.price_fen or body.get("revision") != course.revision or not body.get("evidence"):
         raise HTTPException(409, "请输入平台实际售价、当前版本与核验凭据")
@@ -230,7 +251,7 @@ def ship(ident: int, body: schemas.ReturnIn, admin=Depends(require_perm("commerc
         return ok(trading.order_dict(db, order))
     if db.query(AfterSale).filter(AfterSale.order_id == ident, AfterSale.state.notin_(["rejected", "refunded"])).first():
         raise HTTPException(409, "请先处理进行中的售后")
-    if not providers.capabilities()["shipping"]:
+    if not providers.capabilities(db)["shipping"]:
         raise HTTPException(409, "微信发货能力尚未验收")
     shipment = Shipment(order_id=ident, carrier=body.carrier, tracking_no=body.tracking_no)
     db.add(shipment)
@@ -256,7 +277,7 @@ def sales(_=Depends(require_perm("commerce:view")), page: int = Query(1, ge=1),
             AfterSale.order_id.in_(db.query(Order.id).filter(Order.order_no.contains(q.strip(), autoescape=True)))))
     def dump(row):
         order = db.get(Order, row.order_id)
-        return {**sale_dict(row), "order_no": order.order_no if order else ""}
+        return {**sale_dict(row, db), "order_no": order.order_no if order else ""}
     return paginated(query, page, size, dump)
 
 

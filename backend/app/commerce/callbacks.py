@@ -20,6 +20,7 @@ from app.routers.mp import _mp_cfg
 from . import aftersales, providers, trading
 from .common import ready, record
 from .models import AfterSale, Order, OrderItem
+from .runtime_settings import resolve
 
 router = APIRouter(prefix="/api/mp/v2/callbacks", tags=["commerce-callback"], dependencies=[Depends(ready)])
 
@@ -35,7 +36,7 @@ async def read_body(request):
 
 
 def notification(raw, headers, db):
-    providers.verify_notification(headers, raw)
+    providers.verify_notification(headers, raw, db)
     return wxpay.decrypt_callback_resource(providers.pay_cfg(db)["wx_api_key"], json.loads(raw)["resource"])
 
 
@@ -85,8 +86,8 @@ def accept_refund(raw, headers, db):
     return Response(status_code=204)
 
 
-def verify_push(query, encrypted):
-    token = settings.commerce_push_token
+def verify_push(query, encrypted, db=None):
+    token = resolve(db, settings).commerce_push_token
     if not token:
         raise HTTPException(409, "数字支付消息推送未配置")
     try:
@@ -101,8 +102,8 @@ def verify_push(query, encrypted):
 
 
 @router.get("/virtual")
-def virtual_challenge(request: Request):
-    verify_push(request.query_params, "")
+def virtual_challenge(request: Request, db: Session = Depends(get_db)):
+    verify_push(request.query_params, "", db)
     return PlainTextResponse(request.query_params.get("echostr", ""))
 
 
@@ -116,11 +117,11 @@ def accept_virtual(raw, query, db):
         raise HTTPException(422)
     outer = ET.fromstring(raw)
     encrypted = outer.findtext("Encrypt", "")
-    verify_push(query, encrypted)
+    verify_push(query, encrypted, db)
     if not encrypted:
         raise HTTPException(401, "数字支付仅接受加密消息")
     try:
-        key = base64.b64decode(settings.commerce_push_aes_key + "=")
+        key = base64.b64decode(resolve(db, settings).commerce_push_aes_key + "=")
         decryptor = Cipher(algorithms.AES(key), modes.CBC(key[:16])).decryptor()
         plain = decryptor.update(base64.b64decode(encrypted)) + decryptor.finalize()
         padding_size = plain[-1]

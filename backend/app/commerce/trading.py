@@ -155,4 +155,4 @@ def order_dict(db, order):
         "refund_via_apple": bool(order.provider == "virtual" and payment and payment.params.get("platform") == "ios"),
         "items": [serialize(i) for i in db.query(OrderItem).filter_by(order_id=order.id)],
         "shipment": serialize(s) if (s := db.query(Shipment).filter_by(order_id=order.id).first()) else None,
-        "aftersales": [sale_dict(a) for a in db.query(AfterSale).filter_by(order_id=order.id)], "legacy": False}
+        "aftersales": [sale_dict(a, db) for a in db.query(AfterSale).filter_by(order_id=order.id)], "legacy": False}

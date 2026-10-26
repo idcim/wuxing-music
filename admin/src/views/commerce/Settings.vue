@@ -7,9 +7,16 @@ import ImageField from '@/components/commerce/ImageField.vue';
 import MarkdownEditor from '@/components/MarkdownEditor.vue';
 import LogisticsSettings from '@/components/commerce/LogisticsSettings.vue';
 import ConfigurationCheck from '@/components/commerce/ConfigurationCheck.vue';
+import ChannelSettings from '@/components/commerce/ChannelSettings.vue';
 const auth = useAuthStore();
 const form = ref<any>({ provinces: [] }), caps = ref<Record<string, boolean>>({}), loading = ref(true), saving = ref(false);
 const migrated = ref(false);
+const diagnosticRevision = ref(0);
+async function channelsSaved() {
+  diagnosticRevision.value++;
+  const status = await commerce.get('/status');
+  caps.value = status.capabilities;
+}
 const provinces = ['北京市','天津市','河北省','山西省','内蒙古自治区','辽宁省','吉林省','黑龙江省','上海市','江苏省','浙江省','安徽省','福建省','江西省','山东省','河南省','湖北省','湖南省','广东省','广西壮族自治区','海南省','重庆市','四川省','贵州省','云南省','西藏自治区','陕西省','甘肃省','青海省','宁夏回族自治区','新疆维吾尔自治区'];
 async function load() {
   loading.value = true;
@@ -30,11 +37,12 @@ onMounted(load);
 </script>
 <template>
   <BusinessPage title="课程商城运营配置" description="展示与售卖分别控制；关闭售卖不影响已购课程、已支付订单和售后处理。">
-    <LogisticsSettings v-if="auth.can('commerce:settings')" @saved="caps.logistics = $event" />
-    <ConfigurationCheck v-if="auth.can('commerce:settings')" />
+    <ChannelSettings v-if="auth.can('commerce:settings')" @saved="channelsSaved" />
+    <LogisticsSettings v-if="auth.can('commerce:settings')" @saved="channelsSaved" />
+    <ConfigurationCheck v-if="auth.can('commerce:settings')" :key="diagnosticRevision" />
     <el-alert v-if="!loading && !migrated" title="课程商城数据尚未初始化，其余运营配置暂未开放。物流账号可以先在上方保存。" type="info" :closable="false" />
     <BusinessForm v-if="migrated" v-loading="loading" :model="form" class="settings-panel" :disabled="!auth.can('commerce:settings')">
-      <el-alert title="支付与私有存储密钥由技术人员在服务端配置；快递100账号可直接在上方保存。" :closable="false" style="margin-bottom:20px" />
+      <el-alert title="支付、私有课程 OSS、发货与快递100参数可在上方维护；下方单独控制展示与售卖。" :closable="false" style="margin-bottom:20px" />
       <el-descriptions :column="2" border style="margin-bottom:24px"><el-descriptions-item v-for="(label, key) in { physical_payment:'实物支付', course_payment:'数字课程支付', course_ios:'iOS 数字支付', private_media:'私有课程存储', shipping:'微信发货与收货同步', logistics:'快递100轨迹查询' }" :key="key" :label="label"><el-tag :type="caps[key] ? 'success' : 'info'">{{ caps[key] ? '已配置（仍需真实联调）' : '未配置 / 未验收' }}</el-tag></el-descriptions-item></el-descriptions>
       <el-form-item label="展示课程入口"><el-switch v-model="form.courses_visible" /></el-form-item>
       <el-form-item label="开放收费课程购买"><el-switch v-model="form.courses_sale" /></el-form-item>

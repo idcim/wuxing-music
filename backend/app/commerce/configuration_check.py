@@ -1,14 +1,16 @@
 """仅返回固定字段名称与存在性，帮助核对实际进程加载的配置；不调用外部渠道。"""
-from app.config import settings
 from app.routers.mp import _mp_cfg, _pay_cfg
 from .logistics_settings import load as logistics_account
+from .runtime_settings import load
 
 
 def report(db):
     mp, pay = _mp_cfg(db), _pay_cfg(db)
+    runtime = load(db)
+    source = "后台渠道配置" if runtime["source"] == "admin" else "服务器配置 / 既有支付回调域名"
 
     def server(*names):
-        return [dict(name=name.upper(), present=bool(getattr(settings, name)), source="服务器配置") for name in names]
+        return [dict(name=name.upper(), present=bool(runtime["values"][name.removeprefix("commerce_")]), source=source) for name in names]
 
     def stored(config, names, source):
         return [dict(name=name, present=bool(config.get(name)), source=source) for name in names]
@@ -28,7 +30,7 @@ def report(db):
         ("enabled", "物流查询已启用"), ("customer", "Customer"), ("key", "Key"))]
     return dict(verified_external=False, groups=[
         group("physical_payment", "实物支付", physical,
-              "商户参数复用现有后台支付配置；2.0 通知验签公钥与回调域名仍需服务器配置。"),
+              "商户参数复用现有音乐支付配置；2.0 通知验签公钥与回调域名可在本页上方维护。"),
         group("course_payment", "课程数字支付", course,
               "数字支付与音乐会员的普通微信支付独立，批准标记不会因旧会员支付可用而自动开启。"),
         group("course_ios", "iOS 数字支付许可", server("commerce_virtual_ios_approved"),

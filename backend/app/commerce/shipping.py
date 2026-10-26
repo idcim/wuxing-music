@@ -7,10 +7,11 @@ from app.models import User
 from app.routers.mp import _get_access_token
 from .models import Order, OrderItem, Shipment
 from .common import guard_claim
+from .runtime_settings import resolve
 
 
 def call(db, action, payload):
-    if not settings.commerce_shipping_approved:
+    if not resolve(db, settings).commerce_shipping_approved:
         raise HTTPException(409, "微信发货与物流能力尚未配置验收")
     response = httpx.post("https://api.weixin.qq.com/" + action,
         params={"access_token": _get_access_token(db)}, json=payload, timeout=15)

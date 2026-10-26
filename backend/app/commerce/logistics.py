@@ -79,7 +79,8 @@ def trace(db, order, shipment):
     account = account_config(db)
     if not account["enabled"] or not all([account["customer"], account["key"]]) or account["error"]:
         raise HTTPException(409, "快递100物流查询尚未配置，请复制运单号查询或咨询客服")
-    mapping = {**CARRIERS, **settings.commerce_logistics_carriers}
+    from .runtime_settings import resolve
+    mapping = {**CARRIERS, **resolve(db, settings).commerce_logistics_carriers}
     carrier = mapping.get(shipment.carrier, mapping.get(shipment.carrier.upper(), shipment.carrier.lower()))
     if not re.fullmatch(r"[a-z0-9]{2,32}", carrier):
         raise HTTPException(409, "快递公司尚未配置查询编码，请联系客服")
