@@ -87,6 +87,7 @@ class RuntimeSettingsCases:
         self.app.dependency_overrides[get_current_admin] = lambda: SimpleNamespace(is_super=False, role_id=98, username="viewer")
         self.assertEqual(self.client.get(PATH).status_code, 403)
         self.assertEqual(self.client.post(PATH, json={}).status_code, 403)
+        self.assertEqual(self.client.get("/api/admin/commerce/channel/storage-check").status_code, 403)
         self.assertEqual(self.client.get("/api/mp/v2/channel/settings").status_code, 404)
 
     def test_channel_validation_never_echoes_input_and_rejects_unsafe_endpoints(self):
@@ -197,6 +198,20 @@ class RuntimeSettingsCases:
         media = next(group for group in check["groups"] if group["key"] == "private_media")
         self.assertTrue(media["complete"])
         self.assertTrue(any(item["source"] == "后台存储设置（共用账号）" for item in media["checks"]))
+        store = SimpleNamespace(get_bucket_acl=lambda: SimpleNamespace(acl="private"))
+        auth, bucket = Mock(), Mock(return_value=store)
+        with patch.dict(sys.modules, {"oss2": SimpleNamespace(Auth=auth, Bucket=bucket)}):
+            result = self.client.get("/api/admin/commerce/channel/storage-check")
+            self.assertEqual(result.status_code, 200, result.text)
+            self.assertNotIn("shared-secret", result.text)
+            auth.assert_called_with("shared-id", "shared-secret")
+            self.assertEqual(bucket.call_args.args[1:], (storage["oss_endpoint"], body["private_bucket"]))
+            store.get_bucket_acl = lambda: SimpleNamespace(acl="public-read")
+            self.assertEqual(self.client.get("/api/admin/commerce/channel/storage-check").status_code, 409)
+            store.get_bucket_acl = Mock(side_effect=RuntimeError("shared-secret"))
+            failed = self.client.get("/api/admin/commerce/channel/storage-check")
+            self.assertEqual(failed.status_code, 409)
+            self.assertNotIn("shared-secret", failed.text)
         with self.sessions() as db:
             config = channel.load(db)
             config["values"]["private_bucket"] = "public-music-test"

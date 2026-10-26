@@ -50,6 +50,19 @@ def channel_settings(_=Depends(require_perm("commerce:settings")), db: Session =
     return ok(masked(db))
 
 
+@router.get("/channel/storage-check")
+def channel_storage_check(_=Depends(require_perm("commerce:settings")), db: Session = Depends(get_db)):
+    """只读核对私有桶可访问且 ACL 为 private，不创建课件或探测对象。"""
+    try:
+        media.bucket(db)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(409, "私有课件桶连接或读取 ACL 失败，请核对桶名、Endpoint 与账号权限") from None
+    return ok({"private_bucket_accessible": True,
+               "note": "已验证桶 ACL；上传、历史版本读取及小程序播放仍需用真实课件验证"})
+
+
 @router.post("/channel/settings")
 async def channel_settings_save(request: Request, admin=Depends(require_perm("commerce:settings")), db: Session = Depends(get_db)):
     from .runtime_settings import RuntimeConfigIn, save
