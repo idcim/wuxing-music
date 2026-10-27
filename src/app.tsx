@@ -31,7 +31,7 @@ function App({ children }: PropsWithChildren) {
 // - H5 且在微信内、本地无 token → 走公众号网页授权静默登录，成功后清理 URL 上的 code/state
 //   （wechatLoginH5 内部自行处理「带 code 换取 / 无 code 跳授权」）。
 // - 其它端 / 已登录 → 常规缓存恢复。小程序端绝不触发 H5 逻辑。
-// 资料补全提示不在这里弹（会和 splash 导航/测评引导撞车），由 home 页 useDidShow 触发。
+// 资料补全不弹窗，由“我的”页面显示可点击的站内提示。
 async function bootstrapAuth(): Promise<void> {
   // 微信外浏览器的扫码授权回跳。为什么在这儿而不是登录页：qrconnect 的 redirect_uri
   // 不能带 hash（微信把 ?code=.. 拼在末尾，带 hash 就落进 fragment 里读不到），
