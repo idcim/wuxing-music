@@ -27,7 +27,7 @@ wuxing-music/
 
 ## 小程序前端
 
-技术栈：Taro 4.2 + React 18 + TypeScript + Sass + Zustand。
+技术栈：Taro 4.3 + React 18 + TypeScript + Sass + Zustand。
 
 先复制环境变量模板，并在 `.env.local` 中填写小程序 AppID 和 API 根地址。该文件已被 Git 忽略，修改后需重启 Taro 构建。
 
@@ -60,7 +60,7 @@ npm run type-check       # 类型检查
 
 ### 已知约束
 
-- 自定义 tabBar 在 Taro4+vite 下不编译（官方 bug #18415），改用页内 `TabBar` 组件 + `redirectTo`。
+- 项目仍使用页内 `TabBar` 组件 + `redirectTo`；4.3.0 已修复早期 Vite 自定义 tabBar 编译问题，本次依赖升级不改导航实现。
 - 音频 `audioUrl` 当前为占位，真机需在微信后台配 `downloadFile` 合法域名；mock 下回退测试音频。
 
 ---

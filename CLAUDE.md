@@ -25,7 +25,7 @@
 
 | 目录 | 角色 | 技术栈 | 状态 |
 | ---- | ---- | ------ | ---- |
-| `src/` | 小程序 / H5 前端 | **Taro 4.2 + React 18 + TS + Sass + Zustand** | 小程序主流程完成；H5（微信内）登录/支付已接入（v1.1），已容器化上服务器 |
+| `src/` | 小程序 / H5 前端 | **Taro 4.3 + React 18 + TS + Sass + Zustand** | 小程序主流程完成；H5（微信内）登录/支付已接入（v1.1），已容器化上服务器 |
 | `backend/` | 后端 API（管理端 + 小程序/H5 公开端） | **FastAPI + SQLAlchemy + 外部 MySQL**（开发可 SQLite），Docker | 全套接口 + 微信支付/礼物码/统计 + RBAC + 限流已实现，待真实商户配置上线 |
 | `admin/` | 管理后台 | **Vben Admin 5.7 官方核心 + Vue3 + Vite + Element Plus + Pinia** | 业务页完成，含管理员/角色权限、设置中心及持久音频任务历史 |
 
@@ -45,7 +45,7 @@
 ### 前端 `src/`
 
 ```
-- Taro 4.2（注意：不是 3.x；4.x + Vite 编译）
+- Taro 4.3（注意：不是 3.x；4.x + Vite 编译）
 - React 18 + Hooks + TypeScript（strict）
 - Sass（注意：不是 Less；design token 在 src/styles/variables.scss）
 - Zustand（状态管理）
@@ -53,7 +53,7 @@
 - 图标：lucide-static 生成 SVG 路径 → 自研 Icon 组件用 background-image 渲染（见「图标方案」）
 ```
 
-> 为何不用 NutUI：本项目视觉高度定制（深色冥想氛围、五行渐变），组件库反而是负担；且 Taro4+Vite 下自定义 tabBar 有编译 bug（见「已知陷阱」），越少黑盒越好。
+> 为何不用 NutUI：本项目视觉高度定制（深色冥想氛围、五行渐变），组件库反而是负担；导航目前沿用页内 TabBar，越少黑盒越好。
 
 ### 后端 `backend/`
 
@@ -237,7 +237,7 @@ wuxing-music/
 
 ### 配色系统
 
-Design token 定义在 **`src/styles/variables.scss`（Sass 变量，非 Less）**，各页/组件通过 `@use ... as *` 复用，不再使用已弃用的 `@import`。Taro 4.2 限定的 Vite 4 只能调用 Sass legacy JS API，`config/sass.ts` 仅屏蔽这一项上游警告，不屏蔽其他弃用警告。
+Design token 定义在 **`src/styles/variables.scss`（Sass 变量，非 Less）**，各页/组件通过 `@use ... as *` 复用，不再使用已弃用的 `@import`。当前 Vite 4 构建仍调用 Sass legacy JS API，`config/sass.ts` 仅屏蔽这一项上游警告，不屏蔽其他弃用警告。
 
 #### 全局基色
 
@@ -740,7 +740,7 @@ GET/POST /roles   DELETE /roles/{id}   GET /permissions                 # 角色
 
 ## 未来扩展到 App（跨端策略）
 
-> **现状注记**：已落地 **微信小程序（weapp）+ H5（微信内）** 两端。`services/audio/`、`services/wechat/` 已按端分文件（`index.weapp.ts` / `index.h5.ts`）；`auth.ts` / `pay.ts` 用 `isWeapp`/`isH5` 运行时分支（H5 走公众号网页授权 + JSAPI，小程序走 `wx.login` + `requestPayment`）；`storage/` 仍单文件。**自定义 tabBar 因 Taro4+Vite 编译 bug 用页内 `TabBar` 组件 + `redirectTo` 替代**；RN 端（`.rn.ts` / `.rn.scss`）尚未开始。以下为**未来 App 化的目标规范**，新代码应朝此方向组织。
+> **现状注记**：已落地 **微信小程序（weapp）+ H5（微信内）** 两端。`services/audio/`、`services/wechat/` 已按端分文件（`index.weapp.ts` / `index.h5.ts`）；`auth.ts` / `pay.ts` 用 `isWeapp`/`isH5` 运行时分支（H5 走公众号网页授权 + JSAPI，小程序走 `wx.login` + `requestPayment`）；`storage/` 仍单文件。项目沿用页内 `TabBar` 组件 + `redirectTo`；RN 端（`.rn.ts` / `.rn.scss`）尚未开始。以下为**未来 App 化的目标规范**，新代码应朝此方向组织。
 
 **总原则**：业务逻辑跨端共用，UI 与平台 API 分平台实现。业务层零依赖平台 API（组件禁止直接 `wx.xxx`，一律经 `services/` 封装）；差异样式走 `.weapp.scss` / `.rn.scss`，共用走 `.scss`；状态用 Zustand（RN/小程序均可）。
 
@@ -780,7 +780,7 @@ iOS 端订阅类商品**必须走 Apple IAP**（苹果抽 30%，禁止引导外�
 
 ## 已知陷阱
 
-1. **自定义 tabBar 不可用**：Taro4 + Vite 下 `custom: true` 原生 tabBar 不编译（官方 bug #18415）。本项目改用**页内 `TabBar` 组件 + `Taro.redirectTo`** 切换，`app.config.ts` 不声明 `tabBar`。
+1. **当前导航实现**：Taro 4.2 时 `custom: true` 原生 tabBar 在 Vite 下不编译（官方 bug #18415），本项目改用**页内 `TabBar` 组件 + `Taro.redirectTo`** 切换。Taro 4.3.0 已修复该编译问题，但本次升级没有切换导航，`app.config.ts` 仍不声明 `tabBar`。
 2. **图标别用 `<Image>`**：真机偶发 `appServiceSDKScriptError`；用 `View` + `background-image`（URL 编码 SVG）渲染（见 `Icon` 组件）。
 3. **本地连后端**：开发者工具「本地设置」勾「不校验合法域名」；真机把 `.env.local` 的 `TARO_APP_API_BASE` 改成局域网地址，并在微信后台配 request/downloadFile 合法域名。
 4. **增量构建缓存损坏**（报 `taro.useState/useMemo is not a function` 等）：清缓存全量重建 `rm -rf dist node_modules/.vite .swc && npm run dev:weapp`。

@@ -8,7 +8,7 @@ export default function sassConfig(ctx: IPluginContext) {
         ...viteConfig.css?.preprocessorOptions,
         scss: {
           ...viteConfig.css?.preprocessorOptions?.scss,
-          // Taro 4.2 限定 Vite 4，其 Sass 调用固定为 legacy JS API。
+          // 当前 Vite 4 构建仍通过 Sass legacy JS API 调用。
           silenceDeprecations: ['legacy-js-api']
         }
       }

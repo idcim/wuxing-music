@@ -20,7 +20,7 @@
 
 | 路径 | 职责 | 技术栈 |
 | --- | --- | --- |
-| `src/` | 微信小程序与 H5 | Taro 4.2、React 18、TypeScript、Sass、Zustand |
+| `src/` | 微信小程序与 H5 | Taro 4.3、React 18、TypeScript、Sass、Zustand |
 | `admin/` | 管理后台 | Vben Admin 5.7 官方核心、Vue 3、Vite、TypeScript、Element Plus、Pinia |
 | `backend/` | 公开端与管理端 API | FastAPI、SQLAlchemy 2；生产外部 MySQL，开发可用 SQLite |
 | `config/` | Taro 编译配置 | Vite、PostCSS |
