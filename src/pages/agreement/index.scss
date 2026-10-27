@@ -1,0 +1,30 @@
+@use '../../styles/variables.scss' as *;
+
+.agreement {
+  min-height: 100vh;
+  background: #03050a;
+  color: $text-primary;
+
+  &__nav {
+    display: flex;
+    align-items: center;
+    gap: 24rpx;
+    padding: 0 36rpx 28rpx;
+  }
+
+  &__back {
+    color: $text-secondary;
+    font-size: 28rpx;
+  }
+
+  &__title {
+    font-size: 34rpx;
+  }
+
+  &__body {
+    padding: 24rpx 36rpx 80rpx;
+    font-size: 28rpx;
+    line-height: 1.8;
+    color: $text-secondary;
+  }
+}

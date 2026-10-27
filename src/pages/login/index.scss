@@ -118,6 +118,40 @@
     letter-spacing: 1rpx;
   }
 
+  &__consent {
+    margin-top: 36rpx;
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    color: $text-secondary;
+    font-size: 24rpx;
+    line-height: 48rpx;
+  }
+
+  &__checkbox {
+    margin-right: 8rpx;
+  }
+
+  &__policy-link {
+    color: #a3e635;
+    text-decoration: underline;
+  }
+
+  &__guest {
+    width: 100%;
+    min-height: 88rpx;
+    margin-top: 28rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid $border;
+    border-radius: 44rpx;
+    color: $text-primary;
+    font-size: 28rpx;
+  }
+
   // ── H5 手机登录表单 ──
   &__form {
     width: 100%;
