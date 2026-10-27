@@ -16,7 +16,7 @@ type LoginMode = 'wechat' | 'phone';
 const PHONE_RE = /^1\d{10}$/;
 // placeholder 颜色（小程序端只认 placeholderStyle，不吃 ::placeholder）
 const PLACEHOLDER_STYLE = 'color:#475569';
-// 登录成功不直接回首页：先去个人信息页补全资料，改好（或点完成）再进首页
+// H5 登录沿用个人信息页；小程序登录直接回首页，在“我的”页提示补全资料。
 const AFTER_LOGIN = '/pages/userinfo/index?from=login';
 
 export default function Login() {
@@ -61,7 +61,7 @@ export default function Login() {
     return () => clearTimeout(t);
   }, [countdown]);
 
-  // ── 小程序：微信一键登录（保持原逻辑）──
+  // ── 小程序：微信一键登录，资料补全由“我的”页面提示 ──
   const onWeappLogin = async () => {
     if (loggingIn) return;
     if (!agreed) {
@@ -70,7 +70,7 @@ export default function Login() {
     }
     try {
       await login();
-      Taro.reLaunch({ url: AFTER_LOGIN });
+      Taro.reLaunch({ url: '/pages/home/index' });
     } catch (e: any) {
       // 透传后端的具体原因（网络异常 / 凭证失效），别一律「登录失败」
       Taro.showToast({ title: e?.message || '登录失败，请重试', icon: 'none' });

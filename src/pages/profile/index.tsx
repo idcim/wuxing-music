@@ -8,6 +8,7 @@ import { getAgentMe } from '@/services/agent';
 import Icon from '@/components/Icon';
 import { A } from '@/utils/color';
 import { resolveUrl } from '@/utils/url';
+import { isProfileIncomplete } from '@/utils/profile';
 import { navTopStyle } from '@/utils/nav';
 import CdkeyModal from '@/components/CdkeyModal';
 import MiniPlayer from '@/components/MiniPlayer';
@@ -201,6 +202,16 @@ export default function Profile() {
           <Icon name="chevronRight" size={30} color="#64748b" strokeWidth={1.5} />
         </View>
       </View>
+
+      {isProfileIncomplete(user) && (
+        <View className="profile__complete" onClick={goUserInfo}>
+          <View className="profile__complete-copy">
+            <Text className="profile__complete-title">完善个人信息</Text>
+            <Text className="profile__complete-desc">设置昵称、绑定手机号，方便找回账号与使用会员服务</Text>
+          </View>
+          <Text className="profile__complete-action">去完善 ›</Text>
+        </View>
+      )}
 
       {/* 会员卡片 */}
       <View

@@ -117,6 +117,43 @@
     letter-spacing: 2rpx;
   }
 
+  &__complete {
+    display: flex;
+    align-items: center;
+    gap: 24rpx;
+    margin-bottom: 28rpx;
+    padding: 30rpx 32rpx;
+    border: 2rpx solid rgba(163, 230, 53, 0.45);
+    border-radius: 30rpx;
+    background: linear-gradient(110deg, rgba(163, 230, 53, 0.16), rgba(163, 230, 53, 0.05));
+  }
+
+  &__complete-copy {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: 8rpx;
+  }
+
+  &__complete-title {
+    color: $text-primary;
+    font-size: 30rpx;
+    font-weight: 500;
+  }
+
+  &__complete-desc {
+    color: $text-secondary;
+    font-size: 23rpx;
+    line-height: 1.5;
+  }
+
+  &__complete-action {
+    flex-shrink: 0;
+    color: #a3e635;
+    font-size: 25rpx;
+  }
+
   // ── 会员卡片 ──
   &__vip {
     border: 2rpx solid;
