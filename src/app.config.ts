@@ -3,6 +3,7 @@ export default defineAppConfig({
     'pages/splash/index',
     'pages/onboard/index',
     'pages/login/index',
+    'pages/agreement/index',
     'pages/quiz/index',
     'pages/result/index',
     'pages/home/index',

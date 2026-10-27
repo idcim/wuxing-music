@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { View, Text, Input } from '@tarojs/components';
+import { View, Text, Input, Checkbox, CheckboxGroup } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import Icon from '@/components/Icon';
 import { useUserStore } from '@/stores/user';
 import { useSiteStore } from '@/stores/site';
 import { sendSmsCode, isQrLoginConfigured } from '@/services/auth';
 import { isWeapp, isInWeChat } from '@/utils/platform';
+import { goBack } from '@/utils/nav';
+import { openWeappPrivacyPolicy } from '@/services/privacy';
 import './index.scss';
 
 type LoginTab = 'code' | 'password';
@@ -37,6 +39,8 @@ export default function Login() {
   // 微信外浏览器：后端配了开放平台网站应用才显示扫码入口。
   // 微信内不用问，公众号那条路一直都在。
   const [qrReady, setQrReady] = useState(isInWeChat);
+  // 每次进入登录页都由用户自行选择，不从缓存或平台授权状态预选。
+  const [agreed, setAgreed] = useState(false);
 
   // 已登录用户直接跳走
   useDidShow(() => {
@@ -60,6 +64,10 @@ export default function Login() {
   // ── 小程序：微信一键登录（保持原逻辑）──
   const onWeappLogin = async () => {
     if (loggingIn) return;
+    if (!agreed) {
+      Taro.showToast({ title: '请先阅读并勾选用户服务协议和隐私政策', icon: 'none' });
+      return;
+    }
     try {
       await login();
       Taro.reLaunch({ url: AFTER_LOGIN });
@@ -173,7 +181,17 @@ export default function Login() {
           >
             <Text className="login__btn-text">{loggingIn ? '登录中…' : '微信一键登录'}</Text>
           </View>
-          <Text className="login__terms">登录即同意服务条款与隐私政策</Text>
+          <View className="login__consent">
+            <CheckboxGroup onChange={(event) => setAgreed(event.detail.value.includes('agreed'))}>
+              <Checkbox className="login__checkbox" value="agreed" checked={agreed} color="#84cc16" />
+            </CheckboxGroup>
+            <Text className="login__consent-label">我已阅读并同意</Text>
+            <Text className="login__policy-link" onClick={() => Taro.navigateTo({ url: '/pages/agreement/index' })}>《用户服务协议》</Text>
+            <Text className="login__policy-link" onClick={openWeappPrivacyPolicy}>《隐私政策》</Text>
+          </View>
+          <View className="login__guest" onClick={() => goBack()}>
+            <Text>暂不登录，先体验</Text>
+          </View>
         </View>
       </View>
     );
