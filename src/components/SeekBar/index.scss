@@ -7,6 +7,9 @@
   position: relative;
   height: 88rpx;
   margin: 0 8rpx;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 
   // 轨道在命中区里垂直居中
   &__track {

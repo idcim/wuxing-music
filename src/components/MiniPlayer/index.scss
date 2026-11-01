@@ -71,29 +71,14 @@
     flex-shrink: 0;
   }
 
-  &__bar {
-    position: relative;
+  &__seek {
     flex: 1;
-    height: 4rpx;
-    background: rgba(255, 255, 255, 0.08);
-    border-radius: 2rpx;
-    overflow: hidden;
+    min-width: 0;
+    height: 48rpx;
 
-    // 缓冲进度：压在播放进度之下的浅色条。
-    // 上百 MB 的曲目弱网时，用户至少看得见「在下」而不是干等。
-    &-buffer {
-      position: absolute;
-      left: 0;
-      top: 0;
-      height: 100%;
-      background: rgba(255, 255, 255, 0.18);
-      transition: width 0.3s linear;
-    }
-
-    &-fill {
-      position: relative;
-      height: 100%;
-      transition: width 0.1s linear;
+    .seekbar {
+      height: 48rpx;
+      margin: 0;
     }
   }
 

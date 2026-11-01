@@ -158,14 +158,6 @@ export default function Player() {
           onSeek={seek}
           onSeeking={setDragSec}
         />
-        {!!loadError && (
-          <View className="player__error">
-            <Text className="player__error-text">{loadError}</Text>
-            <View className="player__error-btn" onClick={retry}>
-              <Text className="player__error-btn-text">重试</Text>
-            </View>
-          </View>
-        )}
         <View className="player__time">
           <Text className="player__time-cur serif">
             {fmtTime(dragSec !== null ? dragSec : currentTime)}
@@ -174,6 +166,16 @@ export default function Player() {
           <Text className="player__time-dur serif">
             {storeDuration ? fmtTime(storeDuration) : currentTrack.duration || fmtTime(dur)}
           </Text>
+        </View>
+        <View className="player__error">
+          {!!loadError && (
+            <>
+              <Text className="player__error-text">{loadError}</Text>
+              <View className="player__error-btn" onClick={retry}>
+                <Text className="player__error-btn-text">重试</Text>
+              </View>
+            </>
+          )}
         </View>
       </View>
 

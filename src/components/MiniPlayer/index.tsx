@@ -9,6 +9,7 @@ import { rpx } from '@/utils/unit';
 import { fmtTime } from '@/utils/format';
 import { resolveUrl } from '@/utils/url';
 import Icon from '@/components/Icon';
+import SeekBar from '@/components/SeekBar';
 import SleepTimer from '@/components/SleepTimer';
 import Playlist from '@/components/Playlist';
 import { isH5 } from '@/utils/platform';
@@ -36,7 +37,6 @@ export default function MiniPlayer() {
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const isLoading = usePlayerStore((s) => s.isLoading);
-  const progress = usePlayerStore((s) => s.progress);
   const currentTime = usePlayerStore((s) => s.currentTime);
   const buffered = usePlayerStore((s) => s.buffered);
   const loadError = usePlayerStore((s) => s.loadError);
@@ -45,6 +45,7 @@ export default function MiniPlayer() {
   const timerVal = usePlayerStore((s) => s.timerVal);
   const pause = usePlayerStore((s) => s.pause);
   const resume = usePlayerStore((s) => s.resume);
+  const seek = usePlayerStore((s) => s.seek);
   const userElement = useUserStore((s) => s.element);
   const getElementOfTrack = useContentStore((s) => s.getElementOfTrack);
 
@@ -58,6 +59,7 @@ export default function MiniPlayer() {
 
   // 与全屏播放器同源：跟随曲目所属元素，否则两处颜色会打架
   const el = getElementOfTrack(currentTrack, userElement as ElementId | null);
+  const openPlayer = () => Taro.navigateTo({ url: '/pages/player/index' });
   const toggle = () => {
     // 加载失败时按钮变成「重试」，别让用户对着一个没反应的播放键
     if (loadError) { retry(); return; }
@@ -69,7 +71,6 @@ export default function MiniPlayer() {
   // （旧写法 progress*0.36 / progress*21.6 是把百分比按「36 分钟一首」硬折算的，
   //  凡是时长不等于 36 分钟的曲目，显示的时间都是错的。）
   const curLabel = fmtTime(currentTime);
-  const bufferedPct = duration ? Math.min(100, (buffered / duration) * 100) : 0;
   const hasTabBar = currentPageHasTabBar();
 
   return (
@@ -88,7 +89,7 @@ export default function MiniPlayer() {
             background: `radial-gradient(circle, ${A.a30(el.primary)}, ${A.a10(el.primary)})`,
             borderColor: A.a40(el.primary)
           }}
-          onClick={() => Taro.navigateTo({ url: '/pages/player/index' })}
+          onClick={openPlayer}
         >
           {currentTrack.coverUrl ? (
             <Image className="mini-player__cover-img" src={resolveUrl(currentTrack.coverUrl)} mode="aspectFill" />
@@ -98,21 +99,20 @@ export default function MiniPlayer() {
         </View>
 
         <View className="mini-player__info">
-          <Text className="mini-player__title">
+          <Text className="mini-player__title" onClick={openPlayer}>
             {loadError || currentTrack.title}
           </Text>
           <View className="mini-player__row">
             <Text className="mini-player__time cormorant" style={{ color: el.accent }}>
               {curLabel}
             </Text>
-            <View className="mini-player__bar">
-              <View
-                className="mini-player__bar-buffer"
-                style={{ width: `${bufferedPct}%` }}
-              />
-              <View
-                className="mini-player__bar-fill"
-                style={{ width: `${progress}%`, background: el.primary }}
+            <View className="mini-player__seek">
+              <SeekBar
+                duration={duration || currentTrack.durationSec || 0}
+                currentTime={currentTime}
+                buffered={buffered}
+                color={el.primary}
+                onSeek={seek}
               />
             </View>
           </View>

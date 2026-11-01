@@ -24,6 +24,7 @@ let timerId: ReturnType<typeof setTimeout> | null = null;
 // 存下 deadline 才能在回前台时按真实时间校正。
 let timerDeadline = 0;
 let loadedTrackId: number | null = null;
+let loadGeneration = 0;
 // 本次播放请求的格式上下文（trackId → 请求的 fmt 与实际命中的 format），
 // 解码失败时据此换另一种格式重试
 const playFmtByTrack = new Map<number, { fmt: string; format?: string }>();
@@ -149,6 +150,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   // 内部：真正加载并播放某曲目
   _start: (track: Track) => {
     loadedTrackId = track.id;
+    const generation = ++loadGeneration;
+    const isStale = () => generation !== loadGeneration;
     clearLoadTimer();
     // 加载看门狗：迟迟等不到 canplay 就给用户一句话，
     // 而不是让 spinner 永远转下去（大文件 + 弱网时最容易发生）。
@@ -164,12 +167,16 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     const callbacks = {
       onPlay: () => {
+        if (isStale()) return;
         clearLoadTimer();
         playedTracks.add(track.id);
         set({ isPlaying: true, isLoading: false, loadError: '' });
       },
-      onPause: () => set({ isPlaying: false }),
+      onPause: () => {
+        if (!isStale()) set({ isPlaying: false });
+      },
       onEnded: () => {
+        if (isStale()) return;
         clearLoadTimer();
         set({ isPlaying: false, progress: 100 });
         // 试听剪辑到点自然结束：转升级引导，不自动切下一首
@@ -180,12 +187,16 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         // 自动续播下一首
         get().next();
       },
-      onWaiting: () => set({ isLoading: true }),
+      onWaiting: () => {
+        if (!isStale()) set({ isLoading: true });
+      },
       onCanplay: () => {
+        if (isStale()) return;
         clearLoadTimer();
         set({ isLoading: false, loadError: '' });
       },
       onError: (err?: unknown) => {
+        if (isStale()) return;
         console.error('[audio]', err);
         clearLoadTimer();
         // 已经开播过的曲目：零星 error（缓冲抖动/seek 重缓冲）不打断播放，
@@ -228,8 +239,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           loadError: `音频加载失败${parts ? `（${parts}）` : ''}`
         });
       },
-      onProgress: (bufferedSec: number) => set({ buffered: bufferedSec }),
+      onProgress: (bufferedSec: number) => {
+        if (!isStale()) set({ buffered: bufferedSec });
+      },
       onTimeUpdate: (cur: number, dur: number) => {
+        if (isStale()) return;
         // isPremium 必须每次实时取：若在 _start 时捕获进闭包，
         // 用户听着听着开通了会员，仍会被卡在 30 秒试听，直到重新加载曲目。
         const { isPremium } = useUserStore.getState();
@@ -287,7 +301,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       return;
     }
     // 版权保护：目录接口不含音频地址，播放前用曲目 id 换短时效签名地址。
-    // 全端优先 AAC 副本（省流量；BGM 在 PC 微信实测可播 AAC/MP3）；
+    // 服务端优先返回已有 AAC；新上传默认没有 AAC，直接回退原始母版。
     // 解码失败时 onError 里自动换另一种格式重试一次，再失败 PC 落 H5 播放页。
     const fmt = fmtRetried.get(track.id) ?? 'aac';
     getPlayUrl(track.id, fmt)

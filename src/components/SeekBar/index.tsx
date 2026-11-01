@@ -162,6 +162,7 @@ export default function SeekBar({
     <View
       id={BAR_ID}
       className="seekbar"
+      catchMove
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}

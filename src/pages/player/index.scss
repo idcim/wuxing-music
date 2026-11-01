@@ -1,11 +1,16 @@
 @use '../../styles/variables.scss' as *;
 
 .player {
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 0 $pad-outer 100rpx;
+  padding: 0 $pad-outer;
+  padding-bottom: calc(24rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
+  overflow: hidden;
+  overflow: clip;
 
   &--empty {
     align-items: center;
@@ -18,9 +23,10 @@
   }
 
   &__nav {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
-    padding: 88rpx 0 24rpx;
+    padding: 64rpx 0 16rpx;
   }
 
   &__back {
@@ -45,14 +51,16 @@
   // ── 旋转罗盘 ──
   &__disc-wrap {
     flex: 1;
+    min-height: 0;
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
   &__disc {
-    width: 480rpx;
-    height: 480rpx;
+    width: min(480rpx, 28vh);
+    height: min(480rpx, 28vh);
+    flex-shrink: 0;
     border-radius: 50%;
     border: 2rpx solid;
     display: flex;
@@ -62,8 +70,8 @@
   }
 
   &__disc-core {
-    width: 320rpx;
-    height: 320rpx;
+    width: 66.6667%;
+    height: 66.6667%;
     border-radius: 50%;
     overflow: hidden;
     display: flex;
@@ -84,8 +92,9 @@
 
   // ── 曲目信息 ──
   &__meta {
+    flex-shrink: 0;
     text-align: center;
-    margin: 56rpx 0 48rpx;
+    margin: 24rpx 0;
   }
 
   &__title {
@@ -113,34 +122,42 @@
 
   // ── 进度 ──
   &__progress {
-    margin-bottom: 56rpx;
+    flex-shrink: 0;
+    margin-bottom: 16rpx;
   }
 
   // 进度轴与缓冲轨道都在 components/SeekBar 里（原先用 Taro <Slider> 拖不动，
   // 缓冲条还得在它下面用负 margin 另画一条叠上去，现在合成同一条了）
 
-  // 加载失败 / 超时：给出原因与重试，别让用户对着永远转的 spinner
+  // 错误区始终占位，出现失败或重试时不会把下方控制区推走。
   &__error {
-    margin-top: 20rpx;
+    height: 64rpx;
+    margin-top: 4rpx;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 20rpx;
+    gap: 16rpx;
+    flex-shrink: 0;
   }
 
   &__error-text {
-    font-size: 24rpx;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 22rpx;
     color: #f87171;
   }
 
   &__error-btn {
-    padding: 10rpx 28rpx;
+    flex-shrink: 0;
+    padding: 6rpx 20rpx;
     border-radius: $radius-pill;
     border: 2rpx solid rgba(255, 255, 255, 0.16);
   }
 
   &__error-btn-text {
-    font-size: 24rpx;
+    font-size: 22rpx;
     color: $text-secondary;
   }
 
@@ -148,7 +165,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-top: 12rpx;
+    margin-top: 4rpx;
     padding: 0 8rpx;
 
     &-cur,
@@ -162,15 +179,16 @@
 
   // ── 工具行：模式 / 定时 / 列表 ──
   &__tools {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: space-around;
-    margin-bottom: 48rpx;
+    margin-bottom: 16rpx;
   }
 
   &__tool {
     min-width: 96rpx;
-    padding: 12rpx 8rpx;
+    padding: 8rpx;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -184,6 +202,7 @@
 
   // ── 主控制区 ──
   &__controls {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -218,5 +237,53 @@
     border: 6rpx solid rgba(10, 14, 26, 0.3);
     border-top-color: #0a0e1a;
     animation: rotate-slow 0.8s linear infinite;
+  }
+}
+
+@media (max-height: 600px) {
+  .player {
+    &__nav {
+      padding-top: 32rpx;
+      padding-bottom: 8rpx;
+    }
+
+    &__disc {
+      width: 16vh;
+      height: 16vh;
+    }
+
+    &__meta {
+      margin: 12rpx 0;
+    }
+
+    &__title {
+      font-size: 36rpx;
+    }
+
+    &__sub {
+      margin-top: 8rpx;
+    }
+
+    &__mood {
+      display: none;
+    }
+
+    &__progress,
+    &__tools {
+      margin-bottom: 8rpx;
+    }
+
+    &__error {
+      height: 48rpx;
+    }
+
+    &__tool {
+      padding: 4rpx 8rpx;
+    }
+
+    &__play {
+      width: 104rpx;
+      height: 104rpx;
+    }
   }
 }
