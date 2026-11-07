@@ -10,6 +10,7 @@ import { action, CommercePage, Cover, CustomerService, Feedback, requireCommerce
 export default function CourseDetail() {
   const id = Number(useRouter().params.id);
   const { data: course, loading, error, load } = useData<Entry>(`/courses/${id}`, {});
+  const courseSaleOpen = useCommerce(s => s.config.courses_sale === true);
   const [busy, setBusy] = useState(false);
   const openLesson = (lesson: Entry) => {
     if (!requireCommerceLogin()) return;
@@ -23,6 +24,7 @@ export default function CourseDetail() {
       if (sorted[0]) openLesson(sorted[0]);
       return;
     }
+    if (course.price_fen && !courseSaleOpen) return;
     setBusy(true);
     await action(async () => {
       if (!course.price_fen) { await commerceApi(`/courses/${id}/claim`, 'POST'); await load(); }
@@ -30,7 +32,7 @@ export default function CourseDetail() {
     });
     setBusy(false);
   };
-  return <CommercePage title='课程详情' footer={course.id && <><CustomerService /><Button className='commerce__primary' loading={busy} onClick={start}>{course.owned ? '开始学习' : course.price_fen ? '购买课程' : '免费领取'}</Button></>}>
+  return <CommercePage title='课程详情' footer={course.id && <><CustomerService /><Button className='commerce__primary' loading={busy} disabled={Boolean(course.price_fen && !course.owned && !courseSaleOpen)} onClick={start}>{course.owned ? '开始学习' : course.price_fen ? courseSaleOpen ? '购买课程' : '暂未开放购买' : '免费领取'}</Button></>}>
     <Feedback loading={loading} error={error} retry={load} />
     {course.id && <>
       <Cover src={course.cover} title={course.title} large /><Text className='commerce__name'>{course.title}</Text><Text className='commerce__muted'>{course.subtitle}</Text>

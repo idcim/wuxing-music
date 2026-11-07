@@ -9,12 +9,13 @@ import { action, CommercePage, Cover, CustomerService, Feedback, requireCommerce
 export default function ProductDetail() {
   const id = Number(useRouter().params.id);
   const { data: product, loading, error, load } = useData<Entry>(`/products/${id}`, {});
+  const shopSaleOpen = useCommerce(s => s.config.shop_sale === true);
   const [selected, setSelected] = useState<number>();
   const [quantity, setQuantity] = useState(1);
   const [busy, setBusy] = useState(false);
   const sku = product.skus?.find((s: Entry) => s.id === selected) || product.skus?.[0];
   const buy = async (cart: boolean) => {
-    if (!requireCommerceLogin() || busy) return;
+    if ((!cart && !shopSaleOpen) || !requireCommerceLogin() || busy) return;
     if (!sku || quantity < 1 || quantity > sku.available) return Taro.showToast({ title: '请选择有库存的规格和数量', icon: 'none' });
     setBusy(true);
     await action(async () => {
@@ -27,7 +28,7 @@ export default function ProductDetail() {
     });
     setBusy(false);
   };
-  return <CommercePage title='商品详情' footer={product.id && <><CustomerService /><Button className='commerce__secondary' disabled={busy} onClick={() => buy(true)}>加入购物车</Button><Button className='commerce__primary' loading={busy} onClick={() => buy(false)}>立即购买</Button></>}><Feedback loading={loading} error={error} retry={load} />
+  return <CommercePage title='商品详情' footer={product.id && <><CustomerService /><Button className='commerce__secondary' disabled={busy} onClick={() => buy(true)}>加入购物车</Button><Button className='commerce__primary' loading={busy} disabled={!shopSaleOpen} onClick={() => buy(false)}>{shopSaleOpen ? '立即购买' : '暂未开放购买'}</Button></>}><Feedback loading={loading} error={error} retry={load} />
     {product.id && <>
       {product.images?.length ? <Swiper className='commerce__cover commerce__cover--large' indicatorDots>{product.images.map((src: string) => <SwiperItem key={src}><Image src={resolveUrl(src)} className='commerce__cover commerce__cover--large' mode='aspectFill' /></SwiperItem>)}</Swiper> : <Cover src={product.cover} large />}
       <Text className='commerce__name'>{product.title}</Text><Text className='commerce__muted'>{product.subtitle}</Text><Text className='commerce__price'>{money(sku?.price_fen || product.price_fen)}</Text>
