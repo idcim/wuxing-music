@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -130,7 +131,12 @@ docker() {
 curl() { return 0; }
 sleep() { :; }
 flock() { return 0; }
-export -f git docker curl sleep flock
+timeout() {
+  shift 2
+  if [ "${MOCK_BUILD_TIMEOUT:-0}" = 1 ] && [ "${*: -1}" = build ]; then return 124; fi
+  "$@"
+}
+export -f git docker curl sleep flock timeout
 bash "$MOCK_SOURCE"
 '''
         return subprocess.run([BASH, "-c", wrapper], capture_output=True, text=True, encoding="utf-8", timeout=20, env={
@@ -180,3 +186,18 @@ bash "$MOCK_SOURCE"
             self.assertNotEqual(failed.returncode, 0)
             self.assertIn("reset --hard " + "b" * 40, (folder / "operations").read_text())
             self.assertEqual((folder / "success").read_text(), "b" * 40)
+
+    def test_stuck_build_times_out_retries_and_leaves_success_marker_untouched(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            previous = "b" * 40
+            (folder / "success").write_text(previous)
+            with patch.dict(os.environ, {"MOCK_BUILD_TIMEOUT": "1", "WUXING_BUILD_TIMEOUT": "1"}):
+                result = self.deploy(folder, rollback=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual((folder / "success").read_text(), previous)
+            log = (folder / "deploy.log").read_text(encoding="utf-8")
+            self.assertEqual(log.count("已终止客户端"), 3)
+            self.assertIn("旧容器继续运行，新代码保留供下次重试", log)
+            self.assertNotIn("up -d", (folder / "operations").read_text())
+            self.assertEqual((folder / "operations").read_text().count("reset --hard"), 1)

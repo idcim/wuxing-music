@@ -2,7 +2,8 @@
 # 五行律音 · 自动部署（单次幂等，供 1Panel「计划任务」定时调用）
 # ================================================================
 # 作用：拉取 → 构建 → 数据库备份校验 → 幂等迁移 → Worker/API/后台/H5 → 健康检查。
-#       失败只回滚应用，不回退数据库。成功部署且无更新则退出；带文件锁防并发重入。
+#       构建失败保留旧容器并在下轮重试；启动失败只回滚应用，不回退数据库。
+#       成功部署且无更新则退出；带文件锁防并发重入。
 #
 # 用法（1Panel）：计划任务 → 创建 → 类型「Shell 脚本」→ 周期如每 1 分钟 →
 #   脚本内容：
@@ -45,9 +46,10 @@ LOG_FILE="${WUXING_LOG:-/var/log/wuxing-deploy.log}"
 LOCK_FILE="${WUXING_LOCK:-/tmp/wuxing-deploy.lock}"
 HEALTH_RETRIES="${WUXING_HEALTH_RETRIES:-20}"                    # 健康检查重试次数
 HEALTH_INTERVAL="${WUXING_HEALTH_INTERVAL:-3}"                   # 每次间隔（秒）
-ROLLBACK_ON_FAIL="${WUXING_ROLLBACK:-1}"                         # 部署失败是否回滚（1=是）
+ROLLBACK_ON_FAIL="${WUXING_ROLLBACK:-1}"                         # 启动或健康检查失败是否回滚（1=是）
 PRUNE_IMAGES="${WUXING_PRUNE:-1}"                                # 部署后清理悬空镜像省磁盘
 COMMERCE_ENABLED="${WUXING_COMMERCE:-auto}"                      # auto=按版本声明启动 Worker；兼容旧版 profile
+BUILD_TIMEOUT="${WUXING_BUILD_TIMEOUT:-3600}"                    # 单次镜像构建上限（秒），防止持锁无限等待
 
 # 计划任务的 PATH 可能很精简，补上常见 bin 目录
 export PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:${PATH:-}"
@@ -118,6 +120,16 @@ if ! command -v flock >/dev/null 2>&1; then
   log "❌ 未找到 flock（util-linux），无法保证单实例，拒绝部署。请先安装。"
   exit 1
 fi
+if ! command -v timeout >/dev/null 2>&1; then
+  log "❌ 未找到 timeout（coreutils），无法限制构建耗时，拒绝部署。"
+  exit 1
+fi
+case "$BUILD_TIMEOUT" in
+  ''|*[!0-9]*) log "❌ WUXING_BUILD_TIMEOUT 必须为 1–14400 秒的整数。"; exit 1 ;;
+esac
+if [ "$BUILD_TIMEOUT" -lt 1 ] || [ "$BUILD_TIMEOUT" -gt 14400 ]; then
+  log "❌ WUXING_BUILD_TIMEOUT 必须为 1–14400 秒的整数。"; exit 1
+fi
 exec 9>"$LOCK_FILE"
 if ! flock -n 9; then
   log "已有部署进程在运行，跳过本次。"; exit 0
@@ -171,15 +183,29 @@ esac
 # 层缓存让重试只续跑失败的层，不会从头再来。
 BUILD_OK=0
 for attempt in 1 2 3; do
-  if $COMPOSE build >>"$LOG_FILE" 2>&1; then
+  log "开始构建第 $attempt 次（单次上限 ${BUILD_TIMEOUT}s）。"
+  if timeout --kill-after=30s "${BUILD_TIMEOUT}s" $COMPOSE build >>"$LOG_FILE" 2>&1; then
     BUILD_OK=1
     break
+  else
+    build_rc=$?
   fi
-  log "⚠️ 构建第 $attempt 次失败，20s 后重试…"
-  sleep 20
+  if [ "$build_rc" -eq 124 ]; then
+    log "⚠️ 构建第 $attempt 次超过 ${BUILD_TIMEOUT}s，已终止客户端。"
+  else
+    log "⚠️ 构建第 $attempt 次失败（退出码 $build_rc）。"
+  fi
+  if [ "$attempt" -lt 3 ]; then sleep 20; fi
 done
 
-if [ "$BUILD_OK" = "1" ] && $COMPOSE up -d >>"$LOG_FILE" 2>&1 && health_ok; then
+if [ "$BUILD_OK" != "1" ]; then
+  # 还没有启动新容器，旧服务仍在运行。保留新版脚本和旧成功标记，让下次计划任务继续带超时重试；
+  # 此处若 git reset 回旧提交，超时保护也会丢失，下一轮又可能永久持锁。
+  log "❌ 构建三次均未完成；旧容器继续运行，新代码保留供下次重试。"
+  exit 1
+fi
+
+if $COMPOSE up -d >>"$LOG_FILE" 2>&1 && health_ok; then
   database_setup_logs
   printf '%s\n' "$REMOTE" >"$DEPLOYED_FILE"
   log "✅ 部署成功，健康检查通过（$(git rev-parse --short HEAD)）。"

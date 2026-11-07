@@ -72,7 +72,7 @@ docker compose logs -f
 
 ## 自动部署（1Panel 计划任务）
 
-`scripts/auto-deploy.sh` 是**单次幂等**脚本：检查 git 有更新才 拉取 → 重建 → 健康检查 → 失败回滚；无更新直接退出；带锁防并发。适合被计划任务高频调用。
+`scripts/auto-deploy.sh` 是**单次幂等**脚本：检查 git 有更新才拉取 → 重建 → 健康检查；构建失败保留运行中的旧容器及新版脚本供下轮重试，启动或健康检查失败才回滚应用；无更新直接退出，带锁防并发。适合被计划任务高频调用。
 
 **1Panel 里配置：**
 1. **计划任务 → 创建计划任务**
@@ -84,8 +84,18 @@ docker compose logs -f
    bash /opt/1panel/www/sites/app/index/wuxing-music/scripts/auto-deploy.sh
    ```
 
-之后**只要 `git push` 到 GitHub `master`，1 分钟内服务器自动拉取重建**。
-日志在 `/var/log/wuxing-deploy.log`。可覆盖的环境变量（分支 `WUXING_BRANCH`、健康地址 `WUXING_HEALTH_URL`、是否回滚 `WUXING_ROLLBACK` 等）见脚本头部注释。
+之后 `git push` 到 GitHub `master`，计划任务会在下一次执行时开始拉取；完成时间取决于镜像构建、备份与迁移。日志在 `/var/log/wuxing-deploy.log`。单次构建默认最多 3600 秒，可用 `WUXING_BUILD_TIMEOUT` 指定 1–14400 秒；超时会记录当前尝试并重试，三次都失败后退出、释放锁，旧容器继续服务。可覆盖的其他环境变量（分支 `WUXING_BRANCH`、健康地址 `WUXING_HEALTH_URL`、是否回滚 `WUXING_ROLLBACK` 等）见脚本头部注释。
+
+若健康接口的 `commit` 长时间落后于 master，先在服务器只读检查当前任务和日志，不要仅凭锁文件判断进程仍活着：
+
+```bash
+ps -eo pid,etimes,args | grep '[a]uto-deploy.sh'
+tail -n 80 /var/log/wuxing-deploy.log
+cd /opt/1panel/www/sites/app/index/wuxing-music
+docker compose ps -a
+```
+
+日志中的构建阶段、超时或回滚结果可以区分卡在拉取、构建、备份迁移还是容器健康。旧脚本已经持锁运行时，新提交中的超时保护要等该进程结束、下一轮拉取后才生效；处理旧进程前应先核对实际 PID 和容器状态。分享日志时去除凭证与私有地址。
 
 课程商城 2.0 的首次初始化已纳入 Compose 和自动部署：临时配置 → MySQL 单库备份与校验 → v4 幂等迁移 → 两个 Worker 健康 → API／后台／H5。无需额外填写数据库账号，复用服务器已有 `backend/.env`。备份默认在 `/var/backups/wuxing-music`（700/600 权限），可用 `WUXING_BACKUP_DIR` 改为受控目录；失败则阻止迁移和新应用启动，回滚仅恢复应用、不覆盖数据库。Worker 已纳入默认服务，售卖仍由后台关闭；详细恢复与检查说明见 [2.0 部署顺序](V2-COMMERCE.md#自动部署顺序)。自动部署在发布成功后记录标记，失败且代码已拉取时仍会重试。请监控容器 unhealthy 与备份容量。
 
@@ -133,7 +143,7 @@ H5 已作为 `wuxing-h5` 服务并入 `docker-compose.yml`——`docker compose 
 - `FROM nginx:alpine` 拉几百秒：Docker Hub 慢。给服务器 Docker 配镜像加速器
   （`/etc/docker/daemon.json` 的 `registry-mirrors`，改完 `systemctl reload docker`），
   此项在服务器上配置，不在本仓库。
-- 部署脚本失败会自动回滚到旧版，服务不中断；反复失败看 `/var/log/wuxing-deploy.log`。
+- 构建失败会保留运行中的旧容器并在下轮重试；启动或健康检查失败会回滚应用。反复失败时查看 `/var/log/wuxing-deploy.log` 中的具体阶段与退出码。
 
 ## 生产上线检查单
 
