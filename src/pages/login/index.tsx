@@ -6,7 +6,7 @@ import { useUserStore } from '@/stores/user';
 import { useSiteStore } from '@/stores/site';
 import { sendSmsCode, isQrLoginConfigured } from '@/services/auth';
 import { isWeapp, isInWeChat } from '@/utils/platform';
-import { goBack } from '@/utils/nav';
+import { goBack, navBarStyle } from '@/utils/nav';
 import { openWeappPrivacyPolicy } from '@/services/privacy';
 import './index.scss';
 
@@ -173,6 +173,9 @@ export default function Login() {
   if (isWeapp) {
     return (
       <View className="login">
+        <View className="login__nav" style={navBarStyle()}>
+          <Text className="login__back" onClick={() => goBack()}>‹ 返回</Text>
+        </View>
         {brand}
         <View className="login__actions fade-up" style={{ animationDelay: '0.2s' }}>
           <View

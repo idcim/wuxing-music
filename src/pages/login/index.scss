@@ -11,6 +11,23 @@
   padding: 0 64rpx;
   background: radial-gradient(ellipse at 50% 30%, #0a0e1a 0%, #03050a 100%);
 
+  &__nav {
+    position: absolute;
+    top: 0;
+    left: 36rpx;
+    right: 36rpx;
+    height: 44px;
+    display: flex;
+    align-items: center;
+  }
+
+  &__back {
+    min-width: 120rpx;
+    color: $text-primary;
+    font-size: 28rpx;
+    line-height: 44px;
+  }
+
   // ── 品牌区 ──
   &__brand {
     display: flex;
