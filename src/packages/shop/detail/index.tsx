@@ -13,10 +13,13 @@ export default function ProductDetail() {
   const [selected, setSelected] = useState<number>();
   const [quantity, setQuantity] = useState(1);
   const [busy, setBusy] = useState(false);
-  const sku = product.skus?.find((s: Entry) => s.id === selected) || product.skus?.[0];
+  const sku = product.skus?.find((s: Entry) => s.id === selected)
+    || product.skus?.find((s: Entry) => s.price_fen > 0 && s.available > 0)
+    || product.skus?.find((s: Entry) => s.price_fen > 0)
+    || product.skus?.[0];
   const buy = async (cart: boolean) => {
     if ((!cart && !shopSaleOpen) || !requireCommerceLogin() || busy) return;
-    if (!sku || quantity < 1 || quantity > sku.available) return Taro.showToast({ title: '请选择有库存的规格和数量', icon: 'none' });
+    if (!sku || sku.price_fen <= 0 || quantity < 1 || quantity > sku.available) return Taro.showToast({ title: '请选择可售且有库存的规格和数量', icon: 'none' });
     setBusy(true);
     await action(async () => {
       if (cart) {
@@ -28,11 +31,11 @@ export default function ProductDetail() {
     });
     setBusy(false);
   };
-  return <CommercePage title='商品详情' footer={product.id && <><CustomerService /><Button className='commerce__secondary' disabled={busy} onClick={() => buy(true)}>加入购物车</Button><Button className='commerce__primary' loading={busy} disabled={!shopSaleOpen} onClick={() => buy(false)}>{shopSaleOpen ? '立即购买' : '暂未开放购买'}</Button></>}><Feedback loading={loading} error={error} retry={load} />
+  return <CommercePage title='商品详情' footer={product.id && <><CustomerService /><Button className='commerce__secondary' disabled={busy || !sku || sku.price_fen <= 0 || !sku.available} onClick={() => buy(true)}>加入购物车</Button><Button className='commerce__primary' loading={busy} disabled={!shopSaleOpen || !sku || sku.price_fen <= 0 || !sku.available} onClick={() => buy(false)}>{!shopSaleOpen ? '暂未开放购买' : !sku?.available || sku.price_fen <= 0 ? '暂时售罄' : '立即购买'}</Button></>}><Feedback loading={loading} error={error} retry={load} />
     {product.id && <>
       {product.images?.length ? <Swiper className='commerce__cover commerce__cover--large' indicatorDots>{product.images.map((src: string) => <SwiperItem key={src}><Image src={resolveUrl(src)} className='commerce__cover commerce__cover--large' mode='aspectFill' /></SwiperItem>)}</Swiper> : <Cover src={product.cover} large />}
-      <Text className='commerce__name'>{product.title}</Text><Text className='commerce__muted'>{product.subtitle}</Text><Text className='commerce__price'>{money(sku?.price_fen || product.price_fen)}</Text>
-      <Text className='commerce__name'>选择规格</Text><View className='commerce__chips'>{product.skus?.map((s: Entry) => <Text className={`commerce__chip ${sku?.id === s.id ? 'commerce__chip--active' : ''}`} key={s.id} onClick={() => { setSelected(s.id); setQuantity(1); }}>{s.name}{s.available ? '' : ' · 售罄'}</Text>)}</View>
+      <Text className='commerce__name'>{product.title}</Text><Text className='commerce__muted'>{product.subtitle}</Text><Text className='commerce__price'>{sku?.price_fen > 0 ? money(sku.price_fen) : '暂无可售规格'}</Text>
+      <Text className='commerce__name'>选择规格</Text><View className='commerce__chips'>{product.skus?.map((s: Entry) => <Text className={`commerce__chip ${sku?.id === s.id ? 'commerce__chip--active' : ''}`} key={s.id} onClick={() => { setSelected(s.id); setQuantity(1); }}>{s.name}{s.price_fen <= 0 ? ' · 暂不可售' : s.available ? '' : ' · 售罄'}</Text>)}</View>
       <View className='commerce__field'><Text className='commerce__label'>数量（剩余 {sku?.available || 0}）</Text><Input type='number' value={String(quantity)} onInput={e => setQuantity(Math.max(1, Math.min(99, Number(e.detail.value) || 1)))} /></View>
       <Text className='commerce__name'>商品介绍</Text><MarkdownView source={product.intro || ''} />
       <Text className='commerce__name'>发货说明</Text><MarkdownView source={product.shipping_note || '具体配送区域与运费在结算时确认。'} />

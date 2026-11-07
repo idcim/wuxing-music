@@ -7,7 +7,7 @@ export default defineConfig({
   designWidth: 750,
   deviceRatio: { 640: 2.34 / 2, 750: 1, 828: 1.81 / 2 },
   sourceRoot: 'src',
-  outputRoot: 'dist',
+  outputRoot: process.env.TARO_ENV === 'h5' ? 'dist-h5' : 'dist',
   plugins: [path.resolve(__dirname, 'sass')],
   defineConstants: {},
   copy: { patterns: [], options: {} },

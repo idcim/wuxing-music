@@ -12,7 +12,7 @@ monorepo：**小程序 / H5 前端（Taro）** + **后端 API（FastAPI）** + *
 | 后端 API | `wuxing-backend` | 8000 | `/api/mp/*` 小程序/H5 公开端；`/api/admin/*` 管理端 |
 | 管理后台 | `wuxing-admin` | 8080 | Nginx 托管，`/api` 反代到后端 |
 | MySQL | 外部（`1panel-network`） | 3306 | 不随容器，单独维护 |
-| H5 前端 | `wuxing-h5`（Nginx，含 build:h5） | 8081 | 托管静态产物 + 同源反代 `/api`、`/uploads` 到后端 |
+| H5 前端 | `wuxing-h5`（Nginx，含 build:h5） | 8081 | 独立构建到 `dist-h5/` 并托管；同源反代 `/api`、`/uploads` 到后端 |
 | 小程序 | `dist/`（`npm run build:weapp`） | — | 微信开发者工具上传，不走服务器 |
 
 ---

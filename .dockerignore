@@ -2,6 +2,7 @@
 # 注：backend/ 与 admin/ 各自的镜像用各自子目录为上下文，不受本文件影响。
 node_modules
 dist
+dist-h5
 .git
 .github
 .omc

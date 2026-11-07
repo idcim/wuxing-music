@@ -23,7 +23,7 @@ export default function ShopList() {
       <Feedback loading={loading} error={error} retry={load} />
       {!loading && !error && !data.items.length && <Text className='commerce__empty'>好物筹备中</Text>}
       <View className='commerce__grid'>{data.items.map((product: Entry) => <View className='commerce__card' key={product.id} onClick={() => Taro.navigateTo({ url: `${shopPath}/detail/index?id=${product.id}` })}>
-        <Cover src={product.cover} /><View className='commerce__card-body'><Text className='commerce__name'>{product.title}</Text><Text className='commerce__muted'>{product.subtitle}</Text><Text className='commerce__price'>{money(product.price_fen)} 起</Text></View>
+        <Cover src={product.cover} /><View className='commerce__card-body'><Text className='commerce__name'>{product.title}</Text><Text className='commerce__muted'>{product.subtitle}</Text><Text className='commerce__price'>{product.price_fen ? `${money(product.price_fen)} 起` : '暂无可售规格'}</Text>{product.price_fen > 0 && !product.in_stock && <Text className='commerce__muted'>暂时售罄</Text>}</View>
       </View>)}</View>
       {data.total > 20 && <View className='commerce__actions'><Button disabled={page === 1} onClick={() => setPage(page - 1)}>上一页</Button><Text>第 {page} 页</Text><Button disabled={page * 20 >= data.total} onClick={() => setPage(page + 1)}>下一页</Button></View>}
     </>}

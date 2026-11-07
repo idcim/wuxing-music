@@ -755,6 +755,32 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, Logisti
         self.assertTrue(self.client.get("/api/mp/v2/courses/100").json()["data"]["purchase_ready"])
         self.assertEqual(self.client.post("/api/mp/v2/checkout", json={"kind": "course", "course_id": 100}).status_code, 200)
 
+    def test_unavailable_sku_is_not_advertised_or_added_to_cart(self):
+        response = self.client.post("/api/admin/commerce/catalog/skus/100", json={
+            "product_id": 100, "name": "一盒", "price_fen": 1000, "enabled": False})
+        self.assertEqual(response.status_code, 200)
+        products = self.client.get("/api/mp/v2/catalog/physical").json()["data"]["items"]
+        product = next(row for row in products if row["id"] == 100)
+        self.assertEqual(product["price_fen"], 0)
+        self.assertFalse(product["in_stock"])
+        self.assertEqual(self.client.post("/api/mp/v2/cart", json={"sku_id": 100, "quantity": 1}).status_code, 409)
+        with self.sessions() as db:
+            sku = db.get(Sku, 100)
+            sku.enabled = True
+            sku.price_fen = 0
+            db.commit()
+        self.assertEqual(self.client.post("/api/mp/v2/cart", json={"sku_id": 100, "quantity": 1}).status_code, 409)
+        self.assertEqual(self.client.post("/api/mp/v2/checkout", json={
+            "kind": "physical", "address_id": 1, "items": [{"sku_id": 100, "quantity": 1}]}).status_code, 409)
+
+    def test_catalog_starting_price_uses_available_sku(self):
+        with self.sessions() as db:
+            db.add(Sku(product_id=100, name="小包装", price_fen=500, stock=0))
+            db.commit()
+        product = self.client.get("/api/mp/v2/products/100").json()["data"]
+        self.assertEqual(product["price_fen"], 1000)
+        self.assertTrue(product["in_stock"])
+
     def test_signed_encrypted_payment_callback_and_duplicate(self):
         ident = self.order().json()["data"]["id"]
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)

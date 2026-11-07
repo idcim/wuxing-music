@@ -138,7 +138,7 @@ def cart_save(body: schemas.CartIn, user: User = Depends(get_current_user), db: 
     db.query(User).filter_by(id=user.id).with_for_update().one()
     sku = require_row(db, Sku, body.sku_id)
     product = require_row(db, Product, sku.product_id)
-    if not sku.enabled or product.status != "published" or body.quantity > sku.stock - sku.reserved:
+    if not sku.enabled or sku.price_fen <= 0 or product.status != "published" or body.quantity > sku.stock - sku.reserved:
         raise HTTPException(409, "规格不可用或库存不足")
     row = db.query(CartItem).filter_by(user_id=user.id, sku_id=sku.id).first()
     if not row:

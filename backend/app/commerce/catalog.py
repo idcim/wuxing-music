@@ -35,7 +35,10 @@ def course_dict(db, course, uid=None, detail=False):
 def product_dict(db, product, detail=False):
     result = serialize(product)
     skus = db.query(Sku).filter_by(product_id=product.id, enabled=True).order_by(Sku.id).all()
-    result["price_fen"] = min((s.price_fen for s in skus), default=0)
+    priced = [s for s in skus if s.price_fen > 0]
+    available = [s for s in priced if s.stock > s.reserved]
+    result["price_fen"] = min((s.price_fen for s in available or priced), default=0)
+    result["in_stock"] = bool(available)
     if detail:
         result["skus"] = [{**serialize(s, ("reserved",)), "available": max(0, s.stock - s.reserved)} for s in skus]
         result["policy"] = config(db)["physical_policy"]
