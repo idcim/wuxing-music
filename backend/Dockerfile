@@ -8,11 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# 系统依赖（bcrypt/cryptography 的运行时；slim 镜像需补 libffi）
-# ffmpeg：会员试听剪辑及可选 AAC 副本用（app/audio_norm.py）；缺失时任务明确报告失败
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
+# 音乐与课程都使用 OSS 原文件，运行时无需 ffmpeg；健康检查使用 Python 标准库。
 
 # 先装依赖，利用构建缓存
 COPY requirements.txt .
@@ -30,7 +26,7 @@ COPY app ./app
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -fs http://localhost:8000/api/health || exit 1
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5).close()"]
 
 # --proxy-headers + --forwarded-allow-ips：信任前置 nginx 传来的 X-Forwarded-Proto。
 # 不加的话 request.base_url 恒为 http://，上传接口回给后台的 full_url 就是 http，
