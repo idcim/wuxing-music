@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { commerce, stateLabel, yuan } from '@/api/commerce';
 import { useAuthStore } from '@/stores/auth';
@@ -13,10 +13,17 @@ const dialog = ref(false), saving = ref(false), currentId = ref(0), form = ref<R
 const options = ref<Record<string, any[]>>({});
 const stockDialog = ref(false), stockRow = ref<any>({}), stockDelta = ref(0), stockReason = ref('');
 const priceDialog = ref(false), priceRow = ref<any>({}), verifiedYuan = ref(0), evidence = ref('');
+let loadId = 0, editId = 0;
 async function load() {
+  const id = ++loadId;
+  const resource = tab.value;
   loading.value = true;
-  try { const data = await commerce.get(`/catalog/${tab.value}?page=${page.value}`); rows.value = data.items; total.value = data.total; }
-  finally { loading.value = false; }
+  try {
+    const data = await commerce.get(`/catalog/${resource}?page=${page.value}`);
+    if (id !== loadId || resource !== tab.value) return;
+    rows.value = data.items; total.value = data.total;
+  }
+  finally { if (id === loadId) loading.value = false; }
 }
 async function loadOptions() {
   const names = ['categories', 'teachers', 'courses', 'products'];
@@ -32,15 +39,23 @@ function choices(field: Field) {
   return values.map(v => ({ label: `${v.title || v.name}（#${v.id}）`, value: v.id }));
 }
 async function edit(row?: any) {
+  const id = ++editId;
+  const resource = tab.value;
   await loadOptions();
+  if (id !== editId || resource !== tab.value) return;
   currentId.value = row?.id || 0;
   form.value = structuredClone(definition.value.initial);
   if (row) for (const field of definition.value.fields) form.value[field.key] = row[field.key];
   dialog.value = true;
 }
 async function save() {
+  const resource = tab.value;
   saving.value = true;
-  try { await commerce.post(`/catalog/${tab.value}/${currentId.value}`, form.value); dialog.value = false; ElMessage.success('已保存'); await load(); }
+  try {
+    await commerce.post(`/catalog/${resource}/${currentId.value}`, form.value);
+    dialog.value = false; ElMessage.success('已保存');
+    if (resource === tab.value) await load();
+  }
   finally { saving.value = false; }
 }
 async function adjustStock() {
@@ -51,8 +66,12 @@ async function verifyPrice() {
   await commerce.post(`/courses/${priceRow.value.id}/verify-price`, { price_fen: Math.round(verifiedYuan.value * 100), revision: priceRow.value.revision, evidence: evidence.value });
   priceDialog.value = false; await load();
 }
-watch(tab, () => { page.value = 1; load(); });
+watch(tab, () => {
+  editId++; dialog.value = false; stockDialog.value = false; priceDialog.value = false;
+  rows.value = []; total.value = 0; page.value = 1; load();
+});
 onMounted(load);
+onUnmounted(() => { loadId++; editId++; });
 </script>
 <template>
   <BusinessPage title="课程与商品管理" description="课程与音乐会员独立；新内容先保存草稿，资料和媒体就绪后再上架。">
