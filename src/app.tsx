@@ -79,14 +79,25 @@ async function bootstrapAuth(): Promise<void> {
 
 // 回到前台时校正睡眠定时：H5 切后台/锁屏会节流 setTimeout，
 // 定时可能晚触发甚至不触发，必须按真实时间重新判定。
+let lastSessionCheck = Date.now();
+function refreshForegroundState(): void {
+  usePlayerStore.getState().checkTimer();
+  // 公开音乐接口会将过期令牌视为游客，前台恢复时主动核对一次账号状态。
+  // 启动恢复已有请求；间隔检查避免频繁切换微信页面时反复请求。
+  if (Date.now() - lastSessionCheck < 5 * 60 * 1000) return;
+  if (!getToken() || !useUserStore.getState().user) return;
+  lastSessionCheck = Date.now();
+  void useUserStore.getState().initFromCache();
+}
+
 function watchForeground(): void {
   if (isH5 && typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) usePlayerStore.getState().checkTimer();
+      if (!document.hidden) refreshForegroundState();
     });
     return;
   }
-  Taro.onAppShow?.(() => usePlayerStore.getState().checkTimer());
+  Taro.onAppShow?.(refreshForegroundState);
 }
 
 // 清理地址栏上微信回跳带的 code/state，避免刷新重复换取与分享泄漏。
