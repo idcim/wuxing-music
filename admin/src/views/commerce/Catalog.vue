@@ -84,7 +84,15 @@ onUnmounted(() => { loadId++; editId++; });
       <el-table-column v-if="['courses','skus'].includes(tab)" label="售价" width="110"><template #default="{ row }">{{ yuan(row.price_fen) }}</template></el-table-column>
       <el-table-column v-if="tab === 'skus'" label="库存 / 预占" width="140"><template #default="{ row }">{{ row.stock }} / {{ row.reserved }}</template></el-table-column>
       <el-table-column v-if="['courses','products'].includes(tab)" label="状态" width="110"><template #default="{ row }"><el-tag>{{ stateLabel(row.status) }}</el-tag></template></el-table-column>
-      <el-table-column v-if="tab === 'courses'" label="支付价格核验" min-width="140"><template #default="{ row }">{{ row.price_fen === 0 ? '免费课程' : row.payment_synced_revision === row.revision ? '已核验' : '待核验' }}</template></el-table-column>
+      <el-table-column v-if="['courses','products'].includes(tab)" label="上架准备" min-width="260"><template #default="{ row }">
+        <el-tag v-if="!row.publish_issues?.length" type="success">资料已齐</el-tag>
+        <span v-else>待补：{{ row.publish_issues.join('、') }}</span>
+      </template></el-table-column>
+      <el-table-column v-if="tab === 'courses'" label="收费准备" min-width="220"><template #default="{ row }">
+        <span v-if="!row.price_fen">免费课无需支付</span>
+        <el-tag v-else-if="!row.sale_issues?.length" type="success">价格已核验</el-tag>
+        <span v-else>待补：{{ row.sale_issues.join('、') }}</span>
+      </template></el-table-column>
       <el-table-column label="操作" width="250" fixed="right"><template #default="{ row }">
         <el-button v-if="auth.can(tab === 'skus' ? 'commerce:inventory' : 'commerce:content')" size="small" @click="edit(row)">编辑</el-button>
         <el-button v-if="tab === 'skus' && auth.can('commerce:inventory')" size="small" @click="stockRow = row; stockDelta = 0; stockReason = ''; stockDialog = true">调整库存</el-button>

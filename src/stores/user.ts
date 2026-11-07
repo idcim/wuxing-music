@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import Taro from '@tarojs/taro';
 import type { User, Membership, ElementId, ElementScores } from '@/types';
 import { storage, STORAGE_KEYS } from '@/services/storage';
 import {
@@ -13,6 +14,7 @@ import {
   type WechatH5LoginResult
 } from '@/services/auth';
 import { bindPendingAgent } from '@/services/agent';
+import { registerSessionExpiry } from '@/services/session';
 
 interface UserStore {
   user: User | null;
@@ -143,7 +145,8 @@ export const useUserStore = create<UserStore>((set, get) => ({
   // 启动时只恢复已有登录态；没有有效 token 就保持游客，不隐式创建用户
   initFromCache: async () => {
     const cached = storage.get<User>(STORAGE_KEYS.USER);
-    const hasToken = Boolean(getToken());
+    const cachedToken = getToken();
+    const hasToken = Boolean(cachedToken);
     if (cached && hasToken) {
       set({
         user: cached,
@@ -159,14 +162,9 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
     try {
       const fresh = await fetchProfile();
-      get().setUser(fresh);
-    } catch (e: any) {
-      // token 失效（如旧 mock token / 过期）：清掉本地凭据和内存态，由用户主动登录
-      if (e?.code === 401) {
-        clearAuth();
-        set({ user: null, isPremium: false });
-      }
-      // 其他错误（如网络）保持缓存态，不强制重登
+      if (getToken() === cachedToken) get().setUser(fresh);
+    } catch {
+      // 401 已由请求层统一处理；网络错误保留缓存态。
     }
   },
 
@@ -185,3 +183,8 @@ export const useUserStore = create<UserStore>((set, get) => ({
     });
   }
 }));
+
+registerSessionExpiry(() => {
+  useUserStore.getState().logout();
+  Taro.showToast({ title: '登录已过期，请按需重新登录', icon: 'none', duration: 3000 });
+});

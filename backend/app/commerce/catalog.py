@@ -13,6 +13,7 @@ def has_access(db, uid, course_id):
 
 def course_dict(db, course, uid=None, detail=False):
     result = serialize(course, ("payment_product", "payment_synced_revision"))
+    result["purchase_ready"] = not course.price_fen or not sale_issues(course)
     lessons = db.query(Lesson).filter_by(course_id=course.id).order_by(Lesson.sort, Lesson.id).all()
     result.update(lesson_count=len(lessons), owned=bool(uid and has_access(db, uid, course.id)))
     if detail:
@@ -41,22 +42,51 @@ def product_dict(db, product, detail=False):
     return result
 
 
+def publish_issues(db, row):
+    """内容上架缺项；后台列表与保存校验共用，避免提示和实际门槛分叉。"""
+    issues = []
+    if not row.cover.strip():
+        issues.append("封面")
+    if not row.intro.strip():
+        issues.append("介绍")
+    if isinstance(row, Course):
+        teacher = db.get(Teacher, row.teacher_id) if row.teacher_id else None
+        if not teacher:
+            issues.append("授课老师")
+        elif not teacher.intro.strip():
+            issues.append("老师介绍")
+        if not row.instructions.strip():
+            issues.append("学习说明")
+        lessons = db.query(Lesson).filter_by(course_id=row.id).all()
+        media_ids = {lesson.media_id for lesson in lessons if lesson.media_id}
+        media = {item.id: item for item in db.query(MediaAsset).filter(MediaAsset.id.in_(media_ids)).all()} if media_ids else {}
+        if not lessons or any(not lesson.media_id or not media.get(lesson.media_id)
+                              or media[lesson.media_id].state != "ready" or not media[lesson.media_id].playback_key
+                              for lesson in lessons):
+            issues.append("已就绪章节课件")
+    else:
+        if not db.query(Sku).filter_by(product_id=row.id, enabled=True).filter(Sku.price_fen > 0).first():
+            issues.append("有效规格和售价")
+    return issues
+
+
+def sale_issues(course):
+    if not course.price_fen:
+        return []
+    issues = []
+    if not course.payment_product:
+        issues.append("微信课程商品编号")
+    if course.payment_synced_revision != course.revision:
+        issues.append("支付平台价格核验")
+    return issues
+
+
 def validate_publish(db, row):
     if row.status != "published":
         return
-    if not row.cover or not row.intro:
-        raise HTTPException(409, "上架前请补齐封面和介绍")
-    if isinstance(row, Course):
-        if not row.teacher_id or not db.get(Teacher, row.teacher_id) or not row.instructions:
-            raise HTTPException(409, "上架前请填写老师与学习说明")
-        lessons = db.query(Lesson).filter_by(course_id=row.id).all()
-        if not lessons or any(not x.media_id or not db.get(MediaAsset, x.media_id) or db.get(MediaAsset, x.media_id).state != "ready" or not db.get(MediaAsset, x.media_id).playback_key for x in lessons):
-            raise HTTPException(409, "章节媒体尚未全部处理完成")
-        if row.price_fen and (not row.payment_product or row.payment_synced_revision != row.revision):
-            raise HTTPException(409, "课程价格版本尚未完成支付平台核验")
-    else:
-        if not db.query(Sku).filter_by(product_id=row.id, enabled=True).filter(Sku.price_fen > 0).first():
-            raise HTTPException(409, "请先添加有效规格和售价")
+    issues = publish_issues(db, row)
+    if issues:
+        raise HTTPException(409, "上架前请补齐：" + "、".join(issues))
 
 
 def playable(db, uid, lesson_id):

@@ -39,7 +39,7 @@ from app.security import get_current_admin
 from app.routers.mp import get_current_user
 from app.commerce import admin, aftersales, attachments, callbacks, catalog, common, lifecycle, monitor, providers, public, schemas, trading, worker
 from app.commerce.migrate import upgrade
-from app.commerce.models import Address, AfterSale, Base, Course, Enrollment, Event, Job, Lesson, MediaAsset, Order, OrderItem, Payment, Product, Progress, SCHEMA_VERSION, SchemaVersion, Shipment, Sku, WorkerHeartbeat
+from app.commerce.models import Address, AfterSale, Base, Course, Enrollment, Event, Job, Lesson, MediaAsset, Order, OrderItem, Payment, Product, Progress, SCHEMA_VERSION, SchemaVersion, Shipment, Sku, Teacher, WorkerHeartbeat
 from commerce_lease_cases import LeaseCases
 from commerce_refund_cases import RefundCases
 from commerce_media_cases import MediaCases
@@ -710,6 +710,47 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, Logisti
         self.assertEqual(self.client.post("/api/admin/commerce/skus/100/stock", json={"delta": 1, "reason": "违规调库存"}).status_code, 403)
         self.assertEqual(self.client.post("/api/admin/commerce/settings", json={}).status_code, 403)
         self.assertEqual(self.client.post("/api/admin/commerce/catalog/skus/100", json={"product_id": 100, "name": "一盒", "price_fen": 1}).status_code, 403)
+
+    def test_catalog_readiness_matches_publish_gate(self):
+        products = self.client.get("/api/admin/commerce/catalog/products").json()["data"]["items"]
+        self.assertEqual(next(row for row in products if row["id"] == 100)["publish_issues"], [])
+        courses = self.client.get("/api/admin/commerce/catalog/courses").json()["data"]["items"]
+        self.assertIn("授课老师", next(row for row in courses if row["id"] == 100)["publish_issues"])
+
+        with self.sessions() as db:
+            db.get(Product, 100).cover = ""
+            db.add(Teacher(id=100, name="测试老师", intro="声乐教学介绍"))
+            course = db.get(Course, 100)
+            course.cover = "/course.jpg"
+            course.intro = "课程介绍"
+            course.instructions = "录播，购买后 30 天有效"
+            course.teacher_id = 100
+            course.payment_synced_revision = 0
+            db.commit()
+
+        products = self.client.get("/api/admin/commerce/catalog/products").json()["data"]["items"]
+        self.assertEqual(next(row for row in products if row["id"] == 100)["publish_issues"], ["封面"])
+        blocked = self.client.post("/api/admin/commerce/catalog/products/100", json={
+            "title": "测试茶", "cover": "", "intro": "茶", "status": "published"})
+        self.assertEqual(blocked.status_code, 409)
+        self.assertIn("封面", blocked.json()["detail"])
+        courses = self.client.get("/api/admin/commerce/catalog/courses").json()["data"]["items"]
+        course_row = next(row for row in courses if row["id"] == 100)
+        self.assertEqual(course_row["publish_issues"], [])
+        self.assertEqual(course_row["sale_issues"], ["支付平台价格核验"])
+        published = self.client.post("/api/admin/commerce/catalog/courses/100", json={
+            "title": "测试课", "cover": "/course.jpg", "intro": "课程介绍", "instructions": "录播，购买后 30 天有效",
+            "teacher_id": 100, "price_fen": 2000, "access_days": 30, "payment_product": "course-100", "status": "published"})
+        self.assertEqual(published.status_code, 200)
+        self.assertFalse(self.client.get("/api/mp/v2/courses/100").json()["data"]["purchase_ready"])
+        quote = self.client.post("/api/mp/v2/checkout", json={"kind": "course", "course_id": 100})
+        self.assertEqual(quote.status_code, 409)
+
+        with self.sessions() as db:
+            db.get(Course, 100).payment_synced_revision = db.get(Course, 100).revision
+            db.commit()
+        self.assertTrue(self.client.get("/api/mp/v2/courses/100").json()["data"]["purchase_ready"])
+        self.assertEqual(self.client.post("/api/mp/v2/checkout", json={"kind": "course", "course_id": 100}).status_code, 200)
 
     def test_signed_encrypted_payment_callback_and_duplicate(self):
         ident = self.order().json()["data"]["id"]

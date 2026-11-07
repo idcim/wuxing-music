@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Text, Image } from '@tarojs/components';
 import Taro from '@tarojs/taro';
-import { goBack } from '@/utils/nav';
+import { goBack, navBarStyle } from '@/utils/nav';
 import { getSiteInfo, type SiteInfo } from '@/services/site';
 import { useSiteStore } from '@/stores/site';
 import { WUXING_DISCLAIMER, WUXING_MNEMONIC } from '@/constants/wuxing';
@@ -23,7 +23,7 @@ export default function About() {
 
   return (
     <View className="about">
-      <View className="about__nav">
+      <View className="about__nav" style={navBarStyle()}>
         <Text className="about__back" onClick={back}>‹</Text>
         <Text className="about__nav-title">关于我们</Text>
         <View className="about__nav-spacer" />

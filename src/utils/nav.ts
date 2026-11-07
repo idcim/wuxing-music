@@ -44,6 +44,17 @@ export function navTopStyle(): CSSProperties {
   return { paddingTop: `${getNavTop()}px` };
 }
 
+// 二级页面导航行与右上角胶囊处于同一高度，内容区仍使用 navTopStyle 避让胶囊。
+export function navBarStyle(): CSSProperties {
+  if (isH5) return { paddingTop: rpx(88) };
+  try {
+    const info = Taro.getWindowInfo ? Taro.getWindowInfo() : Taro.getSystemInfoSync();
+    return { paddingTop: `${info.statusBarHeight || 20}px` };
+  } catch {
+    return { paddingTop: '20px' };
+  }
+}
+
 /**
  * 安全返回：页面栈里没有上一页时兜底回首页，避免把用户困在页面里。
  *

@@ -146,7 +146,16 @@ def list_catalog(resource: str, parent: int | None = None, page: int = Query(1, 
     query = db.query(model)
     if parent and resource in ("lessons", "skus"):
         query = query.filter_by(**{"course_id" if resource == "lessons" else "product_id": parent})
-    return ok(dict(items=[serialize(r) for r in query.order_by(model.id.desc()).offset((page - 1) * size).limit(size)], total=query.count()))
+    rows = query.order_by(model.id.desc()).offset((page - 1) * size).limit(size).all()
+    items = []
+    for row in rows:
+        item = serialize(row)
+        if resource in ("courses", "products"):
+            item["publish_issues"] = catalog.publish_issues(db, row)
+        if resource == "courses":
+            item["sale_issues"] = catalog.sale_issues(row)
+        items.append(item)
+    return ok(dict(items=items, total=query.count()))
 
 
 @api.post("/catalog/{resource}/{ident}")

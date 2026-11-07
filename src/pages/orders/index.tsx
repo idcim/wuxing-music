@@ -6,7 +6,7 @@ import { useUserStore } from '@/stores/user';
 import Icon from '@/components/Icon';
 import PosterShare from '@/components/PosterShare';
 import ListState, { type LoadState } from '@/components/ListState';
-import { navTopStyle, goBack } from '@/utils/nav';
+import { navBarStyle, goBack } from '@/utils/nav';
 import { isWeapp } from '@/utils/platform';
 import './index.scss';
 
@@ -70,7 +70,7 @@ export default function Orders() {
 
   return (
     <View className="orders">
-      <View className="orders__nav" style={navTopStyle()}>
+      <View className="orders__nav" style={navBarStyle()}>
         <Text className="orders__back" onClick={() => goBack()}>‹</Text>
         <Text className="orders__nav-title">我的订单</Text>
         <View className="orders__nav-spacer" />

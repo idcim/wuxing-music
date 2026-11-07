@@ -1,6 +1,6 @@
 import { View, Text } from '@tarojs/components';
 import { useRouter, useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/taro';
-import { goBack, navTopStyle } from '@/utils/nav';
+import { goBack, navTopStyle, navBarStyle } from '@/utils/nav';
 import { rpx } from '@/utils/unit';
 import { WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
@@ -66,7 +66,7 @@ export default function ElementDetail() {
 
   return (
     <View className="el-detail" style={{ background: el.bg }}>
-      <View className="el-detail__nav" style={{ ...navStyle, background: el.bg }}>
+      <View className="el-detail__nav" style={{ ...navBarStyle(), background: el.bg }}>
         <Text className="el-detail__back" onClick={back}>‹</Text>
       </View>
 

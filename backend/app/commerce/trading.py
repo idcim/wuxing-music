@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from fastapi import HTTPException
 from sqlalchemy import update
 
-from .catalog import has_access
+from .catalog import has_access, sale_issues
 from .common import enabled, enqueue, guard_claim, record, require_row, serialize
 from .models import Address, Course, Enrollment, InventoryLog, Order, OrderItem, Payment, Product, Sku
 
@@ -20,8 +20,8 @@ def quote(db, uid, body):
             raise HTTPException(409, "课程暂不可购买；免费课程请直接领取")
         if has_access(db, uid, course.id):
             raise HTTPException(409, "你已获得这门课程")
-        if course.payment_synced_revision != course.revision:
-            raise HTTPException(409, "课程价格正在更新")
+        if sale_issues(course):
+            raise HTTPException(409, "课程支付信息尚未核验")
         lines.append(dict(entity_id=course.id, title=course.title, spec="", cover=course.cover,
             price_fen=course.price_fen, quantity=1, access_days=course.access_days,
             product_revision=course.revision, payment_product=course.payment_product))

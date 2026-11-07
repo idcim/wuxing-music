@@ -5,7 +5,7 @@ import { WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
 import { pickAvatar, updateProfile, uploadAvatar } from '@/services/user';
 import { isWeapp } from '@/utils/platform';
-import { goBack } from '@/utils/nav';
+import { goBack, navBarStyle } from '@/utils/nav';
 import Icon from '@/components/Icon';
 import UserEditSheet, { type EditField } from '@/components/UserEditSheet';
 import { A } from '@/utils/color';
@@ -132,7 +132,7 @@ export default function UserInfo() {
   const goHome = () => Taro.reLaunch({ url: '/pages/home/index' });
 
   const nav = (
-    <View className="userinfo__nav">
+    <View className="userinfo__nav" style={navBarStyle()}>
       <Text className="userinfo__back" onClick={() => (fromLogin ? goHome() : goBack())}>‹</Text>
       <Text className="userinfo__nav-title">{fromLogin ? '完善个人信息' : '个人信息'}</Text>
       <View className="userinfo__nav-spacer" />

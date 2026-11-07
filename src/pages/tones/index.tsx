@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import { useRouter } from '@tarojs/taro';
-import { goBack, navTopStyle } from '@/utils/nav';
+import { goBack, navBarStyle } from '@/utils/nav';
 import Icon from '@/components/Icon';
 import { A } from '@/utils/color';
 import {
@@ -110,7 +110,7 @@ export default function Tones() {
 
   return (
     <View className="tones" style={{ background: el.bg }}>
-      <View className="tones__nav" style={navTopStyle()}>
+      <View className="tones__nav" style={navBarStyle()}>
         <Text className="tones__back" onClick={back}>‹</Text>
         <Text className="tones__nav-title">五音对照</Text>
         <View className="tones__nav-spacer" />

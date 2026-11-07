@@ -1,6 +1,7 @@
 import Taro from '@tarojs/taro';
 import { API_BASE, TOKEN_KEY } from '@/constants/env';
 import { storage } from '@/services/storage';
+import { expireSession } from '@/services/session';
 
 export interface ApiResponse<T> {
   code: number;
@@ -25,11 +26,9 @@ interface RequestOptions {
 export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const { method = 'GET', data, auth = true } = opts;
   const header: Record<string, string> = { 'content-type': 'application/json' };
+  const requestToken = auth ? storage.get<string>(TOKEN_KEY) : null;
 
-  if (auth) {
-    const token = storage.get<string>(TOKEN_KEY);
-    if (token) header['Authorization'] = `Bearer ${token}`;
-  }
+  if (requestToken) header['Authorization'] = `Bearer ${requestToken}`;
 
   const res = await Taro.request({
     url: `${API_BASE}${path}`,
@@ -39,6 +38,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   });
 
   if (res.statusCode < 200 || res.statusCode >= 300) {
+    if (res.statusCode === 401 && requestToken) expireSession(requestToken);
     // 优先用后端返回体里的 msg 作为错误信息（如「验证码错误」「密码不正确」），
     // 回退到通用 HTTP 文案；code 仍用 statusCode 便于上层按 401 等分支处理。
     const errBody = res.data as ApiResponse<T> | undefined;
@@ -47,6 +47,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
 
   const body = res.data as ApiResponse<T>;
   if (body.code !== 0) {
+    if (body.code === 401 && requestToken) expireSession(requestToken);
     throw new ApiError(body.code, body.msg || `业务错误 ${body.code}`);
   }
   return body.data;

@@ -7,7 +7,7 @@ import { request } from '@/services/api';
 import TrackCard from '@/components/TrackCard';
 import ListState, { type LoadState } from '@/components/ListState';
 import MiniPlayer from '@/components/MiniPlayer';
-import { navTopStyle, goBack } from '@/utils/nav';
+import { navBarStyle, goBack } from '@/utils/nav';
 import { parseTime } from '@/utils/format';
 import type { Track, ElementId } from '@/types';
 import './index.scss';
@@ -96,7 +96,7 @@ export default function History() {
 
   return (
     <View className="history">
-      <View className="history__nav" style={navTopStyle()}>
+      <View className="history__nav" style={navBarStyle()}>
         <Text className="history__back" onClick={back}>‹ 返回</Text>
         <Text className="history__nav-title">聆听历史</Text>
         <View className="history__nav-spacer" />

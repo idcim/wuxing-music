@@ -13,7 +13,7 @@ import { siteSlogan } from '@/stores/site';
 import Icon from '@/components/Icon';
 import PosterShare from '@/components/PosterShare';
 import ListState, { type LoadState } from '@/components/ListState';
-import { navTopStyle, goBack } from '@/utils/nav';
+import { navBarStyle, goBack } from '@/utils/nav';
 import { isWeapp } from '@/utils/platform';
 import type { AgentDownline, AgentMe, CommissionItem, WithdrawalItem } from '@/types';
 import './index.scss';
@@ -121,7 +121,7 @@ export default function AgentCenter() {
 
   return (
     <View className="agent">
-      <View className="agent__nav" style={navTopStyle()}>
+      <View className="agent__nav" style={navBarStyle()}>
         <Text className="agent__back" onClick={() => goBack()}>‹</Text>
         <Text className="agent__nav-title">代理中心</Text>
         <View className="agent__nav-spacer" />

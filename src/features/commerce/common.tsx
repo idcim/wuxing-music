@@ -5,7 +5,7 @@ import Taro, { useDidShow } from '@tarojs/taro';
 import { commerceApi, useCommerce } from '@/services/commerce';
 import { useUserStore } from '@/stores/user';
 import { resolveUrl } from '@/utils/url';
-import { goBack, navTopStyle } from '@/utils/nav';
+import { goBack, navBarStyle } from '@/utils/nav';
 import TabBar from '@/components/TabBar';
 import MiniPlayer from '@/components/MiniPlayer';
 import './commerce.scss';
@@ -45,8 +45,10 @@ export function CommercePage({ title, children, tab, learning = false, footer }:
   const config = useCommerce(s => s.config);
   useDidShow(() => { useCommerce.getState().load(); });
   return <View className={`commerce ${tab ? 'commerce--tab' : ''} ${footer ? 'commerce--purchase' : ''}`}>
-    <View className='commerce__header' style={navTopStyle()}>
-      {!tab && <Text className='commerce__back' onClick={() => goBack()}>‹ 返回</Text>}<Text className='commerce__title'>{title}</Text>
+    <View className='commerce__header' style={navBarStyle()}>
+      {!tab && <Text className='commerce__back' onClick={() => goBack()}>‹</Text>}
+      <Text className='commerce__title'>{title}</Text>
+      {!tab && <View className='commerce__nav-spacer' />}
     </View>
     {children}
     {!learning && <MiniPlayer />}{tab && <TabBar active={tab} />}

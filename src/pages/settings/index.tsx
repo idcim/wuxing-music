@@ -9,7 +9,7 @@ import { logsToText } from '@/utils/logger';
 import { usePlayerStore } from '@/stores/player';
 import { useUserStore } from '@/stores/user';
 import { isWeapp } from '@/utils/platform';
-import { goBack } from '@/utils/nav';
+import { goBack, navBarStyle } from '@/utils/nav';
 import Icon from '@/components/Icon';
 import './index.scss';
 
@@ -107,7 +107,7 @@ export default function Settings() {
 
   return (
     <View className="settings">
-      <View className="settings__nav">
+      <View className="settings__nav" style={navBarStyle()}>
         <Text className="settings__back" onClick={() => goBack()}>‹</Text>
         <Text className="settings__nav-title">设置</Text>
         <View className="settings__nav-spacer" />

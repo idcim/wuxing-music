@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { View, Text } from '@tarojs/components';
-import { goBack, navTopStyle } from '@/utils/nav';
+import { goBack, navBarStyle } from '@/utils/nav';
 import { getSiteInfo } from '@/services/site';
 import MarkdownView from '@/components/MarkdownView';
 import './index.scss';
@@ -14,7 +14,7 @@ export default function Agreement() {
 
   return (
     <View className="agreement">
-      <View className="agreement__nav" style={navTopStyle()}>
+      <View className="agreement__nav" style={navBarStyle()}>
         <Text className="agreement__back" onClick={() => goBack('/pages/login/index')}>‹ 返回</Text>
         <Text className="agreement__title">用户服务协议</Text>
       </View>
