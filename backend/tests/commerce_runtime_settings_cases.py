@@ -88,7 +88,113 @@ class RuntimeSettingsCases:
         self.assertEqual(self.client.get(PATH).status_code, 403)
         self.assertEqual(self.client.post(PATH, json={}).status_code, 403)
         self.assertEqual(self.client.get("/api/admin/commerce/channel/storage-check").status_code, 403)
+        self.assertEqual(self.client.post("/api/admin/commerce/channel/storage-provision", json={"bucket": "private-course-test", "confirm": True}).status_code, 403)
         self.assertEqual(self.client.get("/api/mp/v2/channel/settings").status_code, 404)
+
+    def test_private_bucket_provision_is_explicit_private_and_retryable(self):
+        self.channel_save(self.channel_data())
+        origin = "https://admin.example.test"
+
+        class NoSuchBucket(Exception):
+            pass
+
+        class NoSuchCors(Exception):
+            pass
+
+        class FakeStore:
+            exists = False
+            version = None
+            rules = None
+            created = 0
+
+            def get_bucket_acl(self):
+                if not self.exists:
+                    raise NoSuchBucket()
+                return SimpleNamespace(acl="private")
+
+            def create_bucket(self, acl):
+                self.created += 1
+                self.exists = True
+                self.assert_acl = acl
+
+            def list_objects(self, max_keys):
+                return SimpleNamespace(object_list=[])
+
+            def get_bucket_versioning(self):
+                return SimpleNamespace(status=self.version)
+
+            def put_bucket_versioning(self, config):
+                self.version = config.status
+
+            def get_bucket_cors(self):
+                if self.rules is None:
+                    raise NoSuchCors()
+                return SimpleNamespace(rules=self.rules)
+
+            def put_bucket_cors(self, config):
+                self.rules = config.rules
+
+        class Versioning:
+            status = None
+
+        class CorsRule:
+            def __init__(self, **kwargs):
+                self.__dict__.update(kwargs)
+
+        class BucketCors:
+            def __init__(self, rules):
+                self.rules = rules
+
+        store = FakeStore()
+        sdk = SimpleNamespace(Auth=Mock(), Bucket=Mock(return_value=store),
+                              BUCKET_ACL_PRIVATE="private", BUCKET_VERSIONING_ENABLE="Enabled",
+                              exceptions=SimpleNamespace(NoSuchBucket=NoSuchBucket, NoSuchCors=NoSuchCors))
+        models = SimpleNamespace(BucketCors=BucketCors, BucketVersioningConfig=Versioning, CorsRule=CorsRule)
+        path = "/api/admin/commerce/channel/storage-provision"
+        with patch.object(settings, "cors_origins", [origin]), patch.dict(sys.modules, {"oss2": sdk, "oss2.models": models}):
+            self.assertEqual(self.client.post(path, json={"bucket": "private-course-test", "confirm": True},
+                                              headers={"Origin": "https://untrusted.test"}).status_code, 409)
+            self.assertEqual(self.client.post(path, json={"bucket": "wrong-bucket", "confirm": True},
+                                              headers={"Origin": origin}).status_code, 409)
+            self.assertEqual(self.client.post(path, json={"bucket": "private-course-test", "confirm": False},
+                                              headers={"Origin": origin}).status_code, 422)
+            self.assertEqual(store.created, 0)
+            first = self.client.post(path, json={"bucket": "private-course-test", "confirm": True},
+                                     headers={"Origin": origin})
+            self.assertEqual(first.status_code, 200, first.text)
+            self.assertTrue(first.json()["data"]["created"])
+            self.assertEqual((store.created, store.assert_acl, store.version), (1, "private", "Enabled"))
+            self.assertEqual((store.rules[0].allowed_origins, store.rules[0].allowed_methods),
+                             ([origin], ["POST", "GET", "HEAD"]))
+            second = self.client.post(path, json={"bucket": "private-course-test", "confirm": True},
+                                      headers={"Origin": origin})
+            self.assertEqual(second.status_code, 200, second.text)
+            self.assertFalse(second.json()["data"]["created"])
+            self.assertEqual((store.created, len(store.rules)), (1, 1))
+            store.rules[0].allowed_methods = ["POST"]
+            repaired = self.client.post(path, json={"bucket": "private-course-test", "confirm": True},
+                                        headers={"Origin": origin})
+            self.assertEqual(repaired.status_code, 200, repaired.text)
+            self.assertEqual((store.created, len(store.rules)), (1, 2))
+
+    def test_private_bucket_provision_rejects_nonempty_or_public_bucket(self):
+        self.channel_save(self.channel_data())
+        origin = "https://admin.example.test"
+        store = Mock()
+        store.get_bucket_acl.return_value = SimpleNamespace(acl="public-read")
+        sdk = SimpleNamespace(Auth=Mock(), Bucket=Mock(return_value=store),
+                              BUCKET_ACL_PRIVATE="private", BUCKET_VERSIONING_ENABLE="Enabled",
+                              exceptions=SimpleNamespace(NoSuchBucket=Exception, NoSuchCors=Exception))
+        models = SimpleNamespace(BucketCors=Mock(), BucketVersioningConfig=Mock(), CorsRule=Mock())
+        path = "/api/admin/commerce/channel/storage-provision"
+        with patch.object(settings, "cors_origins", [origin]), patch.dict(sys.modules, {"oss2": sdk, "oss2.models": models}):
+            body = {"bucket": "private-course-test", "confirm": True}
+            self.assertEqual(self.client.post(path, json=body, headers={"Origin": origin}).status_code, 409)
+            store.get_bucket_acl.return_value = SimpleNamespace(acl="private")
+            store.list_objects.return_value = SimpleNamespace(object_list=[object()])
+            self.assertEqual(self.client.post(path, json=body, headers={"Origin": origin}).status_code, 409)
+            store.put_bucket_cors.assert_not_called()
+            store.put_bucket_versioning.assert_not_called()
 
     def test_channel_validation_never_echoes_input_and_rejects_unsafe_endpoints(self):
         marker = "synthetic-sensitive-input-never-return"

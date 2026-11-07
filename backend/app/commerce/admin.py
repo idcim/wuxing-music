@@ -63,6 +63,20 @@ def channel_storage_check(_=Depends(require_perm("commerce:settings")), db: Sess
                "note": "已验证桶 ACL；上传、历史版本读取及小程序播放仍需用真实课件验证"})
 
 
+@router.post("/channel/storage-provision")
+def channel_storage_provision(body: schemas.PrivateBucketProvisionIn, request: Request,
+                              admin=Depends(require_perm("commerce:settings")), db: Session = Depends(get_db)):
+    if not body.confirm:
+        raise HTTPException(422, "请确认创建或初始化指定的私有课程桶")
+    try:
+        result = media.provision_private_bucket(db, body.bucket, request.headers.get("origin", ""), admin.username)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(409, "OSS 初始化失败；桶可能已创建，请核对账号权限、区域、桶 ACL、版本控制和 CORS 后重试") from None
+    return ok(result)
+
+
 @router.post("/channel/settings")
 async def channel_settings_save(request: Request, admin=Depends(require_perm("commerce:settings")), db: Session = Depends(get_db)):
     from .runtime_settings import RuntimeConfigIn, save

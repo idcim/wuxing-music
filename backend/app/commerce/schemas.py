@@ -13,6 +13,11 @@ class LogisticsConfigIn(Strict):
     revision: int = Field(default=0, ge=0, strict=True)
 
 
+class PrivateBucketProvisionIn(Strict):
+    bucket: str = Field(min_length=3, max_length=63)
+    confirm: bool = Field(strict=True)
+
+
 class CategoryIn(Strict):
     kind: Literal["course", "physical"]
     name: str = Field(min_length=1, max_length=80)

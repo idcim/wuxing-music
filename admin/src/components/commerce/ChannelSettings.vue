@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { commerce } from '@/api/commerce';
 
 interface ConfigField { name: string; label: string; group: string; type: string; secret: boolean; configured: boolean; inherited: boolean; value: string | boolean }
@@ -9,6 +9,7 @@ const fields = ref<ConfigField[]>([]), status = ref<any>({});
 const form = ref<Record<string, any>>({ revision: 0, clear_fields: [] });
 const loading = ref(false), saving = ref(false), loaded = ref(false), error = ref('');
 const checkingStorage = ref(false), storageCheck = ref('');
+const provisioning = ref(false);
 const expanded = ref(['实物支付与回调', '私有课程 OSS']);
 const groups = computed(() => [...new Set(fields.value.map((field) => field.group))]);
 function apply(data: any) {
@@ -42,6 +43,21 @@ async function checkStorage() {
     storageCheck.value = '私有桶检查失败；请核对桶名、账号权限及网络连接。';
   } finally { checkingStorage.value = false; }
 }
+async function provisionStorage() {
+  const name = String(status.value.fields?.find((field: ConfigField) => field.name === 'private_bucket')?.value || '');
+  if (!name || name !== form.value.private_bucket) {
+    ElMessage.warning('请先保存课程桶名，再初始化'); return;
+  }
+  try {
+    await ElMessageBox.confirm(`将使用已保存的 OSS 账号创建或初始化私有桶「${name}」，开启版本控制，并只允许当前后台域名直传。OSS 存储与请求会按实际用量计费。确定继续？`, '初始化私有课程桶', { type: 'warning', confirmButtonText: '确认初始化' });
+  } catch { return; }
+  provisioning.value = true; storageCheck.value = '';
+  try {
+    const result = await commerce.post('/channel/storage-provision', { bucket: name, confirm: true });
+    storageCheck.value = `私有桶 ${result.bucket} 已就绪，版本控制已启用；还需上传真实课件验证播放。`;
+    ElMessage.success('私有课程桶初始化完成'); emit('saved');
+  } finally { provisioning.value = false; }
+}
 onMounted(load);
 </script>
 <template>
@@ -56,7 +72,7 @@ onMounted(load);
           <p v-if="group === '实物支付与回调'">API 地址可沿用现有音乐支付回调域名。公钥与公钥 ID 来自微信支付商户平台的微信支付平台公钥配置，商户证书私钥仍在原微信支付设置中维护。</p>
           <p v-if="group === '课程数字支付'">使用该小程序已开通的数字内容支付参数；音乐会员支付参数继续在原设置中维护。开通标记按已获准并完成验证的终端能力填写。</p>
           <p v-if="group === '私有课程 OSS'">只需填写独立的私有课程桶；Endpoint 和 AccessKey 留空即复用「设置中心 → 存储设置」的 OSS 账号。课程桶不能是公开音乐桶。若使用另一账号，可在这里单独填写 Endpoint 和一整对 AccessKey。上传时仍会核对桶 ACL 和对象版本。</p>
-          <div v-if="group === '私有课程 OSS'" class="channel-settings__storage-check"><el-button :loading="checkingStorage" :disabled="saving" @click="checkStorage">检查已保存私有桶的连接与 ACL</el-button><span v-if="storageCheck">{{ storageCheck }}</span></div>
+          <div v-if="group === '私有课程 OSS'" class="channel-settings__storage-check"><el-button :loading="checkingStorage" :disabled="saving || provisioning" @click="checkStorage">检查已保存私有桶的连接与 ACL</el-button><el-button :loading="provisioning" :disabled="saving || checkingStorage" @click="provisionStorage">创建并初始化私有桶</el-button><span v-if="storageCheck">{{ storageCheck }}</span></div>
           <p v-if="group === '实物发货'">微信发货和收货同步复用已配置的小程序身份；快递100账号在下方单独维护。附加编码映射通常保留 {}，仅为未内置的公司填写，例如 {"CUSTOM":"shunfeng"}。</p>
           <el-form-item v-for="field in fields.filter((item) => item.group === group)" :key="field.name" :label="field.label">
             <el-switch v-if="field.type === 'boolean'" v-model="form[field.name]" />

@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -16,7 +17,7 @@ from .runtime_settings import resolve
 MAX_SIZE = 2 * 1024**3
 
 
-def bucket(db=None, config=None):
+def _bucket_client(db=None, config=None):
     import oss2
     cfg = config or resolve(db, settings)
     if not all([cfg.commerce_private_bucket, cfg.commerce_private_endpoint,
@@ -27,11 +28,71 @@ def bucket(db=None, config=None):
         raise HTTPException(409, "私有课件存储必须使用 HTTPS")
     if not endpoint.startswith("https://"):
         endpoint = "https://" + endpoint
-    result = oss2.Bucket(oss2.Auth(cfg.commerce_private_key_id, cfg.commerce_private_key_secret),
-                        endpoint, cfg.commerce_private_bucket)
+    return oss2.Bucket(oss2.Auth(cfg.commerce_private_key_id, cfg.commerce_private_key_secret),
+                       endpoint, cfg.commerce_private_bucket)
+
+
+def bucket(db=None, config=None):
+    result = _bucket_client(db, config)
     if result.get_bucket_acl().acl != "private":
         raise HTTPException(409, "课件桶必须为 private，不能使用公开音乐桶")
     return result
+
+
+def provision_private_bucket(db, expected_name, origin, operator):
+    """仅对已保存的独立课程桶做私有初始化；重试可完成上次中断的空桶。"""
+    import oss2
+    from oss2.models import BucketCors, BucketVersioningConfig, CorsRule
+
+    cfg = resolve(db, settings)
+    name = cfg.commerce_private_bucket
+    if not name or name != expected_name:
+        raise HTTPException(409, "请先保存私有课程桶名，并确认当前桶名未被其他管理员修改")
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,61}[a-z0-9]", name):
+        raise HTTPException(409, "私有课程桶名格式不正确")
+    host = cfg.commerce_private_endpoint.removeprefix("https://").rstrip("/")
+    if not re.fullmatch(r"oss-[a-z0-9-]+\.aliyuncs\.com", host):
+        raise HTTPException(409, "仅支持阿里云官方 HTTPS OSS Endpoint 初始化")
+    if origin not in settings.cors_origins or not (origin.startswith("https://") or settings.debug):
+        raise HTTPException(409, "请先将当前后台 HTTPS 域名加入服务器 CORS_ORIGINS")
+    store = _bucket_client(db, cfg)
+    created = False
+    try:
+        acl = store.get_bucket_acl().acl
+    except oss2.exceptions.NoSuchBucket:
+        store.create_bucket(oss2.BUCKET_ACL_PRIVATE)
+        created = True
+        acl = store.get_bucket_acl().acl
+    if acl != "private":
+        raise HTTPException(409, "已存在的桶不是 private；不会修改其权限")
+    if not created and store.list_objects(max_keys=1).object_list:
+        raise HTTPException(409, "已存在的桶包含文件；请在 OSS 控制台核对后手动配置")
+    if store.get_bucket_versioning().status != oss2.BUCKET_VERSIONING_ENABLE:
+        versioning = BucketVersioningConfig()
+        versioning.status = oss2.BUCKET_VERSIONING_ENABLE
+        store.put_bucket_versioning(versioning)
+    try:
+        rules = list(store.get_bucket_cors().rules)
+    except oss2.exceptions.NoSuchCors:
+        rules = []
+    methods = {"POST", "GET", "HEAD"}
+    if not any(origin in rule.allowed_origins and methods <= set(rule.allowed_methods) for rule in rules):
+        rules.append(CorsRule(allowed_origins=[origin], allowed_methods=["POST", "GET", "HEAD"],
+                              allowed_headers=["*"], expose_headers=["ETag", "x-oss-version-id"],
+                              max_age_seconds=3600))
+        store.put_bucket_cors(BucketCors(rules))
+    if store.get_bucket_acl().acl != "private" or store.get_bucket_versioning().status != oss2.BUCKET_VERSIONING_ENABLE:
+        raise HTTPException(409, "私有桶初始化未通过 ACL 或版本控制复核")
+    if not any(origin in rule.allowed_origins and methods <= set(rule.allowed_methods)
+               for rule in store.get_bucket_cors().rules):
+        raise HTTPException(409, "私有桶初始化未通过后台直传 CORS 复核")
+    from .common import migrated
+    if migrated(db):
+        record(db, "private-course-bucket", "provisioned", {"bucket": name, "origin": origin,
+                                                               "created": created}, operator)
+        db.commit()
+    return {"bucket": name, "created": created, "private": True, "versioning": "Enabled",
+            "upload_origin": origin}
 
 
 def upload_policy(db, name, kind):
