@@ -11,6 +11,7 @@ import ChannelSettings from '@/components/commerce/ChannelSettings.vue';
 const auth = useAuthStore();
 const form = ref<any>({ provinces: [] }), caps = ref<Record<string, boolean>>({}), loading = ref(true), saving = ref(false);
 const migrated = ref(false);
+const catalogSummary = ref<any>(null);
 const diagnosticRevision = ref(0);
 async function channelsSaved() {
   diagnosticRevision.value++;
@@ -24,7 +25,8 @@ async function load() {
     const status = await commerce.get('/status');
     migrated.value = status.migrated; caps.value = status.capabilities;
     if (!status.migrated) return;
-    const data = await commerce.get('/settings'); caps.value = data.capabilities; delete data.capabilities; form.value = data;
+    const [data, summary] = await Promise.all([commerce.get('/settings'), commerce.get('/catalog-summary')]);
+    caps.value = data.capabilities; delete data.capabilities; form.value = data; catalogSummary.value = summary;
   }
   finally { loading.value = false; }
 }
@@ -43,6 +45,14 @@ onMounted(load);
     <el-alert v-if="!loading && !migrated" title="课程商城数据尚未初始化，其余运营配置暂未开放。物流账号可以先在上方保存。" type="info" :closable="false" />
     <BusinessForm v-if="migrated" v-loading="loading" :model="form" class="settings-panel" :disabled="!auth.can('commerce:settings')">
       <el-alert title="支付、私有课程 OSS、发货与快递100参数可在上方维护；下方单独控制展示与售卖。" :closable="false" style="margin-bottom:20px" />
+      <el-alert v-if="form.courses_visible && catalogSummary && !catalogSummary.courses.published" type="warning" :closable="false" style="margin-bottom:12px"
+        :title="`课程入口已展示，但尚无上架课程（现有 ${catalogSummary.courses.total} 条草稿/下架记录）。请到「课程与商品」补齐资料与课件。`" />
+      <el-alert v-if="form.shop_visible && catalogSummary && !catalogSummary.products.published" type="warning" :closable="false" style="margin-bottom:12px"
+        :title="`商城入口已展示，但尚无上架商品（现有 ${catalogSummary.products.total} 条草稿/下架记录）。请到「课程与商品」补齐图片、介绍与规格。`" />
+      <el-descriptions v-if="catalogSummary" :column="2" border style="margin-bottom:20px">
+        <el-descriptions-item label="课程内容">已上架 {{ catalogSummary.courses.published }} / 总数 {{ catalogSummary.courses.total }}；已核验收费 {{ catalogSummary.courses.purchase_ready }}</el-descriptions-item>
+        <el-descriptions-item label="实物商品">已上架 {{ catalogSummary.products.published }} / 总数 {{ catalogSummary.products.total }}；有库存 {{ catalogSummary.products.in_stock }}</el-descriptions-item>
+      </el-descriptions>
       <el-descriptions :column="2" border style="margin-bottom:24px"><el-descriptions-item v-for="(label, key) in { physical_payment:'实物支付', course_payment:'数字课程支付', course_ios:'iOS 数字支付', private_media:'私有课程存储', shipping:'微信发货与收货同步', logistics:'快递100轨迹查询' }" :key="key" :label="label"><el-tag :type="caps[key] ? 'success' : 'info'">{{ caps[key] ? '已配置（仍需真实联调）' : '未配置 / 未验收' }}</el-tag></el-descriptions-item></el-descriptions>
       <el-form-item label="展示课程入口"><el-switch v-model="form.courses_visible" /></el-form-item>
       <el-form-item label="开放收费课程购买"><el-switch v-model="form.courses_sale" /></el-form-item>

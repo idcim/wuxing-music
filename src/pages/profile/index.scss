@@ -154,6 +154,17 @@
     font-size: 25rpx;
   }
 
+  &__expired {
+    border-color: rgba(251, 191, 36, 0.4);
+    background: rgba(251, 191, 36, 0.08);
+  }
+
+  &__expired-close {
+    flex-shrink: 0;
+    color: $text-tertiary;
+    font-size: 23rpx;
+  }
+
   // ── 会员卡片 ──
   &__vip {
     border: 2rpx solid;

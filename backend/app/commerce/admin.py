@@ -114,6 +114,21 @@ def settings(_=Depends(require_perm("commerce:view")), db: Session = Depends(get
     return ok({**config(db), "capabilities": providers.capabilities(db)})
 
 
+@api.get("/catalog-summary")
+def catalog_summary(_=Depends(require_perm("commerce:view")), db: Session = Depends(get_db)):
+    courses = db.query(Course).filter_by(status="published").all()
+    stocked = (db.query(Product.id).join(Sku, Sku.product_id == Product.id)
+        .filter(Product.status == "published", Sku.enabled.is_(True), Sku.price_fen > 0,
+                Sku.stock > Sku.reserved).distinct().count())
+    return ok({
+        "courses": {"total": db.query(Course).count(), "published": len(courses),
+                    "purchase_ready": sum(not catalog.sale_issues(row) for row in courses if row.price_fen)},
+        "products": {"total": db.query(Product).count(),
+                     "published": db.query(Product).filter_by(status="published").count(),
+                     "in_stock": stocked},
+    })
+
+
 @api.post("/settings")
 def settings_save(body: schemas.ConfigIn, admin=Depends(require_perm("commerce:settings")), db: Session = Depends(get_db)):
     caps = providers.capabilities(db)

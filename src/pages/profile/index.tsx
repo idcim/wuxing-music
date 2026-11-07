@@ -32,6 +32,8 @@ export default function Profile() {
   const element = useUserStore((s) => s.element);
   const isPremium = useUserStore((s) => s.isPremium);
   const user = useUserStore((s) => s.user);
+  const sessionExpired = useUserStore((s) => s.sessionExpired);
+  const dismissSessionExpired = useUserStore((s) => s.dismissSessionExpired);
   const logout = useUserStore((s) => s.logout);
   const el = WUXING[(element as ElementId) || '木'];
 
@@ -202,6 +204,17 @@ export default function Profile() {
           <Icon name="chevronRight" size={30} color="#64748b" strokeWidth={1.5} />
         </View>
       </View>
+
+      {!user && sessionExpired && (
+        <View className="profile__complete profile__expired">
+          <View className="profile__complete-copy">
+            <Text className="profile__complete-title">登录状态已过期</Text>
+            <Text className="profile__complete-desc">你仍可浏览内容；需要使用已购权益时再登录。</Text>
+          </View>
+          <Text className="profile__complete-action" onClick={goLogin}>去登录 ›</Text>
+          <Text className="profile__expired-close" onClick={dismissSessionExpired}>关闭</Text>
+        </View>
+      )}
 
       {isProfileIncomplete(user) && (
         <View className="profile__complete" onClick={goUserInfo}>

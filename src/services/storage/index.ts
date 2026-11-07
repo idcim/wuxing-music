@@ -28,6 +28,7 @@ export const storage = {
 
 export const STORAGE_KEYS = {
   USER: 'wx_user',
+  SESSION_EXPIRED: 'wx_session_expired',
   ELEMENT: 'wx_element',
   SCORES: 'wx_scores',
   ONBOARDED: 'wx_onboarded',

@@ -22,6 +22,8 @@ interface UserStore {
   scores: ElementScores | null;
   isPremium: boolean;
   loggingIn: boolean;
+  sessionExpired: boolean;
+  dismissSessionExpired: () => void;
   setUser: (u: User) => void;
   setElement: (el: ElementId, scores: ElementScores) => void;
   updateMembership: (m: Membership) => void;
@@ -51,11 +53,19 @@ export const useUserStore = create<UserStore>((set, get) => ({
   scores: storage.get<ElementScores>(STORAGE_KEYS.SCORES),
   isPremium: false,
   loggingIn: false,
+  sessionExpired: storage.get<boolean>(STORAGE_KEYS.SESSION_EXPIRED) === true,
+
+  dismissSessionExpired: () => {
+    storage.remove(STORAGE_KEYS.SESSION_EXPIRED);
+    set({ sessionExpired: false });
+  },
 
   setUser: (user) => {
     persistUser(user);
+    storage.remove(STORAGE_KEYS.SESSION_EXPIRED);
     set({
       user,
+      sessionExpired: false,
       element: user.element ?? get().element,
       isPremium: computePremium(user.membership)
     });
@@ -170,6 +180,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
   logout: (clearProfile = false) => {
     clearAuth();
+    storage.remove(STORAGE_KEYS.SESSION_EXPIRED);
     if (clearProfile) {
       storage.remove(STORAGE_KEYS.ELEMENT);
       storage.remove(STORAGE_KEYS.SCORES);
@@ -178,6 +189,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
     }
     set({
       user: null,
+      sessionExpired: false,
       isPremium: false,
       ...(clearProfile ? { element: null, scores: null } : {})
     });
@@ -186,5 +198,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
 registerSessionExpiry(() => {
   useUserStore.getState().logout();
+  storage.set(STORAGE_KEYS.SESSION_EXPIRED, true);
+  useUserStore.setState({ sessionExpired: true });
   Taro.showToast({ title: '登录已过期，请按需重新登录', icon: 'none', duration: 3000 });
 });

@@ -712,6 +712,9 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, Logisti
         self.assertEqual(self.client.post("/api/admin/commerce/catalog/skus/100", json={"product_id": 100, "name": "一盒", "price_fen": 1}).status_code, 403)
 
     def test_catalog_readiness_matches_publish_gate(self):
+        summary = self.client.get("/api/admin/commerce/catalog-summary").json()["data"]
+        self.assertEqual(summary["courses"], {"total": 2, "published": 1, "purchase_ready": 1})
+        self.assertEqual(summary["products"], {"total": 6, "published": 1, "in_stock": 1})
         products = self.client.get("/api/admin/commerce/catalog/products").json()["data"]["items"]
         self.assertEqual(next(row for row in products if row["id"] == 100)["publish_issues"], [])
         courses = self.client.get("/api/admin/commerce/catalog/courses").json()["data"]["items"]
