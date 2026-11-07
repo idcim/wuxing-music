@@ -9,7 +9,7 @@ import { VbenFullScreen } from '@vben-core/shadcn-ui';
 import { useMediaQuery } from '@vueuse/core';
 import { useAuthStore } from '@/stores/auth';
 import { useSiteStore } from '@/stores/site';
-import { NAV_MAIN, NAV_AGENT, NAV_SYSTEM, NAV_ALL, type NavItem } from '@/menu';
+import { NAV_MAIN, NAV_GROUPS, NAV_ALL, type NavItem } from '@/menu';
 import NotifyBell from '@/components/NotifyBell.vue';
 import CheckUpdates from '@/components/shell/CheckUpdates.vue';
 import MenuSearch from '@/components/shell/MenuSearch.vue';
@@ -33,12 +33,17 @@ const asMenu = (n: NavItem) => ({
   icon: markRaw((Icons as Record<string, any>)[n.icon] || Icons.Menu),
 });
 const menus = computed(() => {
-  const agent = NAV_AGENT.filter(visible).map(asMenu);
-  const system = NAV_SYSTEM.filter(visible).map(asMenu);
   return [
     ...NAV_MAIN.filter(visible).map(asMenu),
-    ...(agent.length ? [{ path: '/agent-menu', name: '代理分成', icon: markRaw(Icons.Shop), children: agent }] : []),
-    ...(system.length ? [{ path: '/system-menu', name: '系统管理', icon: markRaw(Icons.Setting), children: system }] : []),
+    ...NAV_GROUPS.flatMap(group => {
+      const children = group.items.filter(visible).map(asMenu);
+      return children.length ? [{
+        path: group.path,
+        name: group.title,
+        icon: markRaw((Icons as Record<string, any>)[group.icon] || Icons.Menu),
+        children,
+      }] : [];
+    }),
   ];
 });
 const tabKey = computed(() => `admin_tabs_${auth.username}`);
