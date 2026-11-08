@@ -410,8 +410,8 @@ def seed(db: Session) -> None:
                 duration_days=days, plan_name=pname,
             ))
 
-    # 示例用户 + 订单（便于后台订单/退单演示）
-    if db.query(Order).count() == 0:
+    # 示例用户 + 订单仅供本地演示，生产不能生成虚假的已付款订单。
+    if settings.debug and db.query(Order).count() == 0:
         demo = db.query(User).filter(User.openid == "demo-openid").first()
         if not demo:
             demo = User(
