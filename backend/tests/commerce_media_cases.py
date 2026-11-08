@@ -15,8 +15,8 @@ from app.commerce.models import Event, Job, MediaAsset
 class MediaCases:
     def test_versioned_original_keeps_uploaded_version_when_latest_is_replaced(self):
         with self.sessions() as db:
-            db.get(MediaAsset, 100).state = "uploading"
-            db.get(MediaAsset, 100).source_key = "course/source/pinned.mp4"
+            db.get(MediaAsset, 101).state = "uploading"
+            db.get(MediaAsset, 101).source_key = "course/source/pinned.mp4"
             db.commit()
         latest = {"version": "uploaded-version"}
         acl_calls, signed_calls = [], []
@@ -32,13 +32,13 @@ class MediaCases:
         store = SimpleNamespace(head_object=lambda _: SimpleNamespace(content_length=1024, headers={"x-oss-version-id": latest["version"]}),
                                 get_object_acl=acl, sign_url=sign)
         with patch.object(media, "bucket", return_value=store):
-            response = self.client.post("/api/admin/commerce/media/100/complete", json={"duration": 40})
+            response = self.client.post("/api/admin/commerce/media/101/complete", json={"duration": 40})
             self.assertEqual(response.status_code, 200, response.text)
             latest["version"] = "replacement-version"
-            again = self.client.post("/api/admin/commerce/media/100/complete", json={"duration": 77})
+            again = self.client.post("/api/admin/commerce/media/101/complete", json={"duration": 77})
             self.assertEqual(again.json()["data"]["duration"], 40)
             with self.sessions() as db:
-                asset = db.get(MediaAsset, 100)
+                asset = db.get(MediaAsset, 101)
                 self.assertEqual(asset.playback_version, "uploaded-version")
             playback = self.client.get("/api/mp/v2/lessons/101/play")
             self.assertEqual(playback.status_code, 200, playback.text)

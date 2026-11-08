@@ -67,6 +67,10 @@ def publish_issues(db, row):
                               or media[lesson.media_id].state != "ready" or not media[lesson.media_id].playback_key
                               for lesson in lessons):
             issues.append("已就绪章节课件")
+        preview_ids = {lesson.media_id for lesson in lessons if lesson.preview and lesson.media_id}
+        if preview_ids and db.query(Lesson.id).filter(
+                Lesson.media_id.in_(preview_ids), Lesson.preview.is_(False)).first():
+            issues.append("独立试听课件")
     else:
         if not db.query(Sku).filter_by(product_id=row.id, enabled=True).filter(Sku.price_fen > 0).first():
             issues.append("有效规格和售价")
@@ -100,6 +104,8 @@ def playable(db, uid, lesson_id):
         enabled(db, "course")
         if not (lesson.preview and course.status == "published"):
             raise HTTPException(403, "请先领取或购买课程；音乐会员不包含课程")
+        if lesson.media_id and db.query(Lesson.id).filter_by(media_id=lesson.media_id, preview=False).first():
+            raise HTTPException(403, "试听课件与付费章节共用，请联系管理员")
     media = require_row(db, MediaAsset, lesson.media_id) if lesson.media_id else None
     if not media or media.state != "ready":
         raise HTTPException(409, "课程媒体尚未就绪")

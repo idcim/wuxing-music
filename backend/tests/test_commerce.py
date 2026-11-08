@@ -108,8 +108,9 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, Logisti
             db.add(Course(id=100, title="测试课", price_fen=2000, status="published", access_days=30,
                 payment_product="course-100", revision=1, payment_synced_revision=1))
             db.add(MediaAsset(id=100, kind="video", name="paid.mp4", state="ready", duration=100, playback_key="private/paid.mp4"))
+            db.add(MediaAsset(id=101, kind="video", name="preview.mp4", state="ready", duration=30, playback_key="private/preview.mp4"))
             db.add_all([Lesson(id=100, course_id=100, title="付费章节", media_id=100),
-                Lesson(id=101, course_id=100, title="独立预览章节", media_id=100, preview=True)])
+                Lesson(id=101, course_id=100, title="独立预览章节", media_id=101, preview=True)])
             db.commit()
         app = FastAPI()
         for router in (public.router, admin.router, callbacks.router, attachments.router):
@@ -448,6 +449,20 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, Logisti
                     db.commit()
                 self.assertEqual(self.client.get("/api/mp/v2/lessons/101/play").status_code, 404)
                 self.assertEqual(sign.call_count, 1)
+                self.assertEqual(sign.call_args.args[0].id, 101)
+        finally:
+            self.app.dependency_overrides[get_current_user] = auth
+
+    def test_preview_cannot_share_the_paid_lesson_media(self):
+        auth = self.app.dependency_overrides.pop(get_current_user)
+        try:
+            with self.sessions() as db:
+                db.get(Lesson, 101).media_id = 100
+                db.commit()
+                self.assertIn("独立试听课件", catalog.publish_issues(db, db.get(Course, 100)))
+            with patch.object(media, "signed_url") as sign:
+                self.assertEqual(self.client.get("/api/mp/v2/lessons/101/play").status_code, 403)
+                sign.assert_not_called()
         finally:
             self.app.dependency_overrides[get_current_user] = auth
 
@@ -570,8 +585,8 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, Logisti
         self.assertNotIn("source_key", result["items"][0])
         self.assertNotIn("playback_key", result["items"][0])
         last = self.client.get("/api/admin/commerce/media", params={"page": 7, "size": 20}).json()["data"]
-        self.assertEqual(last["total"], 123)
-        self.assertEqual(len(last["items"]), 3)
+        self.assertEqual(last["total"], 124)
+        self.assertEqual(len(last["items"]), 4)
 
     def test_concurrent_manual_retries_do_not_enqueue_twice(self):
         with self.sessions() as db:
