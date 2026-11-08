@@ -792,6 +792,36 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, Logisti
         self.assertEqual(self.client.post("/api/admin/commerce/settings", json={}).status_code, 403)
         self.assertEqual(self.client.post("/api/admin/commerce/catalog/skus/100", json={"product_id": 100, "name": "一盒", "price_fen": 1}).status_code, 403)
 
+    def test_aftersale_review_refund_and_restock_permissions(self):
+        ident = self.order(key="permission-order").json()["data"]["id"]
+        self.paid(ident)
+        item = self.client.get(f"/api/mp/v2/orders/{ident}").json()["data"]["items"][0]
+        sale = self.client.post(f"/api/mp/v2/orders/{ident}/aftersales", json={
+            "item_id": item["id"], "quantity": 1, "kind": "refund", "reason": "申请退款"}).json()["data"]
+        with self.sessions() as db:
+            db.add(Role(id=100, name="after-sales", permissions=json.dumps(["commerce:view", "commerce:aftersales"])))
+            db.commit()
+        self.app.dependency_overrides[get_current_admin] = lambda: SimpleNamespace(id=2, username="reviewer", is_super=False, role_id=100)
+        path = f"/api/admin/commerce/aftersales/{sale['id']}/review"
+        self.assertEqual(self.client.post(path, json={"action": "approve"}).status_code, 403)
+        self.assertEqual(self.client.post(path, json={"action": "reject"}).status_code, 200)
+
+        with self.sessions() as db:
+            db.get(Order, ident).fulfillment = "shipped"
+            db.commit()
+        sale = self.client.post(f"/api/mp/v2/orders/{ident}/aftersales", json={
+            "item_id": item["id"], "quantity": 1, "kind": "return_refund", "reason": "申请退货退款"}).json()["data"]
+        path = f"/api/admin/commerce/aftersales/{sale['id']}/review"
+        self.assertEqual(self.client.post(path, json={"action": "approve"}).status_code, 200)
+        self.assertEqual(self.client.post(f"/api/mp/v2/aftersales/{sale['id']}/return", json={
+            "carrier": "SF", "tracking_no": "SF12345678"}).status_code, 200)
+        self.assertEqual(self.client.post(path, json={"action": "received"}).status_code, 403)
+        with self.sessions() as db:
+            db.get(Role, 100).permissions = json.dumps(["commerce:view", "commerce:aftersales", "commerce:payments"])
+            db.commit()
+        self.assertEqual(self.client.post(path, json={"action": "received", "restock": True}).status_code, 403)
+        self.assertEqual(self.client.post(path, json={"action": "received", "restock": False}).status_code, 200)
+
     def test_catalog_readiness_matches_publish_gate(self):
         summary = self.client.get("/api/admin/commerce/catalog-summary").json()["data"]
         self.assertEqual(summary["courses"], {"total": 2, "published": 1, "purchase_ready": 1})

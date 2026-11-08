@@ -32,6 +32,11 @@ async function submitReview() {
   try { await commerce.post(`/aftersales/${sale.value.id}/review`, review.value); reviewDialog.value = false; await load(); }
   finally { busy.value = false; }
 }
+function openReview(row: any) {
+  sale.value = row;
+  review.value = { action: row.state === 'returning' ? 'received' : row.kind === 'refund' && !auth.can('commerce:payments') ? 'reject' : 'approve', remark: '', restock: false };
+  reviewDialog.value = true;
+}
 watch(tab, resetFilters);
 onMounted(refresh);
 onUnmounted(() => { loadId++; });
@@ -57,7 +62,7 @@ onUnmounted(() => { loadId++; });
       <el-table-column label="操作" width="210" fixed="right"><template #default="{ row }">
         <el-button v-if="tab === 'orders'" @click="detail = row; drawer = true">详情</el-button>
         <el-button v-if="tab === 'orders' && row.kind === 'physical' && row.status === 'paid' && (row.fulfillment === 'unshipped' || row.shipment?.sync_state === 'failed') && auth.can('commerce:ship')" @click="detail = row; shipping = { carrier: row.shipment?.carrier || 'SF', tracking_no: row.shipment?.tracking_no || '' }; shipDialog = true">{{ row.shipment ? '更正发货' : '发货' }}</el-button>
-        <el-button v-if="tab === 'aftersales' && ['requested','returning'].includes(row.state) && auth.can('commerce:aftersales')" @click="sale = row; review = { action: row.state === 'returning' ? 'received' : 'approve', remark: '', restock: false }; reviewDialog = true">处理售后</el-button>
+        <el-button v-if="tab === 'aftersales' && ['requested','returning'].includes(row.state) && auth.can('commerce:aftersales') && (row.state === 'requested' || auth.can('commerce:payments'))" @click="openReview(row)">处理售后</el-button>
       </template></el-table-column>
     </BusinessTable>
     <BusinessPagination v-model:current-page="page" :total="total" :page-size="tab === 'orders' ? 20 : 30" layout="total, prev, pager, next" @current-change="load" />
@@ -71,9 +76,9 @@ onUnmounted(() => { loadId++; });
     <BusinessModal v-model="reviewDialog" title="审核售后 / 退货验收">
       <el-descriptions :column="1" border><el-descriptions-item label="申请">{{ sale.reason }} · {{ sale.quantity }} 件 · {{ yuan(sale.amount_fen) }}</el-descriptions-item><el-descriptions-item label="退货快递">{{ sale.return_carrier }} {{ sale.return_tracking }}</el-descriptions-item></el-descriptions>
       <div v-if="sale.images?.length" style="display:flex;gap:12px;margin:12px 0"><el-image v-for="src in sale.images" :key="src" :src="src" style="width:100px;height:100px" :preview-src-list="sale.images" /></div>
-      <BusinessForm :model="review"><el-form-item label="处理结果"><el-select v-model="review.action"><el-option v-if="sale.state === 'requested'" label="审核通过" value="approve" /><el-option v-if="sale.state === 'requested'" label="审核不通过" value="reject" /><el-option v-if="sale.state === 'returning'" label="已收到退货并验收" value="received" /></el-select></el-form-item><el-form-item label="说明"><el-input v-model="review.remark" type="textarea" /></el-form-item><el-form-item v-if="review.action === 'received'" label="验收后恢复可售库存"><el-switch v-model="review.restock" :disabled="!auth.can('commerce:inventory')" /></el-form-item></BusinessForm>
+      <BusinessForm :model="review"><el-form-item label="处理结果"><el-select v-model="review.action"><el-option v-if="sale.state === 'requested'" label="审核通过" value="approve" :disabled="sale.kind === 'refund' && !auth.can('commerce:payments')" /><el-option v-if="sale.state === 'requested'" label="审核不通过" value="reject" /><el-option v-if="sale.state === 'returning'" label="已收到退货并验收" value="received" :disabled="!auth.can('commerce:payments')" /></el-select></el-form-item><el-form-item label="说明"><el-input v-model="review.remark" type="textarea" /></el-form-item><el-form-item v-if="review.action === 'received'" label="验收后恢复可售库存"><el-switch v-model="review.restock" :disabled="!auth.can('commerce:inventory')" /></el-form-item></BusinessForm>
       <el-alert type="warning" title="退款类通过操作会提交支付渠道；需退款权限，实际完成以渠道确认结果为准。" :closable="false" />
-      <template #footer><el-button @click="reviewDialog = false">取消</el-button><el-button type="primary" :loading="busy" @click="submitReview">确认处理</el-button></template>
+      <template #footer><el-button @click="reviewDialog = false">取消</el-button><el-button type="primary" :loading="busy" :disabled="(review.action === 'received' || (review.action === 'approve' && sale.kind === 'refund')) && !auth.can('commerce:payments')" @click="submitReview">确认处理</el-button></template>
     </BusinessModal>
   </BusinessPage>
 </template>
