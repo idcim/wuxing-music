@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, Button, Slider } from '@tarojs/components';
+import { View, Text, Button, Image, Slider } from '@tarojs/components';
 import { Video } from '@tarojs/components';
 import Taro, { useDidHide, useRouter } from '@tarojs/taro';
 import { commerceApi, coursePath, shopPath, money, useCommerce, type Entry } from '@/services/commerce';
 import { usePlayerStore } from '@/stores/player';
 import MarkdownView from '@/components/MarkdownView';
 import { action, CommercePage, Cover, CustomerService, Feedback, requireCommerceLogin, useData } from '@/features/commerce/common';
+import courseBanner from '@/assets/commerce/course-banner.jpg';
 
 export default function CourseList() {
   const [category, setCategory] = useState<number | null>(null);
@@ -14,7 +15,7 @@ export default function CourseList() {
   const cfg = useCommerce(s => s.config);
   return <CommercePage title='课程' tab='course'>
     <View className='commerce__hero' onClick={() => cfg.course_banner_course_id && Taro.navigateTo({ url: `${coursePath}/detail/index?id=${cfg.course_banner_course_id}` })}>
-      <Cover src={cfg.course_banner} title='在音乐中，重新认识自己' large />
+      {cfg.course_banner ? <Cover src={cfg.course_banner} large /> : <Image className='commerce__cover commerce__cover--large' src={courseBanner} mode='aspectFill' />}
       <View className='commerce__card-body'><Text className='commerce__name'>东方音乐 · 美育课堂</Text><Text className='commerce__muted'>视频与音频课程，按章节循序学习。课程独立购买，音乐会员不包含课程。</Text></View>
     </View>
     <View className='commerce__actions'><Button className='commerce__secondary' onClick={() => requireCommerceLogin() && Taro.navigateTo({ url: `${coursePath}/mine/index` })}>我的课程</Button></View>

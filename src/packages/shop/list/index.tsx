@@ -5,6 +5,7 @@ import { commerceApi, shopPath, money, useCommerce, type Entry } from '@/service
 import { resolveUrl } from '@/utils/url';
 import MarkdownView from '@/components/MarkdownView';
 import { action, CommercePage, Cover, CustomerService, Feedback, requireCommerceLogin, useData } from '@/features/commerce/common';
+import shopBanner from '@/assets/commerce/shop-banner.jpg';
 
 export default function ShopList() {
   const [category, setCategory] = useState<number | null>(null);
@@ -13,7 +14,7 @@ export default function ShopList() {
   const cfg = useCommerce(s => s.config);
   return <CommercePage title='商城' tab='shop'>
     <View className='commerce__hero' onClick={() => cfg.shop_banner_product_id && Taro.navigateTo({ url: `${shopPath}/detail/index?id=${cfg.shop_banner_product_id}` })}>
-      <Cover src={cfg.shop_banner} title='一杯茶，一段静好的日常' large />
+      {cfg.shop_banner ? <Cover src={cfg.shop_banner} large /> : <Image className='commerce__cover commerce__cover--large' src={shopBanner} mode='aspectFill' />}
       <View className='commerce__card-body'><Text className='commerce__name'>东方生活 · 日用之美</Text><Text className='commerce__muted'>咖啡、五行茶与生活雅物。让音乐之外的时光，也从容一些。</Text></View>
     </View>
     <View className='commerce__actions'><Button className='commerce__secondary' onClick={() => requireCommerceLogin() && Taro.navigateTo({ url: `${shopPath}/cart/index` })}>购物车</Button>

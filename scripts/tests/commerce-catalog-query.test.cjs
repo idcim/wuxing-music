@@ -8,23 +8,25 @@ const ts = require('typescript');
 const React = require('react');
 const { create, act } = require('react-test-renderer');
 
-function mount(relativeFile) {
+function mount(relativeFile, config = {}) {
   const requests = [];
   const mocks = {
     react: React,
     'react/jsx-runtime': require('react/jsx-runtime'),
-    '@tarojs/components': { View: 'view', Text: 'text', Button: 'button' },
+    '@tarojs/components': { View: 'view', Text: 'text', Button: 'button', Image: 'image' },
     '@tarojs/taro': { default: { navigateTo: () => {} }, useRouter: () => ({ params: {} }) },
     '@/services/commerce': {
       coursePath: '/packages/courses', shopPath: '/packages/shop', money: n => `¥${n / 100}`,
-      useCommerce: select => select({ config: { courses_visible: true, shop_visible: true } }),
+      useCommerce: select => select({ config: { courses_visible: true, shop_visible: true, ...config } }),
     },
     '@/stores/player': { usePlayerStore: () => ({}) },
+    '@/assets/commerce/course-banner.jpg': { default: 'local-course-banner' },
+    '@/assets/commerce/shop-banner.jpg': { default: 'local-shop-banner' },
     '@/components/MarkdownView': { default: () => null },
     '@/utils/url': { resolveUrl: value => value },
     '@/features/commerce/common': {
       CommercePage: ({ children }) => React.createElement('page', null, children),
-      Cover: () => null, Feedback: () => null, CustomerService: () => null,
+      Cover: props => React.createElement('cover', props), Feedback: () => null, CustomerService: () => null,
       requireCommerceLogin: () => false,
       useData: url => {
         requests.push(url);
@@ -47,7 +49,32 @@ function mount(relativeFile) {
     assert.ok(chip, `缺少分类 ${label}`);
     act(() => { chip.props.onClick(); });
   };
-  return { requests, choose, close: () => act(() => renderer.unmount()) };
+  return { requests, choose, images: () => renderer.root.findAllByType('image'),
+    covers: () => renderer.root.findAllByType('cover'), close: () => act(() => renderer.unmount()) };
+}
+
+for (const [kind, file] of [
+  ['course', 'src/packages/courses/list/index.tsx'],
+  ['shop', 'src/packages/shop/list/index.tsx'],
+]) {
+  test(`${kind} 未配置运营海报时显示内置品牌海报`, () => {
+    const ui = mount(file);
+    try { assert.equal(ui.images()[0]?.props.src, `local-${kind}-banner`); }
+    finally { ui.close(); }
+  });
+}
+
+for (const [kind, file, field] of [
+  ['course', 'src/packages/courses/list/index.tsx', 'course_banner'],
+  ['shop', 'src/packages/shop/list/index.tsx', 'shop_banner'],
+]) {
+  test(`${kind} 后台运营海报优先于内置图片`, () => {
+    const ui = mount(file, { [field]: 'https://example.test/banner.jpg' });
+    try {
+      assert.equal(ui.images().length, 0);
+      assert.equal(ui.covers()[0]?.props.src, 'https://example.test/banner.jpg');
+    } finally { ui.close(); }
+  });
 }
 
 for (const [kind, file] of [
