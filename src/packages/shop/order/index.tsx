@@ -79,9 +79,10 @@ export default function OrderDetail() {
       {order.fulfillment === 'shipped' && order.status === 'paid' && <Button className='commerce__primary' loading={busy} onClick={() => perform(async () => {
         const result = await Taro.showModal({ title: '确认收货', content: '请确认已收到商品，确认后仍可按规则申请售后。' });
         if (result.confirm) {
-          receiptPending.current = true;
           await confirmCommerceReceipt(order.transaction_id);
+          receiptPending.current = true;
           await commerceApi(`/orders/${id}/receive`, 'POST');
+          receiptPending.current = false;
         }
       })}>确认收货</Button>}
     </>}
