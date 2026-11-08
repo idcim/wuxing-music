@@ -72,6 +72,10 @@ def publish_issues(db, row):
                 Lesson.media_id.in_(preview_ids), Lesson.preview.is_(False)).first():
             issues.append("独立试听课件")
     else:
+        if not row.shipping_note.strip():
+            issues.append("发货说明")
+        if not row.aftersale_note.strip():
+            issues.append("售后说明")
         if not db.query(Sku).filter_by(product_id=row.id, enabled=True).filter(Sku.price_fen > 0).first():
             issues.append("有效规格和售价")
     return issues

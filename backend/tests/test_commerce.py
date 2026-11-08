@@ -103,7 +103,8 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, Logisti
                 "courses_visible": True, "shop_visible": True, "courses_sale": True, "shop_sale": True,
                 "provinces": ["湖北省"], "shipping_fen": 600, "free_shipping_fen": 20000})))
             db.add(Address(id=1, user_id=1, name="测试", phone="13800000000", province="湖北省", city="武汉市", detail="测试地址"))
-            db.add(Product(id=100, title="测试茶", status="published", cover="/tea.jpg", intro="茶"))
+            db.add(Product(id=100, title="测试茶", status="published", cover="/tea.jpg", intro="茶",
+                shipping_note="48 小时内发货，运费以结算页为准", aftersale_note="支持依法申请退款退货"))
             db.add(Sku(id=100, product_id=100, name="一盒", price_fen=1000, stock=5))
             db.add(Course(id=100, title="测试课", price_fen=2000, status="published", access_days=30,
                 payment_product="course-100", revision=1, payment_synced_revision=1))
@@ -814,7 +815,8 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, Logisti
         products = self.client.get("/api/admin/commerce/catalog/products").json()["data"]["items"]
         self.assertEqual(next(row for row in products if row["id"] == 100)["publish_issues"], ["封面"])
         blocked = self.client.post("/api/admin/commerce/catalog/products/100", json={
-            "title": "测试茶", "cover": "", "intro": "茶", "status": "published"})
+            "title": "测试茶", "cover": "", "intro": "茶", "shipping_note": "48 小时内发货",
+            "aftersale_note": "支持退款退货", "status": "published"})
         self.assertEqual(blocked.status_code, 409)
         self.assertIn("封面", blocked.json()["detail"])
         courses = self.client.get("/api/admin/commerce/catalog/courses").json()["data"]["items"]
@@ -834,6 +836,21 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, Logisti
             db.commit()
         self.assertTrue(self.client.get("/api/mp/v2/courses/100").json()["data"]["purchase_ready"])
         self.assertEqual(self.client.post("/api/mp/v2/checkout", json={"kind": "course", "course_id": 100}).status_code, 200)
+
+    def test_product_publish_requires_delivery_and_aftersale_details(self):
+        with self.sessions() as db:
+            product = db.get(Product, 100)
+            product.shipping_note = ""
+            product.aftersale_note = ""
+            db.commit()
+            self.assertEqual(catalog.publish_issues(db, product), ["发货说明", "售后说明"])
+        payload = {"title": "测试茶", "cover": "/tea.jpg", "intro": "茶", "status": "published"}
+        blocked = self.client.post("/api/admin/commerce/catalog/products/100", json=payload)
+        self.assertEqual(blocked.status_code, 409)
+        self.assertIn("发货说明", blocked.json()["detail"])
+        published = self.client.post("/api/admin/commerce/catalog/products/100", json={
+            **payload, "shipping_note": "48 小时内发货，运费以结算页为准", "aftersale_note": "支持依法申请退款退货"})
+        self.assertEqual(published.status_code, 200, published.text)
 
     def test_unavailable_sku_is_not_advertised_or_added_to_cart(self):
         response = self.client.post("/api/admin/commerce/catalog/skus/100", json={
