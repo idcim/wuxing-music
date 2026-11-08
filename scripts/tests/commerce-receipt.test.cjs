@@ -7,9 +7,10 @@ const ts = require('typescript');
 const React = require('react');
 const { act, create } = require('react-test-renderer');
 
-async function receiptScenario(confirmReceipt, receive = async () => {}) {
+async function receiptScenario(confirmReceipt, receive = async () => {}, showDuringReceive = false) {
   const calls = [];
   let onShow;
+  let showedDuringReceive = false;
   const order = { id: 42, kind: 'physical', status: 'paid', fulfillment: 'shipped',
     transaction_id: 'wx-transaction', order_no: 'C42', amount_fen: 1000, shipping_fen: 0,
     refund_fen: 0, items: [], aftersales: [], address: {} };
@@ -19,7 +20,11 @@ async function receiptScenario(confirmReceipt, receive = async () => {}) {
     '@tarojs/components': Object.fromEntries(['View', 'Text', 'Button', 'Input', 'Textarea', 'Image'].map(name => [name, name.toLowerCase()])),
     '@tarojs/taro': { default: { showModal: async () => ({ confirm: true }) }, useRouter: () => ({ params: { id: '42' } }),
       useDidShow: callback => { onShow = callback; } },
-    '@/services/commerce': { commerceApi: async url => { calls.push(url); await receive(); }, shopPath: '/packages/shop', coursePath: '/packages/courses',
+    '@/services/commerce': { commerceApi: async url => {
+      calls.push(url);
+      if (showDuringReceive && !showedDuringReceive) { showedDuringReceive = true; onShow(); }
+      await receive();
+    }, shopPath: '/packages/shop', coursePath: '/packages/courses',
       money: amount => `¥${(amount / 100).toFixed(2)}`, useCommerce: selector => selector({ config: {} }) },
     '@/services/commerce-payment': { confirmCommerceReceipt: confirmReceipt,
       openCommerceLogistics: async () => {}, payCommerceOrder: async () => {}, refundWechatCode: async () => '' },
@@ -65,4 +70,9 @@ test('微信确认成功但首次核验失败时返回订单页重试', async ()
     if (++attempts === 1) throw new Error('网络中断');
   });
   assert.deepEqual(calls, ['/orders/42/receive', '/orders/42/receive']);
+});
+
+test('页面在核验请求进行中显示时不重复提交收货核验', async () => {
+  const calls = await receiptScenario(async () => {}, async () => {}, true);
+  assert.deepEqual(calls, ['/orders/42/receive']);
 });

@@ -23,10 +23,20 @@ export default function OrderDetail() {
   const [returnCarrier, setReturnCarrier] = useState('');
   const [returnNo, setReturnNo] = useState('');
   const receiptPending = useRef(false);
-  useDidShow(() => {
-    if (receiptPending.current) {
+  const receiptSyncing = useRef(false);
+  const syncReceipt = async () => {
+    if (receiptSyncing.current) return;
+    receiptSyncing.current = true;
+    try {
+      await commerceApi(`/orders/${id}/receive`, 'POST');
       receiptPending.current = false;
-      commerceApi(`/orders/${id}/receive`, 'POST').catch(() => {}).finally(load);
+    } finally {
+      receiptSyncing.current = false;
+    }
+  };
+  useDidShow(() => {
+    if (receiptPending.current && !receiptSyncing.current) {
+      void syncReceipt().catch(() => {}).finally(load);
     }
   });
   if (legacy) return <CommercePage title='音乐会员订单'>
@@ -81,8 +91,7 @@ export default function OrderDetail() {
         if (result.confirm) {
           await confirmCommerceReceipt(order.transaction_id);
           receiptPending.current = true;
-          await commerceApi(`/orders/${id}/receive`, 'POST');
-          receiptPending.current = false;
+          await syncReceipt();
         }
       })}>确认收货</Button>}
     </>}
