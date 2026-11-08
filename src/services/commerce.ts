@@ -19,8 +19,8 @@ export async function commerceApi<T = any>(path: string, method: 'GET' | 'POST' 
     return await request<T>(COMMERCE + path, { method, data });
   } catch (error) {
     // 公开目录/详情允许游客浏览。旧登录态先由 request 统一清除并提示，
-    // 仅这些公开 GET 再以游客身份读取；订单和学习权益绝不降级重试。
-    const publicRead = method === 'GET' && (/^\/catalog\/(course|physical)(\?|$)/.test(path) || /^\/courses\/\d+$/.test(path));
+    // 仅公开 GET 再以游客身份读取；试听由服务端验证章节标记，付费章节不会降级授权。
+    const publicRead = method === 'GET' && (/^\/catalog\/(course|physical)(\?|$)/.test(path) || /^\/courses\/\d+$/.test(path) || /^\/lessons\/\d+\/play$/.test(path));
     if (publicRead && error instanceof ApiError && error.code === 401) {
       return request<T>(COMMERCE + path, { method, auth: false });
     }

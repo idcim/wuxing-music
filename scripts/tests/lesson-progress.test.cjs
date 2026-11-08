@@ -106,6 +106,15 @@ test('排队中切换账号不把原账号的进度提交给新账号', async ()
   assert.equal(writes, 0);
 });
 
+test('游客试听不向需要登录的学习进度接口提交记录', async () => {
+  let writes = 0;
+  const progress = factory()(options({ owner: '', currentOwner: () => undefined,
+    send: async () => { writes++; } }));
+  progress.update(35);
+  await progress.close();
+  assert.equal(writes, 0);
+});
+
 test('无效时间忽略、越界时间限制在媒体时长以内', async () => {
   const progress = factory()(options({ position: 12 }));
   progress.update(NaN); progress.update(Infinity);

@@ -14,7 +14,7 @@ export default function CourseDetail() {
   const canBuyCourse = courseSaleOpen && course.purchase_ready === true;
   const [busy, setBusy] = useState(false);
   const openLesson = (lesson: Entry) => {
-    if (!requireCommerceLogin()) return;
+    if (!lesson.preview && !requireCommerceLogin()) return;
     if (!course.owned && !lesson.preview) return Taro.showToast({ title: '请先领取或购买课程', icon: 'none' });
     Taro.navigateTo({ url: `${coursePath}/learn/index?id=${id}&lesson=${lesson.id}` });
   };

@@ -107,7 +107,7 @@ function LessonPlayer({ lesson, cover, control }: { lesson: number; cover: strin
   return <>
     <Feedback loading={loading} error={error} retry={() => action(() => refresh())} /><Text className='commerce__name'>{play.title}</Text>
     {play.url && <CourseMedia key={play.url} lesson={lesson} play={play} cover={cover} control={control} resume={resumeAfterError} onPlaybackError={onPlaybackError} onPlaybackStarted={() => setResumeAfterError(false)} />}
-    <Text className='commerce__muted'>学习进度自动保存；播放中断会尝试重新连接，仍失败时可手动刷新。</Text>
+    <Text className='commerce__muted'>{owner ? '学习进度自动保存；' : '游客试听不保存学习进度；'}播放中断会尝试重新连接，仍失败时可手动刷新。</Text>
     <Button className='commerce__secondary' loading={refreshing} disabled={refreshing} onClick={() => action(() => refresh())}>刷新播放地址</Button>
   </>;
 }

@@ -2,7 +2,7 @@ from datetime import datetime
 from fastapi import HTTPException
 from sqlalchemy import or_
 
-from .common import config, require_row, serialize
+from .common import config, enabled, require_row, serialize
 from .models import Course, Enrollment, Lesson, MediaAsset, Product, Progress, Sku, Teacher
 
 
@@ -95,9 +95,11 @@ def validate_publish(db, row):
 def playable(db, uid, lesson_id):
     lesson = require_row(db, Lesson, lesson_id)
     course = require_row(db, Course, lesson.course_id)
-    access = has_access(db, uid, course.id)
-    if not access and not (lesson.preview and course.status == "published"):
-        raise HTTPException(403, "请先领取或购买课程；音乐会员不包含课程")
+    access = uid and has_access(db, uid, course.id)
+    if not access:
+        enabled(db, "course")
+        if not (lesson.preview and course.status == "published"):
+            raise HTTPException(403, "请先领取或购买课程；音乐会员不包含课程")
     media = require_row(db, MediaAsset, lesson.media_id) if lesson.media_id else None
     if not media or media.state != "ready":
         raise HTTPException(409, "课程媒体尚未就绪")

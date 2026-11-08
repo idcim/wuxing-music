@@ -90,9 +90,9 @@ def claim(ident: int, user: User = Depends(get_current_user), db: Session = Depe
 
 
 @api.get("/lessons/{ident}/play")
-def play(ident: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    lesson, asset = catalog.playable(db, user.id, ident)
-    progress = db.query(Progress).filter_by(user_id=user.id, lesson_id=ident).first()
+def play(ident: int, user=Depends(optional_user), db: Session = Depends(get_db)):
+    lesson, asset = catalog.playable(db, user.id if user else None, ident)
+    progress = db.query(Progress).filter_by(user_id=user.id, lesson_id=ident).first() if user else None
     return ok(dict(url=media.signed_url(asset, db), expires_in=900, kind=asset.kind,
         duration=asset.duration, position=progress.position if progress else 0, title=lesson.title))
 

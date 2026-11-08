@@ -37,7 +37,7 @@ from app.database import Base as LegacyBase, get_db
 from app.models import Role, Setting, User
 from app.security import get_current_admin
 from app.routers.mp import get_current_user
-from app.commerce import admin, aftersales, attachments, callbacks, catalog, common, lifecycle, monitor, providers, public, schemas, trading, worker
+from app.commerce import admin, aftersales, attachments, callbacks, catalog, common, lifecycle, media, monitor, providers, public, schemas, trading, worker
 from app.commerce.migrate import upgrade
 from app.commerce.models import Address, AfterSale, Base, Course, Enrollment, Event, Job, Lesson, MediaAsset, Order, OrderItem, Payment, Product, Progress, SCHEMA_VERSION, SchemaVersion, Shipment, Sku, Teacher, WorkerHeartbeat
 from commerce_lease_cases import LeaseCases
@@ -407,6 +407,29 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, Logisti
             self.assertTrue(catalog.has_access(db, 1, 100))
             self.assertEqual(db.get(Order, ident).refund_fen, 2000)
             self.assertEqual(db.query(Progress).count(), 1)
+
+    def test_guest_can_preview_published_lesson_without_paid_media_access(self):
+        auth = self.app.dependency_overrides.pop(get_current_user)
+        try:
+            with patch.object(media, "signed_url", return_value="https://private.test/short-lived") as sign:
+                preview = self.client.get("/api/mp/v2/lessons/101/play")
+                self.assertEqual(preview.status_code, 200, preview.text)
+                self.assertEqual(preview.json()["data"]["position"], 0)
+                self.assertEqual(self.client.get("/api/mp/v2/lessons/100/play").status_code, 403)
+                self.assertEqual(self.client.post("/api/mp/v2/lessons/101/progress", json={"position": 10}).status_code, 401)
+                with self.sessions() as db:
+                    db.get(Course, 100).status = "offline"
+                    db.commit()
+                self.assertEqual(self.client.get("/api/mp/v2/lessons/101/play").status_code, 403)
+                with self.sessions() as db:
+                    db.get(Course, 100).status = "published"
+                    setting = db.query(Setting).filter_by(key="commerce_config").one()
+                    setting.value = json.dumps({**json.loads(setting.value), "courses_visible": False})
+                    db.commit()
+                self.assertEqual(self.client.get("/api/mp/v2/lessons/101/play").status_code, 404)
+                self.assertEqual(sign.call_count, 1)
+        finally:
+            self.app.dependency_overrides[get_current_user] = auth
 
     def test_partial_refund_quantity_and_freight_once(self):
         order = self.order(quantity=2).json()["data"]
