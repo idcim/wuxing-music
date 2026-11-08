@@ -128,11 +128,15 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, Logisti
         self.private_dir.start()
         self.credentials = patch.object(providers, "refresh_refund_credential")
         self.credentials.start()
+        self.sale_ready_impl = common.sale_ready
+        self.sale_readiness = patch.object(common, "sale_ready", return_value=True)
+        self.sale_readiness.start()
 
     def tearDown(self):
         self.client.close()
         self.private_dir.stop()
         self.credentials.stop()
+        self.sale_readiness.stop()
         if not os.getenv("COMMERCE_TEST_MYSQL_URL", ""):
             self.engine.dispose()
         self.tmp.cleanup()
@@ -282,6 +286,22 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, Logisti
             a.user_id, a.province = 1, "北京市"
             db.commit()
         self.assertEqual(self.client.post("/api/mp/v2/checkout", json=payload).status_code, 409)
+
+    def test_sale_closes_when_channel_configuration_is_removed(self):
+        payload = {"kind": "physical", "items": [{"sku_id": 100, "quantity": 1}], "address_id": 1}
+        with self.sessions() as db:
+            raw = common.config(db)
+            raw.update(course_policy="课程售后说明", physical_policy="实物售后说明", return_address="退货地址")
+            db.query(Setting).filter_by(key="commerce_config").one().value = json.dumps(raw)
+            db.commit()
+        with patch.object(common, "sale_ready", side_effect=self.sale_ready_impl), patch.object(
+                providers, "capabilities", return_value={"course_payment": False, "private_media": True,
+                    "physical_payment": False, "shipping": True, "course_ios": False, "logistics": False}):
+            cfg = self.client.get("/api/mp/v2/config").json()["data"]
+            self.assertFalse(cfg["courses_sale"])
+            self.assertFalse(cfg["shop_sale"])
+            self.assertEqual(self.client.post("/api/mp/v2/checkout", json=payload).status_code, 409)
+            self.assertEqual(self.order(key="channel-removed").status_code, 409)
 
     def test_idempotent_order_payment_and_snapshots(self):
         first = self.order().json()["data"]

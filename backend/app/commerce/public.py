@@ -8,7 +8,7 @@ from app.models import Order as MusicOrder
 from app.models import User
 from app.routers.mp import get_current_user
 from . import catalog, media, providers, schemas, trading
-from .common import config, enabled, migrated, ok, ready, record, require_row, serialize, throttle
+from .common import effective_config, enabled, migrated, ok, ready, record, require_row, serialize, throttle
 from .models import Address, AfterSale, CartItem, Category, Course, Enrollment, Lesson, Order, Payment, Product, Progress, Shipment, Sku
 
 router = APIRouter(prefix="/api/mp/v2", tags=["commerce-v2"])
@@ -41,7 +41,7 @@ def legacy_order_dict(order: MusicOrder):
 
 @router.get("/config")
 def public_config(db: Session = Depends(get_db)):
-    cfg = config(db)
+    cfg = effective_config(db)
     initialized = migrated(db)
     if not initialized:
         cfg.update(courses_visible=False, shop_visible=False, courses_sale=False, shop_sale=False)

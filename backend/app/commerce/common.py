@@ -63,8 +63,32 @@ def config(db):
     return {**DEFAULTS, **(json.loads(row.value) if row and row.value else {})}
 
 
-def enabled(db, kind, sale=False):
+def sale_ready(db, kind, cfg):
+    from . import providers
+    caps = providers.capabilities(db)
+    if kind == "course":
+        return bool(caps["course_payment"] and caps["private_media"] and cfg["course_policy"].strip())
+    if not (caps["physical_payment"] and caps["shipping"] and cfg["provinces"]
+            and cfg["physical_policy"].strip() and cfg["return_address"].strip()):
+        return False
+    try:
+        providers.pay_cfg(db, require_enabled=True)
+    except HTTPException:
+        return False
+    return True
+
+
+def effective_config(db):
     cfg = config(db)
+    if cfg["courses_sale"] and not sale_ready(db, "course", cfg):
+        cfg["courses_sale"] = False
+    if cfg["shop_sale"] and not sale_ready(db, "physical", cfg):
+        cfg["shop_sale"] = False
+    return cfg
+
+
+def enabled(db, kind, sale=False):
+    cfg = effective_config(db) if sale else config(db)
     prefix = "courses" if kind == "course" else "shop"
     if not cfg[f"{prefix}_visible"]:
         raise HTTPException(404, "该模块暂未开放")
