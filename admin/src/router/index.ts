@@ -19,7 +19,7 @@ const router = createRouter({
         { path: 'audio-history', component: () => import('@/views/AudioHistory.vue'), meta: { title: '音频任务历史', perm: 'tracks:view' } },
         { path: 'cdkeys', component: () => import('@/views/Cdkeys.vue'), meta: { title: '兑换码', perm: 'cdkeys:view' } },
         { path: 'quiz', component: () => import('@/views/Quiz.vue'), meta: { title: '测评管理', perm: 'quiz:view' } },
-        { path: 'orders', component: () => import('@/views/Orders.vue'), meta: { title: '会员订单', perm: 'orders:view' } },
+        { path: 'orders', component: () => import('@/views/Orders.vue'), meta: { title: '音乐会员订单', perm: 'orders:view' } },
         { path: 'users', component: () => import('@/views/Users.vue'), meta: { title: '用户管理', perm: 'users:view' } },
         // 代理分成：meta.feature 与 menu.ts 的同名字段是同一道门。
         // 「分成设置」刻意不带 feature——它是开启入口，挡住就没人能打开模块了。
@@ -31,9 +31,9 @@ const router = createRouter({
         { path: 'admins', component: () => import('@/views/Admins.vue'), meta: { title: '管理员', perm: 'admins:manage' } },
         { path: 'roles', component: () => import('@/views/Roles.vue'), meta: { title: '角色权限', perm: 'admins:manage' } },
         { path: 'commerce-catalog', component: () => import('@/views/commerce/Catalog.vue'), meta: { title: '课程与商品', perm: 'commerce:view' } },
-        { path: 'commerce-trades', component: () => import('@/views/commerce/Trades.vue'), meta: { title: '订单与售后', perm: 'commerce:view' } },
+        { path: 'commerce-trades', component: () => import('@/views/commerce/Trades.vue'), meta: { title: '课程商城订单', perm: 'commerce:view' } },
         { path: 'commerce-media', component: () => import('@/views/commerce/MediaTasks.vue'), meta: { title: '课件与任务', perm: 'commerce:view' } },
-        { path: 'commerce-settings', component: () => import('@/views/commerce/Settings.vue'), meta: { title: '运营配置', perm: 'commerce:view' } },
+        { path: 'commerce-settings', component: () => import('@/views/commerce/Settings.vue'), meta: { title: '课程商城配置', perm: 'commerce:view' } },
         // 旧路径重定向到合并后的设置中心
         { path: 'site', redirect: '/settings' },
         { path: 'storage', redirect: '/settings' }

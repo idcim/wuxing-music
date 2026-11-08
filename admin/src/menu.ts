@@ -31,15 +31,17 @@ export const NAV_MUSIC: NavItem[] = [
 export const NAV_MEMBERS: NavItem[] = [
   { path: '/users', title: '用户管理', perm: 'users:view', icon: 'User' },
   { path: '/plans', title: '套餐管理', perm: 'plans:view', icon: 'Goods' },
-  { path: '/orders', title: '会员订单', perm: 'orders:view', icon: 'List' },
   { path: '/cdkeys', title: '兑换码', perm: 'cdkeys:view', icon: 'Ticket' },
 ];
 
 export const NAV_COMMERCE: NavItem[] = [
   { path: '/commerce-catalog', title: '课程与商品', perm: 'commerce:view', icon: 'Goods' },
-  { path: '/commerce-trades', title: '订单与售后', perm: 'commerce:view', icon: 'List' },
   { path: '/commerce-media', title: '课件与任务', perm: 'commerce:view', icon: 'VideoCamera' },
-  { path: '/commerce-settings', title: '运营配置', perm: 'commerce:view', icon: 'Setting' },
+];
+
+export const NAV_TRADES: NavItem[] = [
+  { path: '/commerce-trades', title: '课程商城订单', perm: 'commerce:view', icon: 'List' },
+  { path: '/orders', title: '音乐会员订单', perm: 'orders:view', icon: 'Tickets' },
 ];
 
 /** 代理分成：独立子菜单，所有相关内容都在这一组里。
@@ -57,18 +59,20 @@ export const NAV_AGENT: NavItem[] = [
 ];
 
 export const NAV_SYSTEM: NavItem[] = [
+  { path: '/commerce-settings', title: '课程商城配置', perm: 'commerce:view', icon: 'SetUp' },
+  { path: '/settings', title: '站点设置', perm: 'settings:view', icon: 'Setting' },
   { path: '/admins', title: '管理员', perm: 'admins:manage', icon: 'UserFilled' },
   { path: '/roles', title: '角色权限', perm: 'admins:manage', icon: 'Key' },
-  { path: '/settings', title: '站点设置', perm: 'settings:view', icon: 'Setting' }
 ];
 
 /** 侧边栏最多两级。组内仍逐项校验权限与模块开关；空组不展示。 */
 export const NAV_GROUPS: NavGroup[] = [
   { path: '/music-menu', title: '音乐内容', icon: 'Headset', items: NAV_MUSIC },
-  { path: '/members-menu', title: '会员与用户', icon: 'User', items: NAV_MEMBERS },
-  { path: '/commerce-menu', title: '课程商城', icon: 'Goods', items: NAV_COMMERCE },
+  { path: '/commerce-menu', title: '课程商品', icon: 'Goods', items: NAV_COMMERCE },
+  { path: '/trades-menu', title: '订单与售后', icon: 'List', items: NAV_TRADES },
+  { path: '/members-menu', title: '用户与权益', icon: 'User', items: NAV_MEMBERS },
   { path: '/agent-menu', title: '代理分成', icon: 'Shop', items: NAV_AGENT },
-  { path: '/system-menu', title: '系统管理', icon: 'Setting', items: NAV_SYSTEM },
+  { path: '/system-menu', title: '配置与权限', icon: 'Setting', items: NAV_SYSTEM },
 ];
 
 export const NAV_ALL: NavItem[] = [...NAV_MAIN, ...NAV_GROUPS.flatMap(group => group.items)];
