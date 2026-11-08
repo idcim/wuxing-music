@@ -46,12 +46,13 @@ export function navTopStyle(): CSSProperties {
 
 // 二级页面导航行与右上角胶囊处于同一高度，内容区仍使用 navTopStyle 避让胶囊。
 export function navBarStyle(): CSSProperties {
-  if (isH5) return { paddingTop: rpx(88) };
+  // 全局 box-sizing 为 border-box；页头自身的 44px 不能被状态栏内边距挤占。
+  if (isH5) return { paddingTop: rpx(88), boxSizing: 'content-box' };
   try {
     const info = Taro.getWindowInfo ? Taro.getWindowInfo() : Taro.getSystemInfoSync();
-    return { paddingTop: `${info.statusBarHeight || 20}px` };
+    return { paddingTop: `${info.statusBarHeight || 20}px`, boxSizing: 'content-box' };
   } catch {
-    return { paddingTop: '20px' };
+    return { paddingTop: '20px', boxSizing: 'content-box' };
   }
 }
 

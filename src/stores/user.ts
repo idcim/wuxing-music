@@ -200,5 +200,14 @@ registerSessionExpiry(() => {
   useUserStore.getState().logout();
   storage.set(STORAGE_KEYS.SESSION_EXPIRED, true);
   useUserStore.setState({ sessionExpired: true });
-  Taro.showToast({ title: '登录已过期，请按需重新登录', icon: 'none', duration: 3000 });
+  void Taro.showModal({
+    title: '登录状态已过期',
+    content: '可以继续浏览，使用已购课程、订单等账号功能时需要重新登录。',
+    showCancel: true,
+    cancelText: '继续浏览',
+    confirmText: '去登录',
+    success: (result) => {
+      if (result.confirm) Taro.navigateTo({ url: '/pages/login/index' });
+    },
+  });
 });
