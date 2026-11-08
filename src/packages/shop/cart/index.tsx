@@ -11,7 +11,8 @@ export default function Cart() {
   const shopSaleOpen = useCommerce(s => s.config.shop_sale === true);
   const [selected, setSelected] = useState<number[]>([]);
   const choose = (id: number) => setSelected(list => list.includes(id) ? list.filter(i => i !== id) : [...list, id]);
-  const total = data.filter(i => selected.includes(i.id)).reduce((n, i) => n + (i.sku?.price_fen || 0) * i.quantity, 0);
+  const selectedItems = data.filter(i => selected.includes(i.id));
+  const total = selectedItems.reduce((n, i) => n + (i.sku?.price_fen || 0) * i.quantity, 0);
   const change = (item: Entry, qty: number) => action(async () => { await commerceApi('/cart', 'POST', { sku_id: item.sku_id, quantity: Math.max(1, Math.min(99, qty)) }); await load(); });
   return <CommercePage title='购物车'><Feedback loading={loading} error={error} retry={load} />
     {!loading && !error && !data.length && <Text className='commerce__empty'>购物车还是空的</Text>}
@@ -23,6 +24,6 @@ export default function Cart() {
     </View>)}
     <Text className='commerce__price'>商品合计 {money(total)}（运费结算时确认）</Text>
     {!shopSaleOpen && <Text className='commerce__muted'>商品可以先加入购物车，商城购买开放后再结算。</Text>}
-    <Button className='commerce__primary' disabled={!selected.length || !shopSaleOpen} onClick={() => Taro.navigateTo({ url: `${shopPath}/checkout/index?kind=physical&cart=${selected.join(',')}` })}>{shopSaleOpen ? '去结算' : '暂未开放结算'}</Button>
+    <Button className='commerce__primary' disabled={!selectedItems.length || !shopSaleOpen} onClick={() => Taro.navigateTo({ url: `${shopPath}/checkout/index?kind=physical&cart=${selectedItems.map(item => item.id).join(',')}` })}>{shopSaleOpen ? '去结算' : '暂未开放结算'}</Button>
   </CommercePage>;
 }
