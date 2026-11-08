@@ -34,7 +34,7 @@ from sqlalchemy.schema import CreateTable
 from PIL import Image
 
 from app.database import Base as LegacyBase, get_db
-from app.models import Role, Setting, User
+from app.models import Order as MusicOrder, Role, Setting, User
 from app.security import get_current_admin
 from app.routers.mp import get_current_user
 from app.commerce import admin, aftersales, attachments, callbacks, catalog, common, lifecycle, media, monitor, providers, public, schemas, trading, worker
@@ -430,6 +430,28 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, Logisti
                 self.assertEqual(sign.call_count, 1)
         finally:
             self.app.dependency_overrides[get_current_user] = auth
+
+    def test_legacy_member_order_detail_reaches_history_beyond_old_list_limit(self):
+        base = datetime(2025, 1, 1)
+        with self.sessions() as db:
+            db.add_all(MusicOrder(order_no=f"legacy-{i:03d}", user_id=1, plan_id="year",
+                plan_name="音乐年会员", amount=199.0, status="paid", is_gift=i == 0,
+                gift_code="GIFT0001" if i == 0 else "", created_at=base + timedelta(minutes=i))
+                for i in range(101))
+            db.commit()
+            oldest = db.query(MusicOrder).filter_by(order_no="legacy-000").one().id
+        page = self.client.get("/api/mp/v2/orders?kind=music&page=6&size=20")
+        self.assertEqual(page.status_code, 200, page.text)
+        self.assertEqual(page.json()["data"]["total"], 101)
+        self.assertEqual(page.json()["data"]["items"][0]["id"], oldest)
+        detail = self.client.get(f"/api/mp/v2/orders/music/{oldest}")
+        self.assertEqual(detail.status_code, 200, detail.text)
+        self.assertEqual(detail.json()["data"]["gift_code"], "GIFT0001")
+        self.app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=2)
+        try:
+            self.assertEqual(self.client.get(f"/api/mp/v2/orders/music/{oldest}").status_code, 404)
+        finally:
+            self.app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=1)
 
     def test_partial_refund_quantity_and_freight_once(self):
         order = self.order(quantity=2).json()["data"]

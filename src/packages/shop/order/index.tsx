@@ -13,8 +13,10 @@ const label = (value: string) => labels[value] || value;
 
 export default function OrderDetail() {
   const cfg = useCommerce(s => s.config);
-  const id = Number(useRouter().params.id);
-  const { data: order, loading, error, load } = useData<Entry>(`/orders/${id}`, {});
+  const params = useRouter().params;
+  const id = Number(params.id);
+  const legacy = params.kind === 'music';
+  const { data: order, loading, error, load } = useData<Entry>(legacy ? `/orders/music/${id}` : `/orders/${id}`, {});
   const [busy, setBusy] = useState(false);
   const perform = async (fn: () => Promise<unknown>) => { if (busy) return; setBusy(true); await action(fn); await load(); setBusy(false); };
   const [returnId, setReturnId] = useState<number>();
@@ -27,6 +29,21 @@ export default function OrderDetail() {
       commerceApi(`/orders/${id}/receive`, 'POST').catch(() => {}).finally(load);
     }
   });
+  if (legacy) return <CommercePage title='音乐会员订单'>
+    <Feedback loading={loading} error={error} retry={load} />
+    {order.id && <View className='commerce__card commerce__card-body'>
+      <Text className='commerce__name'>{order.items?.[0]?.title || order.plan_name}</Text>
+      <Text className='commerce__muted'>订单号 {order.order_no}</Text>
+      <Text className='commerce__muted'>状态：{label(order.status)}</Text>
+      <Text className='commerce__price'>订单金额 {money(order.amount_fen)}</Text>
+      {order.refund_fen > 0 && <Text className='commerce__muted'>已退 {money(order.refund_fen)}</Text>}
+      {order.is_gift && order.gift_code && order.status === 'paid' && <>
+        <Text className='commerce__name'>礼物兑换码 {order.gift_code}</Text>
+        <Button className='commerce__secondary' onClick={() => Taro.setClipboardData({ data: order.gift_code })}>复制兑换码</Button>
+      </>}
+    </View>}
+    <View className='commerce__actions'><CustomerService /><Button loading={loading} onClick={load}>刷新状态</Button></View>
+  </CommercePage>;
   return <CommercePage title='订单详情'><Feedback loading={loading} error={error} retry={load} />
     {order.id && <>
       <Text className='commerce__name'>{label(order.status)} · {label(order.fulfillment)}</Text><Text className='commerce__muted'>{order.order_no}</Text>

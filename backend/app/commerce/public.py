@@ -28,6 +28,17 @@ def owned_order(db, uid, ident):
     return order
 
 
+def legacy_order_dict(order: MusicOrder):
+    amount_fen = round(order.amount * 100)
+    return dict(id=order.id, kind="music", legacy=True, order_no=order.order_no,
+        plan_id=order.plan_id, plan_name=order.plan_name, is_gift=bool(order.is_gift),
+        gift_code=order.gift_code if order.is_gift else "", status=order.status,
+        amount_fen=amount_fen, refund_fen=round(order.refund_amount * 100),
+        paid_at=order.paid_at, created_at=order.created_at,
+        items=[dict(title=f"{order.plan_name}礼物卡" if order.is_gift else order.plan_name,
+                    quantity=1, price_fen=amount_fen)])
+
+
 @router.get("/config")
 def public_config(db: Session = Depends(get_db)):
     cfg = config(db)
@@ -216,11 +227,17 @@ def orders(kind: str = "", state: str = "", page: int = Query(1, ge=1, le=1000),
     new = query.order_by(Order.created_at.desc()).limit(page * size).all() if kind != "music" else []
     legacy_q = db.query(MusicOrder).filter_by(user_id=user.id)
     legacy = legacy_q.order_by(MusicOrder.created_at.desc()).limit(page * size).all() if kind in ("", "music") and not state else []
-    combined = [trading.order_dict(db, o) for o in new] + [dict(id=o.id, kind="music", order_no=o.order_no,
-        amount_fen=round(o.amount * 100), status=o.status, legacy=True, gift_code=o.gift_code,
-        created_at=o.created_at, items=[dict(title=o.plan_name, quantity=1, price_fen=round(o.amount * 100))]) for o in legacy]
+    combined = [trading.order_dict(db, o) for o in new] + [legacy_order_dict(o) for o in legacy]
     combined.sort(key=lambda x: x["created_at"], reverse=True)
     return ok(dict(items=combined[(page - 1) * size:page * size], total=(query.count() if kind != "music" else 0) + (legacy_q.count() if kind in ("", "music") and not state else 0)))
+
+
+@api.get("/orders/music/{ident}")
+def music_order_detail(ident: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    order = db.query(MusicOrder).filter_by(id=ident, user_id=user.id).first()
+    if not order:
+        raise HTTPException(404, "订单不存在")
+    return ok(legacy_order_dict(order))
 
 
 @api.get("/orders/{ident}")
