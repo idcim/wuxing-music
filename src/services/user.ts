@@ -2,6 +2,7 @@ import Taro from '@tarojs/taro';
 import { USE_MOCK, API_BASE, TOKEN_KEY } from '@/constants/env';
 import { request } from '@/services/api';
 import { storage, STORAGE_KEYS } from '@/services/storage';
+import { expireSession } from '@/services/session';
 import type { ElementId, ElementScores, User } from '@/types';
 
 // 提交测评结果到后端（mock 模式下静默成功，仅依赖本地存储）
@@ -85,10 +86,12 @@ export async function uploadAvatar(filePath: string): Promise<string> {
     name: 'file',
     header: token ? { Authorization: `Bearer ${token}` } : {}
   });
+  if (res.statusCode === 401 && token) expireSession(token);
   if (res.statusCode < 200 || res.statusCode >= 300) {
     throw new Error(`上传失败 HTTP ${res.statusCode}`);
   }
   const body = JSON.parse(res.data) as { code: number; data?: { url: string }; msg?: string };
+  if (body.code === 401 && token) expireSession(token);
   if (body.code !== 0 || !body.data) {
     throw new Error(body.msg || '上传失败');
   }
