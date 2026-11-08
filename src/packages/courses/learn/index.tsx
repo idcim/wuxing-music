@@ -10,7 +10,7 @@ import { action, CommercePage, Cover, Feedback, useData } from '@/features/comme
 type PlaybackControl = { pause: () => void; save: () => Promise<void> };
 type ControlRef = MutableRefObject<PlaybackControl | undefined>;
 
-function CourseMedia({ lesson, play, cover, control }: { lesson: number; play: Entry; cover: string; control: ControlRef }) {
+function CourseMedia({ lesson, play, cover, control, resume, onPlaybackError, onPlaybackStarted }: { lesson: number; play: Entry; cover: string; control: ControlRef; resume: boolean; onPlaybackError: () => void; onPlaybackStarted: () => void }) {
   const owner = useUserStore(state => state.user?.id);
   const [saveFailed, setSaveFailed] = useState(false);
   const [audioPlaying, setAudioPlaying] = useState(false);
@@ -37,7 +37,7 @@ function CourseMedia({ lesson, play, cover, control }: { lesson: number; play: E
       audio.current = context;
       context.src = play.url;
       context.startTime = play.position || 0;
-      context.onPlay(() => { if (progress.active) { usePlayerStore.getState().pause(); setAudioPlaying(true); } });
+      context.onPlay(() => { if (progress.active) { usePlayerStore.getState().pause(); setAudioPlaying(true); onPlaybackStarted(); } });
       context.onPause(() => { if (progress.active) { setAudioPlaying(false); void save().catch(() => {}); } });
       context.onTimeUpdate(() => {
         if (!progress.active) return;
@@ -47,7 +47,8 @@ function CourseMedia({ lesson, play, cover, control }: { lesson: number; play: E
         if (!progress.active) return;
         progress.update(play.duration); void save().catch(() => {}); setAudioPlaying(false);
       });
-      context.onError(() => { if (progress.active) playbackError(); });
+      context.onError(() => { if (progress.active) onPlaybackError(); });
+      if (resume) context.play();
     }
     return () => {
       // 先关闭会话，再销毁播放器，迟到事件不能改变最后保存的位置。
@@ -63,10 +64,10 @@ function CourseMedia({ lesson, play, cover, control }: { lesson: number; play: E
         audio.current?.seek(e.detail.value); progress.update(e.detail.value); setAudioPosition(e.detail.value);
       }} />
       <Button className='commerce__primary' onClick={() => audioPlaying ? audio.current?.pause() : audio.current?.play()}>{audioPlaying ? '暂停' : '播放音频'}</Button>
-    </View> : <Video id={videoId} className='commerce__media' src={play.url} initialTime={play.position || 0} controls autoplay={false}
-      onPlay={() => { if (progress.active) usePlayerStore.getState().pause(); }} onTimeUpdate={e => progress.update(e.detail.currentTime)}
+    </View> : <Video id={videoId} className='commerce__media' src={play.url} initialTime={play.position || 0} controls autoplay={resume}
+      onPlay={() => { if (progress.active) { usePlayerStore.getState().pause(); onPlaybackStarted(); } }} onTimeUpdate={e => progress.update(e.detail.currentTime)}
       onPause={() => { if (progress.active) void save().catch(() => {}); }}
-      onEnded={() => { if (progress.active) { progress.update(play.duration); void save().catch(() => {}); } }} onError={playbackError} />}
+      onEnded={() => { if (progress.active) { progress.update(play.duration); void save().catch(() => {}); } }} onError={() => { if (progress.active) onPlaybackError(); }} />}
     {saveFailed && <Text className='commerce__muted'>学习进度暂未保存，请联网后重试。</Text>}
     {saveFailed && <Button className='commerce__secondary' onClick={() => action(save)}>重试保存进度</Button>}
   </>;
@@ -82,20 +83,32 @@ function LessonPlayer({ lesson, cover, control }: { lesson: number; cover: strin
   }, [owner, lesson]);
   const { data: play, loading, error, load } = useData<Entry>(`/lessons/${lesson}/play`, {}, fetchPlayback);
   const [refreshing, setRefreshing] = useState(false);
-  const refresh = async () => {
-    if (refreshing) return;
+  const [resumeAfterError, setResumeAfterError] = useState(false);
+  const refreshInFlight = useRef(false);
+  const autoRefreshUsed = useRef(false);
+  const refresh = async (resume = false) => {
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
+    setResumeAfterError(resume);
     setRefreshing(true);
     try {
       control.current?.pause();
       await control.current?.save();
       await load();
-    } finally { setRefreshing(false); }
+    } finally { refreshInFlight.current = false; setRefreshing(false); }
+  };
+  const onPlaybackError = () => {
+    if (refreshInFlight.current) return;
+    if (autoRefreshUsed.current) { setResumeAfterError(false); playbackError(); return; }
+    autoRefreshUsed.current = true;
+    void Taro.showToast({ title: '播放中断，正在重新连接', icon: 'none' });
+    void action(() => refresh(true));
   };
   return <>
-    <Feedback loading={loading} error={error} retry={() => action(refresh)} /><Text className='commerce__name'>{play.title}</Text>
-    {play.url && <CourseMedia key={play.url} lesson={lesson} play={play} cover={cover} control={control} />}
-    <Text className='commerce__muted'>学习进度自动保存；播放地址过期或网络异常时，可刷新后继续学习。</Text>
-    <Button className='commerce__secondary' loading={refreshing} disabled={refreshing} onClick={() => action(refresh)}>刷新播放地址</Button>
+    <Feedback loading={loading} error={error} retry={() => action(() => refresh())} /><Text className='commerce__name'>{play.title}</Text>
+    {play.url && <CourseMedia key={play.url} lesson={lesson} play={play} cover={cover} control={control} resume={resumeAfterError} onPlaybackError={onPlaybackError} onPlaybackStarted={() => setResumeAfterError(false)} />}
+    <Text className='commerce__muted'>学习进度自动保存；播放中断会尝试重新连接，仍失败时可手动刷新。</Text>
+    <Button className='commerce__secondary' loading={refreshing} disabled={refreshing} onClick={() => action(() => refresh())}>刷新播放地址</Button>
   </>;
 }
 
