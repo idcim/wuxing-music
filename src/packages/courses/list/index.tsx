@@ -10,7 +10,7 @@ import { action, CommercePage, Cover, CustomerService, Feedback, requireCommerce
 export default function CourseList() {
   const [category, setCategory] = useState<number | null>(null);
   const [page, setPage] = useState(1);
-  const { data, loading, error, load } = useData<Entry>(`/catalog/course?page=${page}&category=${category || ''}`, { items: [], categories: [], total: 0 });
+  const { data, loading, error, load } = useData<Entry>(`/catalog/course?page=${page}${category === null ? '' : `&category=${category}`}`, { items: [], categories: [], total: 0 });
   const cfg = useCommerce(s => s.config);
   return <CommercePage title='课程' tab='course'>
     <View className='commerce__hero' onClick={() => cfg.course_banner_course_id && Taro.navigateTo({ url: `${coursePath}/detail/index?id=${cfg.course_banner_course_id}` })}>

@@ -9,7 +9,7 @@ import { action, CommercePage, Cover, CustomerService, Feedback, requireCommerce
 export default function ShopList() {
   const [category, setCategory] = useState<number | null>(null);
   const [page, setPage] = useState(1);
-  const { data, loading, error, load } = useData<Entry>(`/catalog/physical?page=${page}&category=${category || ''}`, { items: [], categories: [], total: 0 });
+  const { data, loading, error, load } = useData<Entry>(`/catalog/physical?page=${page}${category === null ? '' : `&category=${category}`}`, { items: [], categories: [], total: 0 });
   const cfg = useCommerce(s => s.config);
   return <CommercePage title='商城' tab='shop'>
     <View className='commerce__hero' onClick={() => cfg.shop_banner_product_id && Taro.navigateTo({ url: `${shopPath}/detail/index?id=${cfg.shop_banner_product_id}` })}>
