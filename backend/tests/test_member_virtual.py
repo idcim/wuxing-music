@@ -1,6 +1,13 @@
 import unittest
 from unittest.mock import patch
 from xml.etree import ElementTree as ET
+import base64
+import hashlib
+import struct
+import time
+from types import SimpleNamespace
+
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from fastapi import HTTPException
 from sqlalchemy import create_engine
@@ -8,6 +15,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from app import member_virtual, refund_service
+from app.commerce import callbacks
 from app.commerce.models import Base as CommerceBase, Job
 from app.models import Base, Cdkey, Order, Plan, User
 from app.models import Setting
@@ -142,6 +150,50 @@ class MemberVirtualTests(unittest.TestCase):
         with patch("app.agent_service.void_commission"):
             refund_service.finalize_refund(self.db, gift, "test")
         self.assertEqual(self.user.membership_type, "month")
+
+    def test_signed_virtual_push_settles_member_order_through_shared_callback(self):
+        order = self.order()
+        key = b"0123456789abcdef0123456789abcdef"
+        token, appid = "synthetic-token", "synthetic-appid"
+        message = ET.tostring(ET.fromstring(f"<xml><Event>xpay_goods_deliver_notify</Event>"
+            f"<OutTradeNo>{order.order_no}</OutTradeNo><OpenId>openid-1</OpenId>"
+            "<GoodsInfo><ProductId>music-month</ProductId><Quantity>1</Quantity></GoodsInfo></xml>"))
+        plain = b"0123456789abcdef" + struct.pack("!I", len(message)) + message + appid.encode()
+        pad = 32 - len(plain) % 32
+        encryptor = Cipher(algorithms.AES(key), modes.CBC(key[:16])).encryptor()
+        encrypted = base64.b64encode(encryptor.update(plain + bytes([pad]) * pad) + encryptor.finalize()).decode()
+        raw = ET.tostring(ET.fromstring(f"<xml><Encrypt>{encrypted}</Encrypt></xml>"))
+        timestamp, nonce = str(int(time.time())), "synthetic-nonce"
+        signature = hashlib.sha1("".join(sorted([token, timestamp, nonce, encrypted])).encode()).hexdigest()
+        params = {"timestamp": timestamp, "nonce": nonce, "msg_signature": signature}
+        cfg = SimpleNamespace(commerce_push_token=token, commerce_push_aes_key=base64.b64encode(key).decode().rstrip("="))
+        paid = {"paid": True, "amount_fen": 1800, "transaction_id": "tx-push"}
+        with patch("app.commerce.callbacks.resolve", return_value=cfg), \
+                patch("app.commerce.callbacks._mp_cfg", return_value={"app_id": appid}), \
+                patch("app.member_virtual.query", return_value=paid), \
+                patch("app.agent_service.record_commission"):
+            response = callbacks.accept_virtual(raw, params, self.db)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(order.status, "paid")
+            expiry = self.user.membership_expire_at
+            callbacks.accept_virtual(raw, params, self.db)
+            self.assertEqual(self.user.membership_expire_at, expiry)
+            with self.assertRaises(HTTPException):
+                callbacks.accept_virtual(raw, {**params, "msg_signature": "bad"}, self.db)
+
+    def test_channel_initiated_full_refund_revokes_member_once(self):
+        order = self.order()
+        order.payment_platform = "ios"
+        with patch("app.agent_service.record_commission"), patch("app.agent_service.void_commission"):
+            member_virtual.settle(self.db, order, {"paid": True, "amount_fen": 1800, "transaction_id": "apple-tx"})
+            message = ET.fromstring("<xml><OpenId>openid-1</OpenId></xml>")
+            result = {"refunded": True, "transaction_id": "apple-tx"}
+            with patch("app.member_virtual.query", return_value=result):
+                member_virtual.receive(self.db, order, "xpay_refund_notify", message)
+                member_virtual.receive(self.db, order, "xpay_refund_notify", message)
+        self.assertEqual(order.status, "refunded")
+        self.assertEqual(self.user.membership_type, "free")
+        self.assertEqual(order.refund_amount, 18)
 
 
 class MemberMigrationTests(unittest.TestCase):
