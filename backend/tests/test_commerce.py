@@ -429,6 +429,51 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, Logisti
             self.assertEqual(db.query(Payment).filter_by(order_id=ident).one().state, "issued")
             self.assertEqual(db.query(Order).filter_by(id=ident).count(), 1)
 
+    def test_virtual_repay_refreshes_session_signature(self):
+        ident = self.order(key="virtual-repay", kind="course").json()["data"]["id"]
+
+        def signed(_db, _order, code, platform):
+            return {"provider": "virtual", "payParams": {"signature": f"{code}:{platform}"}}
+
+        with patch.object(providers, "preflight"), patch.object(providers, "create_payment", side_effect=signed) as create:
+            first = self.client.post(f"/api/mp/v2/orders/{ident}/pay", json={"code": "first-code", "platform": "android"})
+            second = self.client.post(f"/api/mp/v2/orders/{ident}/pay", json={"code": "fresh-code", "platform": "android"})
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.json()["data"]["payParams"]["signature"], "fresh-code:android")
+        self.assertEqual(create.call_count, 2)
+        with self.sessions() as db:
+            payment = db.query(Payment).filter_by(order_id=ident).one()
+            self.assertEqual(payment.state, "issued")
+            self.assertEqual(payment.params["platform"], "android")
+
+    def test_virtual_repay_cannot_change_platform_before_channel_confirms_payment(self):
+        ident = self.order(key="virtual-platform-switch", kind="course").json()["data"]["id"]
+        params = {"provider": "virtual", "payParams": {"signature": "android-signature"}}
+        with patch.object(providers, "preflight"), patch.object(providers, "create_payment", return_value=params):
+            self.assertEqual(self.client.post(f"/api/mp/v2/orders/{ident}/pay", json={"code": "first", "platform": "android"}).status_code, 200)
+        with patch.object(providers, "preflight"), patch.object(providers, "create_payment") as create:
+            response = self.client.post(f"/api/mp/v2/orders/{ident}/pay", json={"code": "second", "platform": "ios"})
+        self.assertEqual(response.status_code, 409)
+        create.assert_not_called()
+        with self.sessions() as db:
+            payment = db.query(Payment).filter_by(order_id=ident).one()
+            self.assertEqual(payment.state, "issued")
+            self.assertEqual(payment.params["platform"], "android")
+
+    def test_failed_virtual_repay_keeps_issued_payment_for_reconciliation(self):
+        ident = self.order(key="virtual-repay-fail", kind="course").json()["data"]["id"]
+        first_params = {"provider": "virtual", "payParams": {"signature": "first-session"}}
+        with patch.object(providers, "preflight"), patch.object(providers, "create_payment", return_value=first_params):
+            self.assertEqual(self.client.post(f"/api/mp/v2/orders/{ident}/pay", json={"code": "first-code"}).status_code, 200)
+        with patch.object(providers, "preflight"), patch.object(providers, "create_payment", side_effect=HTTPException(401, "微信 code 失效")):
+            self.assertEqual(self.client.post(f"/api/mp/v2/orders/{ident}/pay", json={"code": "expired-code"}).status_code, 401)
+        with self.sessions() as db:
+            payment = db.query(Payment).filter_by(order_id=ident).one()
+            self.assertEqual(payment.state, "issued")
+            self.assertEqual(payment.params["payParams"], first_params["payParams"])
+            self.assertEqual(db.get(Order, ident).status, "pending")
+
     def test_physical_payment_setup_network_failure_waits_for_reconciliation(self):
         ident = self.order().json()["data"]["id"]
         with patch.object(providers, "preflight"), patch.object(providers, "create_payment", side_effect=RuntimeError("微信预支付请求超时")):

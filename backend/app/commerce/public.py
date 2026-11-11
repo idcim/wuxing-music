@@ -256,18 +256,24 @@ def pay(ident: int, body: schemas.PayIn, user: User = Depends(get_current_user),
     providers.preflight(db, order, body.platform)
     if row.state == "initiating":
         raise HTTPException(409, "支付正在准备中，请稍后刷新订单")
-    if row.state == "issued" and row.params:
+    if (row.state == "issued" and order.provider == "virtual"
+            and row.params.get("platform") != body.platform):
+        # 已签出的订单仍可能在原终端付款；未取得渠道终端结果前不能改写退款渠道。
+        raise HTTPException(409, "请在发起付款的设备继续支付；更换设备请等待原订单关闭后重新下单")
+    if row.state == "issued" and row.params and order.provider != "virtual":
         return ok({key: value for key, value in row.params.items() if key != "platform"})
+    was_issued = row.state == "issued"
     row.state = "initiating"
     db.commit()
     try:
         params = providers.create_payment(db, order, body.code, body.platform)
     except Exception as exc:
-        row.error = str(exc)[:500]
-        # 数字课程只在客户端发起渠道支付；此处失败时没有预支付单，允许重试。
-        # 实物预支付的网络异常可能已在微信侧建单，仍须等待补查。
-        if isinstance(exc, HTTPException) or order.provider == "virtual":
-            row.state = "created"
+        # 已签发过的虚拟订单可能仍在渠道支付中；重新签名失败不能降回“未发起”，
+        # 否则超时关单会跳过查单。状态更新也不得覆盖并发补查已确认的付款。
+        next_state = ("issued" if order.provider == "virtual" and was_issued else
+            "created" if isinstance(exc, HTTPException) or order.provider == "virtual" else "initiating")
+        db.execute(update(Payment).where(Payment.id == row.id, Payment.state == "initiating")
+            .values(state=next_state, error=str(exc)[:500]))
         db.commit()
         raise
     issued = db.execute(update(Payment).where(Payment.id == row.id, Payment.state == "initiating")
