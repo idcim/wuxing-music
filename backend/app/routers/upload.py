@@ -7,9 +7,18 @@ from app.config import settings
 from app.database import get_db
 from app.models import Admin
 from app.schemas import ok
-from app.security import get_current_admin
+from app.security import admin_permissions, get_current_admin
 
 router = APIRouter(prefix="/api/admin/upload", tags=["upload"])
+
+
+def require_upload_permission(admin: Admin, db: Session, ext: str) -> None:
+    if admin.is_super:
+        return
+    allowed = {"tracks:edit"} if ext in storage.AUDIO_EXT else {
+        "tracks:edit", "settings:edit", "commerce:content"}
+    if not allowed.intersection(admin_permissions(admin, db)):
+        raise HTTPException(status_code=403, detail="无权限上传此类文件")
 
 
 @router.post("")
@@ -17,7 +26,7 @@ async def upload_file(
     request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    admin: Admin = Depends(get_current_admin),
 ):
     """后台上传（曲目音频 / 封面 / LOGO 等）。
 
@@ -30,6 +39,7 @@ async def upload_file(
     ext = storage.ext_of(file.filename)
     if ext not in storage.ALL_EXT:
         raise HTTPException(status_code=400, detail=f"不支持的文件类型：{ext}")
+    require_upload_permission(admin, db, ext)
 
     max_bytes = settings.upload_max_mb * 1024 * 1024
     too_large = f"文件超过 {settings.upload_max_mb}MB 限制"
@@ -60,7 +70,7 @@ class OssSignIn(BaseModel):
 def oss_sign(
     body: OssSignIn,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    admin: Admin = Depends(get_current_admin),
 ):
     """为 OSS 直传签名。
 
@@ -71,6 +81,7 @@ def oss_sign(
     ext = storage.ext_of(body.filename)
     if ext not in storage.ALL_EXT:
         raise HTTPException(status_code=400, detail=f"不支持的文件类型：{ext}")
+    require_upload_permission(admin, db, ext)
     try:
         # 直传不经服务器，上限放宽到 2GB（仍由 policy 强制，客户端改不了）
         return ok(storage.build_oss_post_policy(db, ext, 2 * 1024 * 1024 * 1024))

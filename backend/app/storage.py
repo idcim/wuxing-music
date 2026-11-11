@@ -333,7 +333,8 @@ def rewrite_db_urls(db: Session, mapping: dict) -> int:
 
 
 # 允许的扩展名（供路由复用）
-IMAGE_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
+# SVG 可携带脚本；上传内容会经同源 /uploads 或公开 OSS 地址展示，不接收可执行矢量文件。
+IMAGE_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 AUDIO_EXT = {".mp3", ".m4a", ".wav"}
 ALL_EXT = IMAGE_EXT | AUDIO_EXT
 
