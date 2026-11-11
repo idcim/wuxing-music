@@ -99,6 +99,15 @@ class MemberVirtualTests(unittest.TestCase):
         self.assertEqual(caught.exception.status_code, 409)
         self.assertEqual(self.db.query(Order).count(), 0)
 
+    def test_purchase_status_identifies_virtual_channel_to_new_weapp(self):
+        from app.routers.mp import mp_purchase_status
+        cfg = SimpleNamespace(commerce_virtual_ios_approved=True)
+        with patch("app.routers.mp._pay_cfg", return_value={"purchase_enabled": True}), \
+                patch("app.member_virtual.ready", return_value=(True, cfg)):
+            result = mp_purchase_status("weapp", "android", self.db)
+        self.assertEqual(result["data"]["provider"], "virtual")
+        self.assertTrue(result["data"]["enabled"])
+
     def test_virtual_payment_params_require_matching_wechat_identity(self):
         from types import SimpleNamespace
         order = self.order()

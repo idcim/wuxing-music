@@ -69,6 +69,18 @@ test('旧后端未返回虚拟渠道时，小程序不会调用普通支付', as
   assert.match(result.message, /渠道未升级/);
 });
 
+test('新版小程序只在后端明确报告虚拟支付时开放会员购买入口', async () => {
+  const makeService = response => payService({ weapp: true,
+    request: async url => {
+      assert.match(url, /\/api\/mp\/pay\/purchase-status\?channel=weapp/);
+      return response;
+    },
+  });
+  assert.equal(await makeService({ enabled: true }).getPurchaseStatus(), false);
+  assert.equal(await makeService({ enabled: true, provider: 'virtual' }).getPurchaseStatus(), true);
+  assert.equal(await makeService({ enabled: false, provider: 'virtual' }).getPurchaseStatus(), false);
+});
+
 test('H5 会员购买继续调原公众号支付', async () => {
   let invoked = false;
   const service = payService({ weapp: false,

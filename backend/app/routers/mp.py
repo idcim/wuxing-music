@@ -1323,7 +1323,7 @@ def mp_purchase_status(channel: str = "weapp", platform: str = "other", db: Sess
         from app import member_virtual
         virtual_ready, virtual_config = member_virtual.ready(db)
         enabled = enabled and virtual_ready and (platform != "ios" or virtual_config.commerce_virtual_ios_approved)
-    return ok({"enabled": bool(enabled)})
+    return ok({"enabled": bool(enabled), "provider": "virtual" if channel == "weapp" else "wxpay"})
 
 
 @router.get("/pay/order-status")

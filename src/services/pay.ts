@@ -126,8 +126,8 @@ function payFailure(err: any): { ok: false; reason: 'cancel' | 'fail' | 'auth'; 
 export async function getPurchaseStatus(): Promise<boolean> {
   if (USE_MOCK) return true;
   const platform = isWeapp ? Taro.getDeviceInfo().platform : 'other';
-  const res = await request<{ enabled: boolean }>(`/api/mp/pay/purchase-status?channel=${isH5 ? 'h5' : 'weapp'}&platform=${platform}`, { auth: false });
-  return res.enabled;
+  const res = await request<{ enabled: boolean; provider?: 'wxpay' | 'virtual' }>(`/api/mp/pay/purchase-status?channel=${isH5 ? 'h5' : 'weapp'}&platform=${platform}`, { auth: false });
+  return res.enabled && (!isWeapp || res.provider === 'virtual');
 }
 
 // 套餐列表以后台「套餐」管理为准（后台新增/调价立即生效，不用发版）；
