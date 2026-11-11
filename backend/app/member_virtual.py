@@ -58,14 +58,10 @@ def create_params(db, order, code, platform):
 
 
 def query(db, order):
-    from app.commerce.providers import virtual_request
-    data = virtual_request(db, "/xpay/query_order", {
-        "openid": order.payer_openid, "env": 0, "order_id": order.order_no}).get("order", {})
+    from app.commerce.providers import verify_virtual_order, virtual_request
+    data = verify_virtual_order(virtual_request(db, "/xpay/query_order", {
+        "openid": order.payer_openid, "env": 0, "order_id": order.order_no}).get("order", {}), order)
     status = data.get("status")
-    if status in (2, 3, 4, 5, 8):
-        if (data.get("order_id") != order.order_no or data.get("order_fee") != order.amount_fen
-                or data.get("paid_fee") != order.amount_fen):
-            raise HTTPException(409, "数字支付订单或金额校验失败")
     return dict(paid=status in (2, 3, 4), closed=status == 6,
         refunded=status == 8 and data.get("left_fee") == 0,
         transaction_id=data.get("wx_order_id"), amount_fen=data.get("paid_fee"))
@@ -112,9 +108,9 @@ def settle(db, order, result):
 
 def confirm_delivery(db, order):
     if order and order.status == "paid" and order.provider == "virtual":
-        from app.commerce.providers import virtual_request
-        current = virtual_request(db, "/xpay/query_order", {
-            "openid": order.payer_openid, "env": 0, "order_id": order.order_no}).get("order", {})
+        from app.commerce.providers import verify_virtual_order, virtual_request
+        current = verify_virtual_order(virtual_request(db, "/xpay/query_order", {
+            "openid": order.payer_openid, "env": 0, "order_id": order.order_no}).get("order", {}), order)
         if current.get("status") == 4:
             return
         virtual_request(db, "/xpay/notify_provide_goods", {"order_id": order.order_no, "env": 0})

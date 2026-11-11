@@ -81,6 +81,19 @@ class MemberVirtualTests(unittest.TestCase):
             with self.assertRaises(HTTPException):
                 member_virtual.query(self.db, order)
 
+    def test_closed_or_delivered_virtual_order_must_match_order_number(self):
+        order = self.order()
+        for status in (4, 6):
+            data = {"order": {"status": status, "order_id": "someone-else",
+                "order_fee": 1800, "paid_fee": 1800, "wx_order_id": "tx"}}
+            with self.subTest(status=status), patch("app.commerce.providers.virtual_request", return_value=data):
+                with self.assertRaises(HTTPException):
+                    member_virtual.query(self.db, order)
+                if status == 4:
+                    order.status = "paid"
+                    with self.assertRaises(HTTPException):
+                        member_virtual.confirm_delivery(self.db, order)
+
     def test_push_product_and_openid_must_match(self):
         order = self.order()
         data = {"paid": True, "amount_fen": 1800, "transaction_id": "tx"}

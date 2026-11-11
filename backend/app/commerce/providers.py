@@ -95,6 +95,17 @@ def virtual_request(db, path, payload, session_key=None):
     return data
 
 
+def verify_virtual_order(data, order):
+    """仅将与本地订单一致的渠道状态用于入账、关单或交付。"""
+    status = data.get("status")
+    if status in (1, 2, 3, 4, 5, 6, 7, 8) and data.get("order_id") != order.order_no:
+        raise HTTPException(409, "数字支付订单号校验失败")
+    if status in (2, 3, 4, 5, 8) and (data.get("order_fee") != order.amount_fen
+            or data.get("paid_fee") != order.amount_fen):
+        raise HTTPException(409, "数字支付订单金额校验失败")
+    return data
+
+
 def credential_cipher():
     return Fernet(base64.urlsafe_b64encode(hashlib.sha256((settings.jwt_secret + "/commerce-session").encode()).digest()))
 
@@ -167,17 +178,18 @@ def query_payment(db, order):
     if order.provider == "wxpay":
         cfg = pay_cfg(db)
         data = wx_request(db, "GET", f"/v3/pay/transactions/out-trade-no/{quote(order.order_no)}?mchid={cfg['wx_mch_id']}")
+        if data.get("trade_state") == "NOT_CREATED":
+            return dict(paid=False, closed=True, exists=False)
+        if (data.get("out_trade_no") != order.order_no or data.get("appid") != cfg["wx_app_id"]
+                or data.get("mchid") != cfg["wx_mch_id"]):
+            raise HTTPException(409, "支付渠道订单归属不匹配")
         if data.get("trade_state") == "SUCCESS":
-            if data.get("appid") != cfg["wx_app_id"] or data.get("mchid") != cfg["wx_mch_id"]:
-                raise RuntimeError("支付归属不匹配")
             return dict(paid=True, transaction_id=data["transaction_id"], amount_fen=data["amount"]["total"])
         return dict(paid=False, closed=data.get("trade_state") in ("CLOSED", "REVOKED", "NOT_CREATED"),
-            exists=data.get("out_trade_no") == order.order_no and data.get("appid") == cfg["wx_app_id"] and data.get("mchid") == cfg["wx_mch_id"])
-    data = virtual_request(db, "/xpay/query_order", {"openid": order.payer_openid, "env": 0, "order_id": order.order_no}).get("order", {})
+            exists=True)
+    data = verify_virtual_order(virtual_request(db, "/xpay/query_order", {
+        "openid": order.payer_openid, "env": 0, "order_id": order.order_no}).get("order", {}), order)
     # 未识别的响应绝不当作成功，留给持久任务重试与人工核对。
-    if data.get("status") in (2, 3, 4, 5, 8):
-        if data.get("order_id") != order.order_no or data.get("order_fee") != order.amount_fen or data.get("paid_fee") != order.amount_fen:
-            raise RuntimeError("数字支付订单或金额校验失败")
     if data.get("status") in (2, 3, 4):
         return dict(paid=True, transaction_id=data["wx_order_id"], amount_fen=data["paid_fee"])
     return dict(paid=False, closed=data.get("status") == 6,
@@ -198,7 +210,8 @@ def close_payment(db, order):
 def confirm_course_delivery(db, order):
     if order.status != "paid":
         return
-    data = virtual_request(db, "/xpay/query_order", {"openid": order.payer_openid, "env": 0, "order_id": order.order_no}).get("order", {})
+    data = verify_virtual_order(virtual_request(db, "/xpay/query_order", {
+        "openid": order.payer_openid, "env": 0, "order_id": order.order_no}).get("order", {}), order)
     if data.get("status") == 4:
         return
     virtual_request(db, "/xpay/notify_provide_goods", {"order_id": order.order_no, "env": 0})

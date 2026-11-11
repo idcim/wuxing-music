@@ -173,6 +173,39 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, Logisti
                 with self.assertRaises(HTTPException):
                     providers.preflight(db, db.get(Order, ident))
 
+    def test_virtual_close_and_delivery_require_matching_channel_order(self):
+        ident = self.order(key="channel-order-match", kind="course").json()["data"]["id"]
+        with self.sessions() as db:
+            order = db.get(Order, ident)
+            order.status = "paid"
+            for status in (4, 6):
+                result = {"order": {"status": status, "order_id": "someone-else",
+                    "order_fee": order.amount_fen, "paid_fee": order.amount_fen,
+                    "wx_order_id": "channel-transaction"}}
+                with self.subTest(status=status), patch.object(providers, "virtual_request", return_value=result):
+                    with self.assertRaises((HTTPException, RuntimeError)):
+                        providers.query_payment(db, order)
+                    if status == 4:
+                        with self.assertRaises((HTTPException, RuntimeError)):
+                            providers.confirm_course_delivery(db, order)
+
+    def test_physical_close_requires_matching_channel_order(self):
+        ident = self.order(key="physical-close-match").json()["data"]["id"]
+        with self.sessions() as db:
+            order = db.get(Order, ident)
+            cfg = {"wx_app_id": "our-app", "wx_mch_id": "our-merchant"}
+            response = {"trade_state": "CLOSED", "out_trade_no": "someone-else",
+                "appid": cfg["wx_app_id"], "mchid": cfg["wx_mch_id"]}
+            with patch.object(providers, "pay_cfg", return_value=cfg), \
+                    patch.object(providers, "wx_request", return_value=response):
+                with self.assertRaises((HTTPException, RuntimeError)):
+                    providers.query_payment(db, order)
+                response["out_trade_no"] = order.order_no
+                self.assertTrue(providers.query_payment(db, order)["closed"])
+            with patch.object(providers, "pay_cfg", return_value=cfg), \
+                    patch.object(providers, "wx_request", return_value={"trade_state": "NOT_CREATED"}):
+                self.assertTrue(providers.query_payment(db, order)["closed"])
+
     def paid(self, ident):
         with self.sessions() as db:
             trading.settle_paid(db, ident, f"transaction-{ident}", db.get(Order, ident).amount_fen)
