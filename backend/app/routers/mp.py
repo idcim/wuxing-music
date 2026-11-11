@@ -492,9 +492,12 @@ def _oauth2_access_token(app_id: str, app_secret: str, code: str) -> dict:
 
 
 @router.get("/h5/oauth-url")
-def h5_oauth_url(redirect: str, db: Session = Depends(get_db)):
+def h5_oauth_url(redirect: str, state: str, db: Session = Depends(get_db)):
     """返回公众号网页授权跳转地址（snsapi_base，静默授权）。未配公众号则 configured=False。"""
     from urllib.parse import quote
+
+    if not re.fullmatch(r"wx[0-9a-f]{32}", state):
+        raise HTTPException(status_code=400, detail="微信登录状态不合法")
 
     cfg = _oa_cfg(db)
     app_id = cfg.get("app_id")
@@ -503,7 +506,7 @@ def h5_oauth_url(redirect: str, db: Session = Depends(get_db)):
     url = (
         "https://open.weixin.qq.com/connect/oauth2/authorize"
         f"?appid={app_id}&redirect_uri={quote(redirect, safe='')}"
-        "&response_type=code&scope=snsapi_base&state=wx#wechat_redirect"
+        f"&response_type=code&scope=snsapi_base&state={state}#wechat_redirect"
     )
     return ok({"url": url, "configured": True})
 
@@ -592,7 +595,7 @@ def h5_qrlogin_url(redirect: str, nonce: str = "", db: Session = Depends(get_db)
     scope 必须是 snsapi_login——这是网站应用专用的 scope，公众号那套 snsapi_base
     在微信外浏览器打开只会提示「请在微信客户端打开」。
 
-    state 拼成 `wxqr.<nonce>`：微信会原样回传，前端拿它比对本地存的一次性随机串，
+    state 拼成 `wxqr<nonce>`：微信会原样回传，前端拿它比对本地存的一次性随机串，
     挡住「攻击者把自己的授权 code 塞给受害者、让受害者登录成攻击者账号」这类
     登录 CSRF。nonce 只在前端生成与校验，服务端不存——它防的是链接被伪造，
     不是防重放（code 本身微信就只允许用一次）。
@@ -606,9 +609,12 @@ def h5_qrlogin_url(redirect: str, nonce: str = "", db: Session = Depends(get_db)
     # 用户点进去扫完码，换 token 那步却因未配密钥回 503——一个看得见但用不了的按钮。
     if not app_id or not cfg.get("app_secret"):
         return ok({"url": "", "configured": False})
-    # 只放行安全字符，避免把任意内容拼进跳转 URL
-    safe_nonce = re.sub(r"[^A-Za-z0-9]", "", nonce or "")[:32]
-    state = f"wxqr.{safe_nonce}" if safe_nonce else "wxqr"
+    # 空 redirect 只用于前端查询是否已配置，不生成授权地址。
+    if not redirect:
+        return ok({"url": "", "configured": True})
+    if not re.fullmatch(r"[0-9a-f]{32}", nonce or ""):
+        raise HTTPException(status_code=422, detail="扫码登录随机校验参数无效")
+    state = f"wxqr{nonce}"
     url = (
         "https://open.weixin.qq.com/connect/qrconnect"
         f"?appid={app_id}&redirect_uri={quote(redirect, safe='')}"

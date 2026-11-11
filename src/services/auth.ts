@@ -157,6 +157,8 @@ export async function setPassword(password: string): Promise<void> {
 }
 
 // ── 微信网页授权登录（H5 公众号内）───────────────────────
+const OA_STATE_KEY = 'wx_oa_oauth_state';
+
 // 流程：地址栏带 code → 用 code 换 token；无 code → 取授权跳转地址并 replace 跳转
 //（此时函数返回 null，页面即将卸载）；后端未配置公众号时 → 用游客 id 兜底登录（dev）。
 export async function wechatLoginH5(): Promise<WechatH5LoginResult> {
@@ -173,6 +175,12 @@ export async function wechatLoginH5(): Promise<WechatH5LoginResult> {
 
   // 已从微信授权回跳（地址栏带 code）：换取 token —— 真实微信登录
   if (code) {
+    const returnedState = new URLSearchParams(loc!.search).get('state');
+    const expectedState = window.sessionStorage.getItem(OA_STATE_KEY);
+    window.sessionStorage.removeItem(OA_STATE_KEY);
+    if (!expectedState || returnedState !== expectedState) {
+      throw new Error('微信登录校验失败，请重新尝试');
+    }
     const result = await request<LoginResult>('/api/mp/h5/login', {
       method: 'POST',
       data: { code, guestId: guest },
@@ -181,16 +189,23 @@ export async function wechatLoginH5(): Promise<WechatH5LoginResult> {
     return { user: persistLogin(result), devGuest: false };
   }
 
-  // 无 code：向后端要授权跳转地址（redirect 为当前不含 code/state 的完整 URL）
+  // 无 code：微信把 code/state 加在 redirect_uri 的查询串末尾；hash 路由必须移除，
+  // 否则回跳会变成 #/pages/...?code=...，location.search 读不到 code。
   let redirect = '';
+  let state = '';
   if (loc) {
     const u = new URL(loc.href);
     u.searchParams.delete('code');
     u.searchParams.delete('state');
+    u.hash = '';
     redirect = u.href;
+    const bytes = new Uint8Array(16);
+    window.crypto.getRandomValues(bytes);
+    state = `wx${Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')}`;
+    window.sessionStorage.setItem(OA_STATE_KEY, state);
   }
   const oauth = await request<{ url: string; configured: boolean }>(
-    `/api/mp/h5/oauth-url?redirect=${encodeURIComponent(redirect)}`,
+    `/api/mp/h5/oauth-url?redirect=${encodeURIComponent(redirect)}&state=${state}`,
     { auth: false }
   );
 
@@ -199,6 +214,8 @@ export async function wechatLoginH5(): Promise<WechatH5LoginResult> {
     loc.replace(oauth.url);
     return { user: null, devGuest: false };
   }
+
+  if (loc) window.sessionStorage.removeItem(OA_STATE_KEY);
 
   // 后端未配置公众号：游客兜底登录（仅开发态，生产后端会 503）——标记 devGuest 供 UI 提示
   console.warn('[H5] 公众号未配置，走「开发游客兜底登录」（非真实微信登录）');
@@ -210,7 +227,7 @@ export async function wechatLoginH5(): Promise<WechatH5LoginResult> {
   return { user: persistLogin(result), devGuest: true };
 }
 
-/** 扫码授权回跳的 state 前缀，与公众号的 state=wx 区分开 */
+/** 扫码授权回跳的 state 前缀，与公众号的 wx 前缀区分开 */
 const QR_STATE = 'wxqr';
 // 一次性随机串，跟着 state 走一圈再比对，挡登录 CSRF（攻击者把自己的 code
 // 塞给受害者，让受害者登录成攻击者的账号）。存 sessionStorage 而不是 Taro storage：
@@ -218,31 +235,19 @@ const QR_STATE = 'wxqr';
 const QR_NONCE_KEY = 'wx_qr_nonce';
 
 function issueQrNonce(): string {
-  const nonce = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
-  try {
-    sessionStorage.setItem(QR_NONCE_KEY, nonce);
-  } catch {
-    // 隐私模式下 sessionStorage 可能不可写：降级为不带 nonce，功能仍可用
-  }
+  const bytes = new Uint8Array(16);
+  window.crypto.getRandomValues(bytes);
+  const nonce = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+  window.sessionStorage.setItem(QR_NONCE_KEY, nonce);
   return nonce;
 }
 
 // 回跳带的 state 是否是本次扫码授权的（且 nonce 对得上）。
 // nonce 一经校验立即作废，避免同一个 state 被重复消费。
 function matchQrState(state: string | null): boolean {
-  if (!state || (state !== QR_STATE && !state.startsWith(`${QR_STATE}.`))) return false;
-  const got = state.includes('.') ? state.slice(QR_STATE.length + 1) : '';
-  let want = '';
-  try {
-    want = sessionStorage.getItem(QR_NONCE_KEY) || '';
-    sessionStorage.removeItem(QR_NONCE_KEY);
-  } catch {
-    want = '';
-  }
-  // 两边都没有 nonce 时放行（sessionStorage 不可用的降级路径）；
-  // 一旦本地存过就必须对上，对不上说明这个回跳不是本人发起的。
-  if (!want) return true;
-  return got === want;
+  const want = window.sessionStorage.getItem(QR_NONCE_KEY);
+  window.sessionStorage.removeItem(QR_NONCE_KEY);
+  return !!want && state === `${QR_STATE}${want}`;
 }
 
 // ── 微信扫码登录（H5 · 微信外浏览器）──────────────────
@@ -250,7 +255,7 @@ function matchQrState(state: string | null): boolean {
 // 公众号的 snsapi_base 在微信外浏览器打开只会显示「请在微信客户端打开」，
 // 这条路在浏览器里从来就是断的，扫码登录才是浏览器端唯一能用的微信登录。
 //
-// 流程与 wechatLoginH5 同构：地址栏带 code（且 state=wxqr）→ 换 token；
+// 流程与 wechatLoginH5 同构：地址栏带 code 与匹配的一次性 state → 换 token；
 // 无 code → 取跳转地址并 replace 跳转（返回 user=null，页面即将卸载）。
 export async function wechatQrLoginH5(): Promise<WechatH5LoginResult> {
   const guest = getGuestOpenid();
@@ -263,11 +268,12 @@ export async function wechatQrLoginH5(): Promise<WechatH5LoginResult> {
 
   const loc = typeof window !== 'undefined' ? window.location : null;
   const params = loc ? new URLSearchParams(loc.search) : null;
-  // 必须连 state 一起判断：公众号授权回跳带的是 state=wx，
-  // 只看 code 会把公众号的 code 拿去换网站应用的 token，必然失败。
-  const code = matchQrState(params?.get('state') ?? null) ? params!.get('code') : null;
+  const code = params?.get('code');
 
   if (code) {
+    if (!matchQrState(params?.get('state') ?? null)) {
+      throw new Error('微信登录校验失败，请重新尝试');
+    }
     const result = await request<LoginResult>('/api/mp/h5/qrlogin', {
       method: 'POST',
       data: { code, guestId: guest },
@@ -291,6 +297,7 @@ export async function wechatQrLoginH5(): Promise<WechatH5LoginResult> {
     loc.replace(oauth.url);
     return { user: null, devGuest: false };
   }
+  if (loc) window.sessionStorage.removeItem(QR_NONCE_KEY);
 
   // 后端未配网站应用：游客兜底（仅开发态，生产后端回 503）
   console.warn('[H5] 开放平台网站应用未配置，走「开发游客兜底登录」（非真实微信登录）');
@@ -318,12 +325,12 @@ export async function isQrLoginConfigured(): Promise<boolean> {
 }
 
 /** 当前地址栏是否是扫码授权的回跳（登录页据此在挂载时自动完成登录）。
- *  只看形状不校验 nonce——nonce 一验就作废，这里验了后面换 token 那步就没得验了。 */
+ *  这里只看形状；一次性 nonce 留给换 token 前校验。 */
 export function hasQrLoginCallback(): boolean {
   if (typeof window === 'undefined') return false;
   const p = new URLSearchParams(window.location.search);
   const state = p.get('state') || '';
-  return (state === QR_STATE || state.startsWith(`${QR_STATE}.`)) && !!p.get('code');
+  return /^wxqr[0-9a-f]{32}$/.test(state) && !!p.get('code');
 }
 
 export async function fetchProfile(): Promise<User> {

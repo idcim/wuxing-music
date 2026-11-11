@@ -621,7 +621,7 @@ loadTimer = setTimeout(() => {
 - **`state` 带一次性 nonce**，前端存 sessionStorage 回来比对，挡登录 CSRF
   （攻击者把自己的授权 code 塞给受害者，让受害者登录成攻击者的账号，
   之后受害者兑的码、买的会员都落在攻击者头上）。
-  ⚠️ **公众号那条路径的 `state=wx` 是固定值，没有这层防护**，接真实 AppSecret 时应一并补。
+  公众号网页授权现也改为每次生成 128 位随机 nonce，回跳校验通过后才换取账号。
 
 **两个坑（都会让功能静默失效，不报任何错）**
 
@@ -631,8 +631,8 @@ loadTimer = setTimeout(() => {
    `https://站点/#/pages/login/index?code=..` —— code 落在 fragment 里，
    `location.search` 是空的。所以回跳地址只取 `origin + pathname`，
    落地是站点根路由而非发起授权的登录页，**回跳处理只能放 `app.tsx` 全局接管**。
-   ⚠️ 现有公众号那条 `wechatLoginH5` 用的是含 hash 的 `u.href`，**很可能有同样的问题**，
-   只是至今没配真实 AppSecret、从未真跑通过。配好那天先验这一条。
+   公众号 `wechatLoginH5` 现也移除回跳地址的 hash，保留原有查询参数；
+   后端只接受正确格式的字母数字 `state`，前端比对是否属于本次授权。真实公众号回跳仍须在微信内复核。
 2. **授权回调域填 H5 站点域名，不是后台域名。** 后台(:8080)与 H5(:8081) 是两个域名，
    填错会报 redirect_uri 参数错误。就是公众号那边配的「网页授权域名」那一个。
 
