@@ -35,11 +35,11 @@ def finalize_refund(db: Session, order: Order, operator: str) -> None:
     if operator:
         order.refund_by = operator
 
-    # 回收会员权益：若用户当前会员来自购买且就是这条订单的套餐，降级为免费
+    # 虚拟支付的累计时长按订单扣回；旧支付保持原套餐匹配规则。
     from app.user_merge import resolve_user
     user = resolve_user(db, db.query(User).filter(User.id == order.user_id).first())
     if (not order.is_gift and user and user.membership_source == "purchase"
-            and user.membership_type == order.plan_id):
+            and (order.provider == "virtual" or user.membership_type == order.plan_id)):
         if order.provider == "virtual" and order.duration_days > 0 and user.membership_expire_at:
             user.membership_expire_at -= timedelta(days=order.duration_days)
         if not user.membership_expire_at or user.membership_expire_at <= datetime.utcnow() or order.provider != "virtual":

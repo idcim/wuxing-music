@@ -140,6 +140,20 @@ class MemberVirtualTests(unittest.TestCase):
         self.assertEqual(self.user.membership_type, "month")
         self.assertTrue(29 <= (self.user.membership_expire_at - second.paid_at).days <= 30)
 
+    def test_refunding_earlier_plan_removes_its_days_after_upgrading(self):
+        month = self.order()
+        year = Order(order_no="M202611110003", user_id=self.user.id, plan_id="year",
+            plan_name="年藏", amount=199, amount_fen=19900, duration_days=365,
+            payment_product="music-year", payer_openid="openid-1", provider="virtual", status="pending")
+        self.db.add(year)
+        self.db.commit()
+        with patch("app.agent_service.record_commission"), patch("app.agent_service.void_commission"):
+            member_virtual.settle(self.db, month, {"paid": True, "amount_fen": 1800, "transaction_id": "tx-month"})
+            member_virtual.settle(self.db, year, {"paid": True, "amount_fen": 19900, "transaction_id": "tx-year"})
+            refund_service.finalize_refund(self.db, month, "test")
+        self.assertEqual(self.user.membership_type, "year")
+        self.assertTrue(364 <= (self.user.membership_expire_at - year.paid_at).days <= 365)
+
     def test_gift_refund_does_not_remove_buyers_own_membership(self):
         gift = self.order(gift=True)
         self.user.membership_type = "month"
