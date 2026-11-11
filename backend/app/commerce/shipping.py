@@ -47,7 +47,7 @@ def confirm_receipt(db, order):
     data = call(db, "wxa/sec/order/get_order", {"transaction_id": order.transaction_id}).get("order", {})
     if data.get("transaction_id") != order.transaction_id or data.get("openid") != order.payer_openid or data.get("paid_amount") != order.amount_fen:
         raise RuntimeError("微信收货订单归属或金额不匹配")
-    if data.get("order_state") not in (3, 4, 6):
+    if data.get("order_state") not in (3, 4):
         raise RuntimeError("微信尚未确认收货，请在微信组件中完成确认")
     from .common import record
     guard_claim(db)

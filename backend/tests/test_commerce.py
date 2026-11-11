@@ -962,6 +962,10 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, Logisti
                 with self.assertRaises(RuntimeError):
                     shipping.confirm_receipt(db, order)
             self.assertEqual(order.fulfillment, "shipped")
+            with patch.object(shipping, "call", return_value={"order": {"transaction_id": order.transaction_id, "openid": "test-openid", "paid_amount": 1600, "order_state": 6}}):
+                with self.assertRaises(RuntimeError):
+                    shipping.confirm_receipt(db, order)
+            self.assertEqual(order.fulfillment, "shipped")
             with patch.object(shipping, "call", return_value={"order": {"transaction_id": order.transaction_id, "openid": "test-openid", "paid_amount": 1600, "order_state": 3}}):
                 shipping.confirm_receipt(db, order)
             self.assertEqual(order.fulfillment, "received")
