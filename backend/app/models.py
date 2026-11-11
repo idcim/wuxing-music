@@ -191,6 +191,38 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
 
+class MemberLedger(Base):
+    """会员发放链的起点；合并或重置时旧链保留但不再影响当前权益。"""
+
+    __tablename__ = "member_ledger"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("user.id"), unique=True, nullable=True)
+    baseline_type: Mapped[str] = mapped_column(String(16), default="free")
+    baseline_name: Mapped[str] = mapped_column(String(32), default="听闻")
+    baseline_source: Mapped[str] = mapped_column(String(16), default="")
+    baseline_expire_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class MemberGrant(Base):
+    """可逐单撤销的会员天数，source_kind/source_ref 全局唯一。"""
+
+    __tablename__ = "member_grant"
+    __table_args__ = (UniqueConstraint("source_kind", "source_ref", name="uq_member_grant_source"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ledger_id: Mapped[int] = mapped_column(ForeignKey("member_ledger.id"), index=True)
+    source_kind: Mapped[str] = mapped_column(String(16))
+    source_ref: Mapped[str] = mapped_column(String(64))
+    duration_days: Mapped[int] = mapped_column(Integer)
+    plan_type: Mapped[str] = mapped_column(String(16))
+    plan_name: Mapped[str] = mapped_column(String(32))
+    source: Mapped[str] = mapped_column(String(16))
+    granted_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class Cdkey(Base):
     __tablename__ = "cdkey"
 

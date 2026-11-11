@@ -14,10 +14,10 @@ from sqlalchemy import create_engine
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
-from app import member_virtual, refund_service
+from app import member_ledger, member_virtual, refund_service
 from app.commerce import callbacks
 from app.commerce.models import Base as CommerceBase, Job
-from app.models import Base, Cdkey, Order, Plan, User
+from app.models import Base, Cdkey, MemberGrant, MemberLedger, Order, Plan, User
 from app.models import Setting
 
 
@@ -162,6 +162,72 @@ class MemberVirtualTests(unittest.TestCase):
             refund_service.finalize_refund(self.db, month, "test")
         self.assertEqual(self.user.membership_type, "year")
         self.assertTrue(364 <= (self.user.membership_expire_at - year.paid_at).days <= 365)
+
+    def test_refund_after_cdkey_redeem_preserves_only_cdkey_days(self):
+        from starlette.requests import Request
+        from app.routers.mp import RedeemIn, mp_redeem
+        order = self.order()
+        key = Cdkey(code="MIXED-SOURCE-60", plan_type="year", plan_name="年藏", duration_days=60)
+        self.db.add(key)
+        self.db.commit()
+        with patch("app.agent_service.record_commission"), patch("app.agent_service.void_commission"):
+            member_virtual.settle(self.db, order, {"paid": True, "amount_fen": 1800, "transaction_id": "tx-mixed"})
+            request = Request({"type": "http", "client": ("127.0.0.1", 1234), "headers": []})
+            mp_redeem(RedeemIn(code=key.code), request, self.user, self.db)
+            refund_service.finalize_refund(self.db, order, "test")
+        self.assertEqual(self.user.membership_type, "year")
+        self.assertEqual(self.user.membership_source, "cdkey")
+        self.assertTrue(59 <= (self.user.membership_expire_at - key.used_at).days <= 60)
+
+    def test_reset_archives_grants_so_later_refund_does_not_remove_new_gift(self):
+        order = self.order()
+        with patch("app.agent_service.record_commission"), patch("app.agent_service.void_commission"):
+            member_virtual.settle(self.db, order, {"paid": True, "amount_fen": 1800, "transaction_id": "tx-reset"})
+            member_ledger.reset(self.db, self.user)
+            self.user.membership_type, self.user.membership_name = "free", "听闻"
+            self.user.membership_expire_at, self.user.membership_source = None, ""
+            member_ledger.admin_grant(self.db, self.user, days=15, plan_type="year", plan_name="年藏")
+            self.db.commit()
+            gifted_expiry = self.user.membership_expire_at
+            refund_service.finalize_refund(self.db, order, "test")
+        self.assertEqual(self.user.membership_expire_at, gifted_expiry)
+        self.assertEqual(self.user.membership_source, "gift")
+        self.assertEqual(self.db.query(MemberLedger).count(), 2)
+        self.assertIsNotNone(self.db.query(MemberGrant).filter_by(source_ref=str(order.id)).one().revoked_at)
+
+    def test_merge_keeps_later_membership_ledger_for_future_refunds(self):
+        from app.user_merge import merge_users
+        order = self.order()
+        keep = User(openid="keep-openid")
+        self.db.add(keep)
+        self.db.commit()
+        with patch("app.agent_service.record_commission"), patch("app.agent_service.void_commission"):
+            member_virtual.settle(self.db, order, {"paid": True, "amount_fen": 1800, "transaction_id": "tx-merge"})
+            merge_users(self.db, keep, self.user)
+            self.db.commit()
+            refund_service.finalize_refund(self.db, order, "test")
+        self.assertEqual(keep.membership_type, "free")
+        self.assertIsNone(keep.membership_expire_at)
+        self.assertEqual(self.db.query(MemberLedger).filter_by(user_id=keep.id).count(), 1)
+
+    def test_legacy_refund_preserves_new_cdkey_grant(self):
+        from datetime import datetime, timedelta
+        from starlette.requests import Request
+        from app.routers.mp import RedeemIn, mp_redeem
+        old = self.order()
+        old.provider, old.status = "wxpay", "paid"
+        self.user.membership_type, self.user.membership_name = "month", "月悦"
+        self.user.membership_source = "purchase"
+        self.user.membership_expire_at = datetime.utcnow() + timedelta(days=30)
+        key = Cdkey(code="LEGACY-KEY-20", plan_type="year", plan_name="年藏", duration_days=20)
+        self.db.add(key)
+        self.db.commit()
+        request = Request({"type": "http", "client": ("127.0.0.1", 1234), "headers": []})
+        with patch("app.agent_service.void_commission"):
+            mp_redeem(RedeemIn(code=key.code), request, self.user, self.db)
+            refund_service.finalize_refund(self.db, old, "test")
+        self.assertEqual(self.user.membership_source, "cdkey")
+        self.assertTrue(19 <= (self.user.membership_expire_at - key.used_at).days <= 20)
 
     def test_gift_refund_does_not_remove_buyers_own_membership(self):
         gift = self.order(gift=True)

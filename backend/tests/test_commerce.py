@@ -167,6 +167,7 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, Logisti
             db.delete(db.get(SchemaVersion, 2))
             db.delete(db.get(SchemaVersion, 3))
             db.delete(db.get(SchemaVersion, 4))
+            db.delete(db.get(SchemaVersion, 5))
             db.get(Product, 100).title = "运营已修改商品"
             db.commit()
         WorkerHeartbeat.__table__.drop(self.engine)

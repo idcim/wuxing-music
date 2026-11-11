@@ -2,6 +2,7 @@
 from datetime import datetime
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session
+from app.models import MemberGrant, MemberLedger
 
 from .models import Base, Category, Course, Lesson, Product, SCHEMA_VERSION, SchemaVersion, Sku, Teacher
 
@@ -9,6 +10,9 @@ from .models import Base, Category, Course, Lesson, Product, SCHEMA_VERSION, Sch
 def upgrade(engine):
     # 仅更新课程商城结构，不修改音乐会员财务数据。DDL 可重复执行。
     Base.metadata.create_all(engine)
+    # 会员权益流水随同一版本化迁移创建，先于新支付回调启用。
+    MemberLedger.__table__.create(engine, checkfirst=True)
+    MemberGrant.__table__.create(engine, checkfirst=True)
     if "playback_version" not in {column["name"] for column in inspect(engine).get_columns("course_media")}:
         # MySQL 的 DDL 会隐式提交；先检查实际结构，允许中断后安全重跑。
         with engine.begin() as connection:

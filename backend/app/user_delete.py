@@ -15,6 +15,7 @@ from app.models import (
     Cdkey,
     CdkeyRedeemLog,
     Commission,
+    MemberLedger,
     Order,
     PlayHistory,
     User,
@@ -66,6 +67,8 @@ def deactivate_user(db: Session, user: User) -> None:
     user.element = ""
     user.element_scores = "{}"
     user.quiz_completed_at = None
+    from app import member_ledger
+    member_ledger.reset(db, user)
     user.membership_type = "free"
     user.membership_name = "听闻"
     user.membership_expire_at = None
@@ -80,6 +83,7 @@ def hard_delete_blockers(db: Session, user: User) -> list[str]:
         (db.query(Cdkey).filter(Cdkey.used_by == user.id).first(), "有兑换码使用记录"),
         (db.query(CdkeyRedeemLog).filter(CdkeyRedeemLog.user_id == user.id).first(), "有兑换日志"),
         (db.query(Commission).filter(Commission.user_id == user.id).first(), "有分成记录"),
+        (db.query(MemberLedger).filter(MemberLedger.user_id == user.id).first(), "有会员权益记录"),
         (db.query(Agent).filter(Agent.user_id == user.id).first(), "关联代理"),
         (db.query(User).filter(User.merged_into == user.id).first(), "有其他账号合并到该用户"),
         (

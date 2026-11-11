@@ -142,7 +142,7 @@ class LogisticsCases:
     def test_v3_upgrade_adds_logistics_cache_and_preserves_media_and_orders(self):
         ident, _ = self.logistics_order()
         with self.sessions() as db:
-            db.delete(db.get(SchemaVersion, 4)); db.commit()
+            db.delete(db.get(SchemaVersion, 4)); db.delete(db.get(SchemaVersion, 5)); db.commit()
         LogisticsQuery.__table__.drop(self.engine)
         self.assertFalse(self.client.get("/api/admin/commerce/status").json()["data"]["migrated"])
         upgrade(self.engine); upgrade(self.engine)

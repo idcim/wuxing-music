@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app import agent_service
+from app import agent_service, member_ledger
 from app.database import get_db
 from app.lunar import lunar_info
 from app.models import Admin, Agent, Cdkey, Order, Plan, Track, User
@@ -228,13 +228,14 @@ def grant_membership(
     _: Admin = Depends(require_perm("users:grant")),
 ):
     """后台给用户开通/赠送会员（不走支付，source=gift）。"""
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.id == user_id).with_for_update().first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
     if is_deleted(user):
         raise HTTPException(status_code=400, detail="已注销账号不能开通会员")
 
     if body.plan_id == "free":
+        member_ledger.reset(db, user)
         user.membership_type = "free"
         user.membership_name = "听闻"
         user.membership_expire_at = None
@@ -251,13 +252,7 @@ def grant_membership(
     if days <= 0:
         raise HTTPException(status_code=400, detail="开通天数必须大于 0")
 
-    # 若当前会员仍有效，则在剩余期上叠加；否则从现在起算
-    now = datetime.utcnow()
-    base = user.membership_expire_at if (user.membership_expire_at and user.membership_expire_at > now) else now
-    user.membership_type = plan.id
-    user.membership_name = plan.name
-    user.membership_expire_at = base + timedelta(days=days)
-    user.membership_source = "gift"
+    member_ledger.admin_grant(db, user, days=days, plan_type=plan.id, plan_name=plan.name)
     db.commit()
     db.refresh(user)
     return ok(_user_dict(user, _agent_map(db, [user.id])))

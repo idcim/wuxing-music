@@ -137,12 +137,15 @@ def merge_users(
 
     # 3) 会员取到期更晚的一整组（type/name/expire/source 必须同进同退，
     #    否则会出现「年藏」的名字配着月卡的到期日这种自相矛盾的展示）
-    if _expire_ts(drop) > _expire_ts(keep):
+    use_drop_membership = _expire_ts(drop) > _expire_ts(keep)
+    if use_drop_membership:
         keep.membership_type = drop.membership_type
         keep.membership_name = drop.membership_name
         keep.membership_expire_at = drop.membership_expire_at
         keep.membership_source = drop.membership_source
         detail["membership"] = "drop"
+    from app import member_ledger
+    member_ledger.merge(db, keep, drop, use_drop=use_drop_membership)
 
     # 4) 立碑：清掉 drop 的 unionid / oa_openid / web_openid，避免它再被任何匹配路径命中；
     #    openid 保留（唯一约束占着，也便于追溯这条行原本是谁）

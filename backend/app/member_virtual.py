@@ -2,12 +2,12 @@
 import hashlib
 import hmac
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import httpx
 from fastapi import HTTPException
 
-from app import agent_service, refund_service
+from app import agent_service, member_ledger, refund_service
 from app.config import settings
 from app.models import Cdkey, Order, User
 
@@ -96,12 +96,10 @@ def settle(db, order, result):
         user = resolve_user(db, db.get(User, order.user_id))
         if not user or user.deleted_at:
             raise HTTPException(409, "付款账号已注销，需人工处理")
-        now = datetime.utcnow()
-        base = user.membership_expire_at if user.membership_expire_at and user.membership_expire_at > now else now
-        user.membership_type = order.plan_id
-        user.membership_name = order.plan_name
-        user.membership_expire_at = base + timedelta(days=order.duration_days)
-        user.membership_source = "purchase"
+        user = db.query(User).filter_by(id=user.id).populate_existing().with_for_update().one()
+        member_ledger.grant(db, user, kind="order", ref=order.id,
+            days=order.duration_days, plan_type=order.plan_id,
+            plan_name=order.plan_name, source="purchase")
     order.status = "paid"
     order.transaction_id = str(result["transaction_id"])
     order.paid_at = datetime.utcnow()

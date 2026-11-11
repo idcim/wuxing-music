@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import agent_service, ratelimit, refund_service, sms, storage, streaming, wxpay
+from app import agent_service, member_ledger, ratelimit, refund_service, sms, storage, streaming, wxpay
 from app.config import settings
 from app.database import get_db
 from app.lunar import lunar_info
@@ -1188,7 +1188,7 @@ def mp_redeem(
         raise HTTPException(status_code=400, detail=detail)
 
     code = body.code.strip().upper()
-    key = db.query(Cdkey).filter(Cdkey.code == code).first()
+    key = db.query(Cdkey).filter(Cdkey.code == code).with_for_update().first()
     if not key:
         _reject("兑换码不存在")
     if key.status == "used":
@@ -1198,14 +1198,13 @@ def mp_redeem(
     if key.expire_at and key.expire_at < datetime.utcnow():
         _reject("兑换码已过期")
 
-    # 发放权益：剩余期叠加
+    # 发放权益：剩余期叠加，并记录来源以便准确退款。
     now = datetime.utcnow()
-    base = user.membership_expire_at if (user.membership_expire_at and user.membership_expire_at > now) else now
-    expire_at = base + timedelta(days=key.duration_days)
-    user.membership_type = key.plan_type
-    user.membership_name = key.plan_name
-    user.membership_expire_at = expire_at
-    user.membership_source = "cdkey"
+    user = db.query(User).filter_by(id=user.id).populate_existing().with_for_update().one()
+    member_ledger.grant(db, user, kind="cdkey", ref=key.id,
+        days=key.duration_days, plan_type=key.plan_type,
+        plan_name=key.plan_name, source="cdkey", at=now)
+    expire_at = user.membership_expire_at
 
     key.status = "used"
     key.used_by = user.id
@@ -1242,16 +1241,12 @@ def _gen_order_no() -> str:
     return datetime.utcnow().strftime("%Y%m%d%H%M%S") + uuid.uuid4().hex[:10]
 
 
-def _grant_membership(db: Session, user: User, plan: Plan, source: str = "purchase") -> None:
+def _grant_membership(db: Session, user: User, plan: Plan, order: Order, source: str = "purchase") -> None:
     """按套餐天数累加会员有效期（已是会员则从到期日续期）。"""
-    now = datetime.utcnow()
-    base = user.membership_expire_at if (user.membership_expire_at and user.membership_expire_at > now) else now
-    user.membership_type = plan.id
-    user.membership_name = plan.name
-    user.membership_expire_at = base + timedelta(days=plan.duration_days)
-    user.membership_source = source
-    db.commit()
-    db.refresh(user)
+    user = db.query(User).filter_by(id=user.id).populate_existing().with_for_update().one()
+    member_ledger.grant(db, user, kind="order", ref=order.id,
+        days=order.duration_days or plan.duration_days, plan_type=order.plan_id,
+        plan_name=order.plan_name, source=source)
 
 
 def _resolve_pay_payer(db: Session, user: User, channel: str, order: Order):
@@ -1381,6 +1376,7 @@ def mp_create_order(
         plan_id=plan.id,
         plan_name=plan.name,
         amount=plan.price,
+        duration_days=plan.duration_days,
         status="pending",
     )
     db.add(order)
@@ -1394,7 +1390,7 @@ def mp_create_order(
             db.commit()
             raise HTTPException(status_code=400, detail="支付未配置")
         # 开发期：直接开通，便于联调
-        _grant_membership(db, user, plan)
+        _grant_membership(db, user, plan, order)
         order.status = "paid"
         order.paid_at = datetime.utcnow()
         # 分成与「订单转已支付」同一次提交，避免出现付了款却没记账的中间态
@@ -1480,7 +1476,7 @@ async def mp_pay_callback(request: Request, db: Session = Depends(get_db)):
     else:
         user = db.query(User).filter(User.id == order.user_id).first()
         if user and not user.deleted_at:
-            _grant_membership(db, user, plan)
+            _grant_membership(db, user, plan, order)
     order.status = "paid"
     order.transaction_id = data.get("transaction_id", "")
     order.paid_at = datetime.utcnow()

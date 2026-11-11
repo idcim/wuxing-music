@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app import agent_service
+from app import member_ledger
 from app.models import Cdkey, Order, User
 
 logger = logging.getLogger("uvicorn.error")
@@ -38,7 +39,12 @@ def finalize_refund(db: Session, order: Order, operator: str) -> None:
     # 虚拟支付的累计时长按订单扣回；旧支付保持原套餐匹配规则。
     from app.user_merge import resolve_user
     user = resolve_user(db, db.query(User).filter(User.id == order.user_id).first())
-    if (not order.is_gift and user and user.membership_source == "purchase"
+    if user:
+        user = db.query(User).filter(User.id == user.id).populate_existing().with_for_update().one()
+    handled = not order.is_gift and member_ledger.revoke(db, user, kind="order", ref=order.id)
+    if not handled and not order.is_gift:
+        handled = member_ledger.revoke_legacy_baseline(db, user, order)
+    if (not handled and not order.is_gift and user and user.membership_source == "purchase"
             and (order.provider == "virtual" or user.membership_type == order.plan_id)):
         if order.provider == "virtual" and order.duration_days > 0 and user.membership_expire_at:
             user.membership_expire_at -= timedelta(days=order.duration_days)
