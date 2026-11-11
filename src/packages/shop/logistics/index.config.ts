@@ -1,1 +1,1 @@
-export default definePageConfig({ navigationBarTitleText: '物流进度' });
+export default definePageConfig({ navigationStyle: 'custom' });
