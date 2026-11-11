@@ -15,6 +15,13 @@
   &--empty {
     align-items: center;
     justify-content: center;
+
+    .player__nav {
+      position: absolute;
+      top: 0;
+      left: $pad-outer;
+      right: $pad-outer;
+    }
   }
 
   &__empty-text {
@@ -26,7 +33,8 @@
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    padding: 64rpx 0 16rpx;
+    height: 44px;
+    padding-bottom: 16rpx;
   }
 
   &__back {

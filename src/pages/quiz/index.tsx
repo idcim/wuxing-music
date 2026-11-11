@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro from '@tarojs/taro';
-import { goBack } from '@/utils/nav';
+import { goBack, navBarStyle } from '@/utils/nav';
 import Icon from '@/components/Icon';
 import { QUIZ_QUESTIONS, EMPTY_SCORES, calcTopElement } from '@/constants/quiz';
 import { useUserStore } from '@/stores/user';
@@ -66,7 +66,7 @@ export default function Quiz() {
   return (
     <View className="quiz">
       {/* 顶部栏：返回 + 分段进度 + 计数 */}
-      <View className="quiz__top">
+      <View className="quiz__top" style={navBarStyle()}>
         <View className="quiz__back" onClick={back}>
           <Icon name="chevronLeft" size={32} color="#94a3b8" strokeWidth={2} />
         </View>

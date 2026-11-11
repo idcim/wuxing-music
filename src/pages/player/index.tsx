@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, Text, Image } from '@tarojs/components';
 import Taro, { useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/taro';
-import { goBack } from '@/utils/nav';
+import { goBack, navBarStyle } from '@/utils/nav';
 import { openShareMenu, setH5Share } from '@/utils/share';
 import { usePlayerStore } from '@/stores/player';
 import { useUserStore } from '@/stores/user';
@@ -86,7 +86,7 @@ export default function Player() {
   if (!currentTrack) {
     return (
       <View className="player player--empty" style={{ background: el.bg }}>
-        <View className="player__nav">
+        <View className="player__nav" style={navBarStyle()}>
           <Text className="player__back" onClick={back}>‹</Text>
         </View>
         <Text className="player__empty-text">暂无播放中的曲目</Text>
@@ -108,7 +108,7 @@ export default function Player() {
 
   return (
     <View className="player" style={{ background: el.bg }}>
-      <View className="player__nav">
+      <View className="player__nav" style={navBarStyle()}>
         <Text className="player__back" onClick={back}>‹</Text>
         <Text className="player__nav-title">正在播放</Text>
         <View className="player__nav-spacer" />
