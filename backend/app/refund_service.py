@@ -2,7 +2,7 @@
 代理分成、礼物码四件事始终一致。后台「确认退款」「同步退款状态」和
 退款结果通知回调三个入口共用，函数本身幂等。"""
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -36,12 +36,17 @@ def finalize_refund(db: Session, order: Order, operator: str) -> None:
         order.refund_by = operator
 
     # 回收会员权益：若用户当前会员来自购买且就是这条订单的套餐，降级为免费
-    user = db.query(User).filter(User.id == order.user_id).first()
-    if user and user.membership_source == "purchase" and user.membership_type == order.plan_id:
-        user.membership_type = "free"
-        user.membership_name = "听闻"
-        user.membership_expire_at = None
-        user.membership_source = ""
+    from app.user_merge import resolve_user
+    user = resolve_user(db, db.query(User).filter(User.id == order.user_id).first())
+    if (not order.is_gift and user and user.membership_source == "purchase"
+            and user.membership_type == order.plan_id):
+        if order.provider == "virtual" and order.duration_days > 0 and user.membership_expire_at:
+            user.membership_expire_at -= timedelta(days=order.duration_days)
+        if not user.membership_expire_at or user.membership_expire_at <= datetime.utcnow() or order.provider != "virtual":
+            user.membership_type = "free"
+            user.membership_name = "听闻"
+            user.membership_expire_at = None
+            user.membership_source = ""
 
     # 礼物单：买家退款后，未兑换的礼物码作废；已兑换的记日志由人工处理
     if order.is_gift and order.gift_code:

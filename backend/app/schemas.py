@@ -42,6 +42,8 @@ class PlanIn(BaseModel):
     featured: bool = False
     is_active: bool = True
     sort: int = 0
+    virtual_product: str = ""
+    virtual_price_synced: bool = False
 
 
 class PlanOut(PlanIn):

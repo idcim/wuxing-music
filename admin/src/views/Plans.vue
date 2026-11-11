@@ -11,6 +11,9 @@
           <template #default="{ row }">¥{{ row.price }}</template>
         </el-table-column>
         <el-table-column prop="duration_days" label="时长(天)" width="100" />
+        <el-table-column label="小程序虚拟支付" width="170">
+          <template #default="{ row }">{{ row.virtual_product ? (row.virtual_price_synced ? '价格已确认' : '待确认价格') : '未配置商品' }}</template>
+        </el-table-column>
         <el-table-column label="特性">
           <template #default="{ row }">
             <el-tag v-for="f in row.features" :key="f" size="small" class="tag">{{ f }}</el-tag>
@@ -39,6 +42,8 @@
           <el-form-item label="单位"><el-input v-model="form.unit" placeholder="/ 月" /></el-form-item>
           <el-form-item label="角标"><el-input v-model="form.badge" placeholder="热门" /></el-form-item>
           <el-form-item label="时长(天)"><el-input-number v-model="form.duration_days" :min="0" /></el-form-item>
+          <el-form-item label="虚拟商品编号"><el-input v-model="form.virtual_product" placeholder="微信虚拟支付商品 productId" /></el-form-item>
+          <el-form-item label="价格已同步"><el-switch v-model="form.virtual_price_synced" /><span class="hint">确认微信商品价格与本套餐现价一致后开启；改价或改编号会自动关闭</span></el-form-item>
           <el-form-item label="特性">
             <el-input v-model="featuresText" type="textarea" :rows="4" placeholder="每行一条特性" />
           </el-form-item>
@@ -85,7 +90,7 @@ function openEdit(row?: any) {
   isEdit.value = !!row;
   form.value = row
     ? { ...row }
-    : { id: '', name: '', en: '', price: 0, original: '', unit: '', badge: '', duration_days: 0, featured: false, is_active: true, sort: 0 };
+    : { id: '', name: '', en: '', price: 0, original: '', unit: '', badge: '', duration_days: 0, featured: false, is_active: true, sort: 0, virtual_product: '', virtual_price_synced: false };
   featuresText.value = row ? (row.features || []).join('\n') : '';
   dialog.value = true;
 }

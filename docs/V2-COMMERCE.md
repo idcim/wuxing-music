@@ -213,3 +213,11 @@ docker compose exec -T commerce-media-worker python -m app.commerce.monitor --ch
 - 本轮已截图检查课件与任务页的在线提示、查询栏及分页布局；筛选切换和重试的浏览器点击联调仍因浏览器指令超时待复核，对应接口回归已通过。截图中的 Worker 离线及私有存储未配置提示来自本地测试环境，不代表现网状态。
 
 技术依据：[微信虚拟支付](https://developers.weixin.qq.com/miniprogram/dev/platform-capabilities/business-capabilities/virtual-payment)、[查单](https://developers.weixin.qq.com/miniprogram/dev/server/API/VirtualPayment/api_query_order.html)、[退款](https://developers.weixin.qq.com/miniprogram/dev/server/API/VirtualPayment/api_refund_order.html)、[发货管理](https://developers.weixin.qq.com/miniprogram/dev/platform-capabilities/business-capabilities/order-shipping/order-shipping.html)、[确认收货组件](https://developers.weixin.qq.com/miniprogram/dev/platform-capabilities/business-capabilities/order-shipping/order-shipping-half)、[物流接口](https://developers.weixin.qq.com/miniprogram/dev/server/API/weixin-express/express-search/api_trace_waybill.html)。
+
+# 2026-11-11：音乐会员与礼物卡虚拟支付迁移
+
+小程序新购会员及礼物卡使用「课程商城配置」里的虚拟支付渠道。后台「会员套餐」为每个收费套餐填写微信商品编号，并确认微信侧价格与套餐价一致。修改价格或编号会自动取消确认；未配置渠道或套餐价格未确认时，服务端拒绝小程序新购。H5 公众号支付和存量普通支付订单按原渠道继续处理，退款按订单保存的 `provider` 分流。
+
+新会员订单保存分价、商品编号、时长和付款 OpenID 快照；支付推送和 Worker 补查校验后开通会员或发礼物码，履约同步单独重试。iOS 虚拟订单的退款由买家在 App Store 发起，后台等待渠道通知；其他终端整单退款需退款授权，买家可在「我的订单」刷新。生产启用前逐个套餐核对微信商品、价格和真机退款。
+
+本地使用独立临时 MySQL 和合成数据演练旧会员表加列、旧订单渠道默认值、商城备份恢复与任务恢复；该演练不使用生产数据或真实支付渠道。

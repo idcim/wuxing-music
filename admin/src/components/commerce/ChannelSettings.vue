@@ -70,7 +70,7 @@ onMounted(load);
       <el-collapse v-model="expanded">
         <el-collapse-item v-for="group in groups" :key="group" :name="group" :title="group">
           <p v-if="group === '实物支付与回调'">API 地址可沿用现有音乐支付回调域名。公钥与公钥 ID 来自微信支付商户平台的微信支付平台公钥配置，商户证书私钥仍在原微信支付设置中维护。</p>
-          <p v-if="group === '课程数字支付'">使用该小程序已开通的数字内容支付参数；音乐会员支付参数继续在原设置中维护。开通标记按已获准并完成验证的终端能力填写。</p>
+          <p v-if="group === '课程数字支付'">课程、音乐会员与礼物卡共用小程序虚拟支付渠道。各会员套餐还需在「会员套餐」填写商品编号，并确认微信侧价格已同步；H5 普通支付参数仍在原支付设置维护。</p>
           <p v-if="group === '私有课程 OSS'">只需填写独立的私有课程桶；Endpoint 和 AccessKey 留空即复用「设置中心 → 存储设置」的 OSS 账号。课程桶不能是公开音乐桶。若使用另一账号，可在这里单独填写 Endpoint 和一整对 AccessKey。上传时仍会核对桶 ACL 和对象版本。</p>
           <div v-if="group === '私有课程 OSS'" class="channel-settings__storage-check"><el-button :loading="checkingStorage" :disabled="saving || provisioning" @click="checkStorage">检查已保存私有桶的连接与 ACL</el-button><el-button :loading="provisioning" :disabled="saving || checkingStorage" @click="provisionStorage">创建并初始化私有桶</el-button><span v-if="storageCheck">{{ storageCheck }}</span></div>
           <p v-if="group === '实物发货'">微信发货和收货同步复用已配置的小程序身份；快递100账号在下方单独维护。附加编码映射通常保留 {}，仅为未内置的公司填写，例如 {"CUSTOM":"shunfeng"}。</p>

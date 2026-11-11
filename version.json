@@ -1,16 +1,16 @@
 {
   "current": {
-    "app": "2.0.0-rc.1",
+    "app": "2.0.0-rc.2",
     "api": "1.3.0"
   },
   "channels": {
     "weapp": {
-      "version": "2.0.0-rc.1",
+      "version": "2.0.0-rc.2",
       "published": "unconfirmed",
       "note": "version 为源码版本；线上已发布的包版本待人工确认（不随服务器自动部署，需 build:weapp + 开发者工具上传）。发布后请把实际版本填进 published。欠账清单见 docs/WEAPP-TODO.md"
     },
     "h5": {
-      "version": "2.0.0-rc.1",
+      "version": "2.0.0-rc.2",
       "note": "H5 端，随 master 自动部署。微信内走公众号授权，微信外浏览器走开放平台扫码登录"
     },
     "android": {
@@ -29,6 +29,14 @@
     }
   },
   "changelog": [
+    {
+      "version": "2.0.0-rc.2",
+      "date": "2026-11-11",
+      "notes": [
+        "小程序音乐会员与礼物卡新购接入虚拟支付，缺渠道或套餐价格同步时关闭新购；H5 与历史订单保留原渠道",
+        "新订单保存渠道与权益快照，通知和补查后幂等开通；退款按渠道处理，仍需真机支付退款复核"
+      ]
+    },
     {
       "version": "2.0.0-rc.1",
       "date": "2026-10-25",

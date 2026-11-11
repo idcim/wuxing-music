@@ -25,6 +25,8 @@ def _to_dict(p: Plan) -> dict:
         "featured": p.featured,
         "is_active": p.is_active,
         "sort": p.sort,
+        "virtual_product": p.virtual_product,
+        "virtual_price_synced": p.virtual_price_synced,
     }
 
 
@@ -44,6 +46,8 @@ def upsert_plan(
     data = body.model_dump()
     data["features"] = json.dumps(body.features, ensure_ascii=False)
     if plan:
+        if plan.price != body.price or plan.virtual_product != body.virtual_product:
+            data["virtual_price_synced"] = False
         for k, v in data.items():
             setattr(plan, k, v)
     else:

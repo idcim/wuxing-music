@@ -85,10 +85,14 @@ def seed_commerce(engine):
     from app.commerce import aftersales, common, schemas, trading
     from app.commerce.models import (Address, Course, Event, Job, Lesson, MediaAsset,
                                      Order, Product, Progress, Shipment, Sku)
-    with Session(engine) as db:
+    with patch.object(common, "sale_ready", return_value=True), Session(engine) as db:
         cfg = {**common.DEFAULTS, "courses_visible": True, "courses_sale": True,
                "shop_visible": True, "shop_sale": True, "provinces": ["湖北省"], "shipping_fen": 600}
-        db.add(Setting(key="commerce_config", value=json.dumps(cfg)))
+        existing = db.query(Setting).filter_by(key="commerce_config").first()
+        if existing:
+            existing.value = json.dumps(cfg)
+        else:
+            db.add(Setting(key="commerce_config", value=json.dumps(cfg)))
         db.add(Address(id=100, user_id=1, name="演练", phone="13800000000", province="湖北省",
                        city="武汉市", detail="合成地址，无真实收件人"))
         db.add(Product(id=100, title="演练茶", cover="/synthetic-tea.jpg", intro="合成商品", status="published"))
@@ -154,19 +158,21 @@ def rehearse(folder, container, password, port):
             if time.monotonic() >= deadline:
                 raise RuntimeError("临时 MySQL TCP 登录就绪超时") from None
             time.sleep(1)
-    names = ["wuxing_rehearsal_source", "wuxing_rehearsal_legacy_restore", "wuxing_rehearsal_v2_restore"]
+    names = ["wuxing_rehearsal_source", "wuxing_rehearsal_legacy_restore",
+             "wuxing_rehearsal_v2_restore", "wuxing_rehearsal_member_columns"]
     with admin.begin() as connection:
         for name in names:
             connection.execute(text(f"CREATE DATABASE `{name}` CHARACTER SET utf8mb4"))
     for name in names:
         engines.append(create_engine(url.set(database=name)))
-    source, legacy_restore, v2_restore = engines[1:]
+    source, legacy_restore, v2_restore, member_columns = engines[1:]
     # 导入应用前离开仓库工作目录，明确覆盖数据库地址，不读取仓库 .env。
     os.environ["DATABASE_URL"] = url.set(database=names[0]).render_as_string(hide_password=False)
     sys.path.insert(0, str(ROOT / "backend"))
     from app.commerce.migrate import upgrade
     from app.commerce.models import SCHEMA_VERSION, Job, LogisticsQuery, Order, Progress, SchemaVersion, Shipment, Sku
     from app.commerce import logistics, worker
+    from app import main as app_main
     from sqlalchemy.orm import Session, sessionmaker
 
     def copy_database(source_name, target_name, path):
@@ -195,6 +201,19 @@ def rehearse(folder, container, password, port):
 
     try:
         print("MySQL 已就绪；备份恢复旧业务数据并执行真实迁移", flush=True)
+        # 单独模拟升级前的会员表；验证真实 MySQL 上加列默认值及旧订单渠道归属。
+        with member_columns.begin() as connection:
+            connection.execute(text("CREATE TABLE app_order (id INT PRIMARY KEY, order_no VARCHAR(64), amount FLOAT)"))
+            connection.execute(text("INSERT INTO app_order VALUES (1, 'SYNTHETIC-OLD', 18)"))
+            connection.execute(text("CREATE TABLE plan (id VARCHAR(16) PRIMARY KEY, price FLOAT)"))
+            connection.execute(text("INSERT INTO plan VALUES ('month', 18)"))
+        with patch.object(app_main, "engine", member_columns):
+            app_main._auto_migrate()
+        with member_columns.connect() as connection:
+            old_provider = connection.execute(text("SELECT provider FROM app_order WHERE id=1")).scalar()
+            old_synced = connection.execute(text("SELECT virtual_price_synced FROM plan WHERE id='month'")).scalar()
+            if old_provider != "wxpay" or old_synced != 0:
+                raise RuntimeError("旧会员订单渠道或套餐价格同步默认值迁移失败")
         seed_legacy(source)
         old = snapshot(source)
         legacy_dump = copy_database(names[0], names[1], folder / "legacy.sql")
@@ -249,7 +268,8 @@ def rehearse(folder, container, password, port):
                            "v2_restore_exact", "v2_migration_preserves_operations", "progress_restored",
                            "expired_lease_recovers", "unpaid_order_closed", "reserved_inventory_released",
                            "failed_history_preserved", "v2_media_version_upgrade", "v2_upgrade_preserves_other_domains",
-                           "logistics_cache_restored", "logistics_cooldown_prevents_requery"]}
+                           "logistics_cache_restored", "logistics_cooldown_prevents_requery",
+                           "member_provider_default_migrated"]}
     finally:
         for engine in engines:
             engine.dispose()

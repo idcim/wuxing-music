@@ -1297,11 +1297,46 @@ def _resolve_pay_payer(db: Session, user: User, channel: str, order: Order):
 class CreateOrderIn(BaseModel):
     planId: str
     channel: str = "weapp"   # weapp（小程序）| h5（公众号网页 JSAPI）
+    code: str = ""
+    platform: str = "other"
+
+
+class RefundCodeIn(BaseModel):
+    orderNo: str
+    code: str
+
+
+@router.post("/pay/refund-authorize")
+def mp_refund_authorize(body: RefundCodeIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    order = db.query(Order).filter_by(order_no=body.orderNo, user_id=user.id, provider="virtual").first()
+    if not order or order.status != "refunding" or order.payment_platform == "ios":
+        raise HTTPException(404, "当前订单无需刷新退款授权")
+    from app import member_virtual
+    member_virtual.refresh_refund_credential(db, order, body.code)
+    return ok({"updated": True})
 
 
 @router.get("/pay/purchase-status")
-def mp_purchase_status(db: Session = Depends(get_db)):
-    return ok({"enabled": _pay_cfg(db).get("purchase_enabled", True)})
+def mp_purchase_status(channel: str = "weapp", platform: str = "other", db: Session = Depends(get_db)):
+    enabled = _pay_cfg(db).get("purchase_enabled", True)
+    if channel == "weapp":
+        from app import member_virtual
+        virtual_ready, virtual_config = member_virtual.ready(db)
+        enabled = enabled and virtual_ready and (platform != "ios" or virtual_config.commerce_virtual_ios_approved)
+    return ok({"enabled": bool(enabled)})
+
+
+@router.get("/pay/order-status")
+def mp_pay_order_status(orderNo: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    order = db.query(Order).filter_by(order_no=orderNo, user_id=user.id, is_gift=False).first()
+    if not order:
+        raise HTTPException(404, "订单不存在")
+    if order.provider == "virtual" and order.status == "pending":
+        from app import member_virtual
+        result = member_virtual.query(db, order)
+        if result["paid"]:
+            member_virtual.settle(db, order, result)
+    return ok({"status": order.status, "membership": _user_dict(user)["membership"] if order.status == "paid" else None})
 
 
 @router.post("/pay/create-order")
@@ -1313,10 +1348,30 @@ def mp_create_order(
     plan = db.query(Plan).filter(Plan.id == body.planId).first()
     if not plan:
         raise HTTPException(status_code=404, detail="套餐不存在")
+    if body.channel not in ("weapp", "h5") or body.platform not in ("ios", "android", "other"):
+        raise HTTPException(status_code=422, detail="支付终端无效")
 
     cfg = _pay_cfg(db)
     if not cfg.get("purchase_enabled", True):
         raise HTTPException(status_code=400, detail="暂未开放")
+    if body.channel == "weapp":
+        from app import member_virtual
+        if not plan.is_active or not member_virtual.ready(db, plan)[0]:
+            raise HTTPException(status_code=409, detail="该套餐的小程序虚拟支付尚未开通或价格未同步")
+        if not user.openid:
+            raise HTTPException(status_code=401, detail="请先微信登录")
+        order = Order(order_no=_gen_order_no(), user_id=user.id, plan_id=plan.id,
+            plan_name=plan.name, amount=plan.price, amount_fen=member_virtual.price_fen(plan),
+            duration_days=plan.duration_days, provider="virtual", payment_product=plan.virtual_product,
+            payer_openid=user.openid, status="pending")
+        params = member_virtual.create_params(db, order, body.code, body.platform)
+        db.add(order)
+        db.flush()
+        from app.commerce.common import enqueue
+        enqueue(db, f"member-payment:{order.id}", "member_payment", {"order_id": order.id})
+        db.commit()
+        return ok({"dev_opened": False, "orderNo": order.order_no,
+                   "provider": "virtual", "payParams": params})
     pay_enabled = bool(cfg.get("enabled")) and bool(cfg.get("wx_mch_id")) and bool(cfg.get("wx_key_pem"))
 
     # 创建订单（pending）
@@ -1401,13 +1456,16 @@ async def mp_pay_callback(request: Request, db: Session = Depends(get_db)):
     if not order:
         logger.warning("支付回调订单不存在：%s", order_no)
         return JSONResponse(content={"code": "SUCCESS", "message": "已接收"})
+    if order.provider == "virtual":
+        logger.warning("普通支付回调不能处理虚拟订单：%s", order_no)
+        return fail
 
     if order.status == "paid":  # 幂等：重复回调直接成功
         return JSONResponse(content={"code": "SUCCESS", "message": "已处理"})
 
     # 金额校验（分）
     paid_fen = (data.get("amount") or {}).get("total")
-    if paid_fen is not None and int(paid_fen) != int(round(order.amount * 100)):
+    if type(paid_fen) is not int or paid_fen != int(round(order.amount * 100)):
         logger.warning("支付回调金额不符：订单 %s 期望 %s 实付 %s", order_no, order.amount, paid_fen)
         return fail
 
@@ -1454,6 +1512,9 @@ async def mp_pay_refund_callback(request: Request, db: Session = Depends(get_db)
     if not order:
         logger.warning("退款回调订单不存在：%s", out_refund_no)
         return JSONResponse(content={"code": "SUCCESS", "message": "已接收"})
+    if order.provider == "virtual":
+        logger.warning("普通退款回调不能处理虚拟订单：%s", order.order_no)
+        return fail
 
     if data.get("refund_status") == "SUCCESS" and order.status == "refunding":
         refund_service.finalize_refund(db, order, order.refund_by or "")
@@ -1494,6 +1555,8 @@ def _issue_gift_cdkey(db: Session, plan: Plan, order_no: str) -> str:
 class GiftOrderIn(BaseModel):
     planId: str
     channel: str = "weapp"   # weapp（小程序）| h5（公众号网页 JSAPI）
+    code: str = ""
+    platform: str = "other"
 
 
 @router.post("/gift/create-order")
@@ -1506,10 +1569,30 @@ def mp_gift_create_order(
     plan = db.query(Plan).filter(Plan.id == body.planId).first()
     if not plan or plan.id == "free":
         raise HTTPException(status_code=404, detail="套餐不存在")
+    if body.channel not in ("weapp", "h5") or body.platform not in ("ios", "android", "other"):
+        raise HTTPException(status_code=422, detail="支付终端无效")
 
     cfg = _pay_cfg(db)
     if not cfg.get("purchase_enabled", True):
         raise HTTPException(status_code=400, detail="暂未开放")
+    if body.channel == "weapp":
+        from app import member_virtual
+        if not plan.is_active or not member_virtual.ready(db, plan)[0]:
+            raise HTTPException(status_code=409, detail="该礼物卡的小程序虚拟支付尚未开通或价格未同步")
+        if not user.openid:
+            raise HTTPException(status_code=401, detail="请先微信登录")
+        order = Order(order_no=_gen_order_no(), user_id=user.id, plan_id=plan.id,
+            plan_name=plan.name, amount=plan.price, amount_fen=member_virtual.price_fen(plan),
+            duration_days=plan.duration_days, provider="virtual", payment_product=plan.virtual_product,
+            payer_openid=user.openid, status="pending", is_gift=True)
+        params = member_virtual.create_params(db, order, body.code, body.platform)
+        db.add(order)
+        db.flush()
+        from app.commerce.common import enqueue
+        enqueue(db, f"member-payment:{order.id}", "member_payment", {"order_id": order.id})
+        db.commit()
+        return ok({"dev_opened": False, "orderNo": order.order_no,
+                   "provider": "virtual", "payParams": params, "planName": plan.name})
     pay_enabled = bool(cfg.get("enabled")) and bool(cfg.get("wx_mch_id")) and bool(cfg.get("wx_key_pem"))
 
     order = Order(
@@ -1581,6 +1664,11 @@ def mp_gift_code(
     ).first()
     if not order:
         raise HTTPException(status_code=404, detail="订单不存在")
+    if order.provider == "virtual" and order.status == "pending":
+        from app import member_virtual
+        result = member_virtual.query(db, order)
+        if result["paid"]:
+            member_virtual.settle(db, order, result)
     return ok({
         "status": order.status,
         "giftCode": order.gift_code,
@@ -1610,6 +1698,8 @@ def mp_my_orders(
             "planName": o.plan_name,
             "amount": o.amount,
             "status": o.status,
+            "provider": o.provider or "wxpay",
+            "paymentPlatform": o.payment_platform or "",
             "isGift": bool(o.is_gift),
             "giftCode": o.gift_code if o.is_gift else "",
             "paidAt": o.paid_at.isoformat() if o.paid_at else None,

@@ -30,6 +30,8 @@ def _to_dict(o: Order) -> dict:
         "plan_id": o.plan_id,
         "plan_name": o.plan_name,
         "amount": o.amount,
+        "provider": o.provider or "wxpay",
+        "payment_platform": o.payment_platform or "",
         "status": o.status,
         "transaction_id": o.transaction_id,   # 微信支付单号（商户平台按它查账）
         "paid_at": o.paid_at.isoformat() if o.paid_at else None,
@@ -111,6 +113,8 @@ def start_refund(
     amount = body.amount if body.amount is not None else o.amount
     if amount <= 0 or amount > o.amount:
         raise HTTPException(status_code=400, detail="退款金额不合法")
+    if o.provider == "virtual" and int(round(amount * 100)) != o.amount_fen:
+        raise HTTPException(status_code=400, detail="虚拟会员与礼物卡仅支持整单退款")
 
     o.status = "refunding"
     o.refund_amount = amount
@@ -139,6 +143,25 @@ def confirm_refund(
         raise HTTPException(status_code=404, detail="订单不存在")
     if o.status != "refunding":
         raise HTTPException(status_code=400, detail="仅退款中订单可确认")
+    if o.provider == "virtual":
+        from app import member_virtual
+        from app.commerce.providers import virtual_request
+        result = member_virtual.query(db, o)
+        if result["refunded"] and result["transaction_id"] == o.transaction_id:
+            refund_service.finalize_refund(db, o, admin.username)
+            return ok(_to_dict(o))
+        if o.payment_platform == "ios":
+            raise HTTPException(409, "iOS 虚拟支付请买家在 App Store 申请退款，等待渠道通知")
+        virtual_request(db, "/xpay/refund_order", dict(openid=o.payer_openid, env=0,
+            order_id=o.order_no, refund_order_id="RF" + o.order_no,
+            refund_fee=o.amount_fen, left_fee=o.amount_fen, refund_reason="3",
+            req_from="2", biz_meta=o.refund_reason or "会员退款"),
+            session_key=member_virtual.refund_session_key(o))
+        result = member_virtual.query(db, o)
+        if result["refunded"] and result["transaction_id"] == o.transaction_id:
+            refund_service.finalize_refund(db, o, admin.username)
+            return ok(_to_dict(o))
+        return ok({**_to_dict(o), "refund_state": "PROCESSING"})
 
     # 真实退款：支付已配置且有微信支付单号时，调微信退款 API；
     # 否则视为开发期/线下退款，仅改状态（兜底）。
@@ -184,6 +207,13 @@ def sync_refund(
         raise HTTPException(status_code=404, detail="订单不存在")
     if o.status != "refunding":
         raise HTTPException(status_code=400, detail="仅退款中订单可同步")
+    if o.provider == "virtual":
+        from app import member_virtual
+        result = member_virtual.query(db, o)
+        if result["refunded"] and result["transaction_id"] == o.transaction_id:
+            refund_service.finalize_refund(db, o, admin.username)
+            return ok({**_to_dict(o), "refund_state": "SUCCESS"})
+        return ok({**_to_dict(o), "refund_state": "PROCESSING"})
 
     cfg = _pay_cfg(db)
     pay_enabled = bool(cfg.get("enabled")) and bool(cfg.get("wx_mch_id")) and bool(cfg.get("wx_key_pem"))

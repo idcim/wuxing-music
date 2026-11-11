@@ -22,6 +22,9 @@
           </template>
         </el-table-column>
         <el-table-column prop="plan_name" label="套餐" width="90" />
+        <el-table-column label="支付渠道" width="110">
+          <template #default="{ row }">{{ row.provider === 'virtual' ? '小程序虚拟' : '微信普通' }}</template>
+        </el-table-column>
         <el-table-column label="金额" width="90">
           <template #default="{ row }">¥{{ row.amount }}</template>
         </el-table-column>
@@ -64,6 +67,7 @@
           </el-descriptions-item>
           <el-descriptions-item label="套餐">{{ detail.plan_name }}（{{ detail.plan_id }}）</el-descriptions-item>
           <el-descriptions-item label="金额">¥{{ detail.amount }}</el-descriptions-item>
+          <el-descriptions-item label="支付渠道">{{ detail.provider === 'virtual' ? `小程序虚拟（${detail.payment_platform || '其他终端'}）` : '微信普通' }}</el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag :type="statusType(detail.status)" size="small">{{ statusText(detail.status) }}</el-tag>
           </el-descriptions-item>
@@ -96,14 +100,14 @@
           <el-form-item label="订单号">{{ current.order_no }}</el-form-item>
           <el-form-item label="订单金额">¥{{ current.amount }}</el-form-item>
           <el-form-item label="退款金额">
-            <el-input-number v-model="refundForm.amount" :min="0.01" :max="current.amount" :precision="2" />
+            <el-input-number v-model="refundForm.amount" :min="0.01" :max="current.amount" :precision="2" :disabled="current.provider === 'virtual'" />
           </el-form-item>
           <el-form-item label="退款原因">
             <el-input v-model="refundForm.reason" type="textarea" :rows="3" placeholder="选填" />
           </el-form-item>
         </BusinessForm>
         <el-alert type="info" :closable="false" show-icon
-          title="发起后订单转为「退款中」，确认退款后将回收该用户会员权益。" />
+          :title="current.provider === 'virtual' ? '虚拟订单仅支持整单退款；iOS 需买家在 App Store 申请退款，最终以渠道通知为准。' : '发起后订单转为「退款中」，确认退款后将回收该用户会员权益。'" />
         <template #footer>
           <el-button @click="refundDialog = false">取消</el-button>
           <el-button type="warning" :loading="submitting" @click="onRefund">发起退款</el-button>

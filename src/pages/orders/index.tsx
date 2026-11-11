@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
-import { getMyOrders, type MyOrder } from '@/services/pay';
+import { getMyOrders, refreshMemberRefundCredential, type MyOrder } from '@/services/pay';
 import { useUserStore } from '@/stores/user';
 import Icon from '@/components/Icon';
 import PosterShare from '@/components/PosterShare';
@@ -120,6 +120,13 @@ export default function Orders() {
               )}
 
               <Text className="orders__item-no">订单号 {o.orderNo}</Text>
+              {isWeapp && o.provider === 'virtual' && o.status === 'refunding' && o.paymentPlatform !== 'ios' && (
+                <Text className="orders__item-no" onClick={() => {
+                  refreshMemberRefundCredential(o.orderNo)
+                    .then(() => Taro.showToast({ title: '退款授权已更新', icon: 'success' }))
+                    .catch((e: any) => Taro.showToast({ title: e?.message || '更新失败', icon: 'none' }));
+                }}>退款处理中？点击刷新微信授权</Text>
+              )}
             </View>
           ))}
         </View>

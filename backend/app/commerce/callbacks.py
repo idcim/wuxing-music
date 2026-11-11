@@ -136,6 +136,14 @@ def accept_virtual(raw, query, db):
         raise HTTPException(401, "数字支付消息解密失败") from exc
     event = message.findtext("Event", "")
     order = db.query(Order).filter_by(order_no=message.findtext("OutTradeNo", ""), provider="virtual").first()
+    if not order and event in ("xpay_goods_deliver_notify", "xpay_refund_notify"):
+        from app.models import Order as MemberOrder
+        from app import member_virtual
+        member_order = db.query(MemberOrder).filter_by(
+            order_no=message.findtext("OutTradeNo", ""), provider="virtual").first()
+        if member_order:
+            member_virtual.receive(db, member_order, event, message)
+            return Response(content="<xml><ErrCode>0</ErrCode><ErrMsg>success</ErrMsg></xml>", media_type="application/xml")
     if event in ("xpay_goods_deliver_notify", "xpay_refund_notify"):
         if not order:
             raise HTTPException(404, "数字支付订单不存在")

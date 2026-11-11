@@ -11,6 +11,7 @@ interface CreateOrderResult {
   orderNo?: string;
   membership?: Membership;
   payParams?: PayParams;      // 生产期微信支付参数
+  provider?: 'wxpay' | 'virtual';
 }
 
 // 仅 mock / 兜底用；真实天数与名称以后端套餐为准
@@ -50,11 +51,11 @@ function buildMembership(planId: PlanId): Membership {
 // 超时返回 null，**绝不本地推算一个会员态冒充成功**——回调可能压根没到
 // （验签失败、回调地址不通、金额不符），伪造出来的「开通成功」会让用户
 // 以为已生效，直到下一次 fetchProfile 才被打回原形。
-async function pollMembership(planId: PlanId): Promise<Membership | null> {
+async function pollMembership(orderNo: string): Promise<Membership | null> {
   for (let i = 0; i < 8; i++) {
     try {
-      const m = await request<Membership & { isPremium?: boolean }>('/api/mp/membership');
-      if (m && m.type === planId) return m;
+      const order = await request<{ status: string; membership?: Membership }>(`/api/mp/pay/order-status?orderNo=${encodeURIComponent(orderNo)}`);
+      if (order.status === 'paid' && order.membership) return order.membership;
     } catch {
       // 忽略，继续重试
     }
@@ -84,6 +85,19 @@ async function invokePay(payParams: PayParams): Promise<void> {
   });
 }
 
+async function virtualOrderIdentity(): Promise<{ code: string; platform: string }> {
+  if (!Taro.canIUse('requestVirtualPayment')) throw new Error('当前微信版本暂不支持虚拟支付，请更新微信');
+  const platform = Taro.getDeviceInfo().platform;
+  return { code: (await Taro.login()).code, platform: platform === 'ios' ? 'ios' : platform === 'android' ? 'android' : 'other' };
+}
+
+async function invokeVirtualPay(payParams: Record<string, unknown>): Promise<void> {
+  const wx = (globalThis as unknown as { wx: { requestVirtualPayment: (params: Record<string, unknown>) => void } }).wx;
+  await new Promise<void>((resolve, reject) => wx.requestVirtualPayment({
+    ...payParams, success: () => resolve(), fail: reject
+  }));
+}
+
 // 识别用户主动取消：小程序 requestPayment 取消 errMsg 含 'cancel'；
 // H5 chooseWXPay 取消无统一标识，尽量从 errMsg / message 中识别。
 function isPayCancel(err: any): boolean {
@@ -111,7 +125,8 @@ function payFailure(err: any): { ok: false; reason: 'cancel' | 'fail' | 'auth'; 
 
 export async function getPurchaseStatus(): Promise<boolean> {
   if (USE_MOCK) return true;
-  const res = await request<{ enabled: boolean }>('/api/mp/pay/purchase-status', { auth: false });
+  const platform = isWeapp ? Taro.getDeviceInfo().platform : 'other';
+  const res = await request<{ enabled: boolean }>(`/api/mp/pay/purchase-status?channel=${isH5 ? 'h5' : 'weapp'}&platform=${platform}`, { auth: false });
   return res.enabled;
 }
 
@@ -136,9 +151,10 @@ export async function purchasePlan(planId: PlanId): Promise<PayOutcome> {
   }
 
   try {
+    const identity = isWeapp ? await virtualOrderIdentity() : { code: '', platform: 'other' };
     const res = await request<CreateOrderResult>('/api/mp/pay/create-order', {
       method: 'POST',
-      data: { planId, channel: isH5 ? 'h5' : 'weapp' }
+      data: { planId, channel: isH5 ? 'h5' : 'weapp', ...identity }
     });
 
     // 开发期：后端直接开通，返回 dev_opened + 最新会员态，无需拉起支付
@@ -148,9 +164,11 @@ export async function purchasePlan(planId: PlanId): Promise<PayOutcome> {
 
     // 生产：后端返回微信支付参数 → 分端拉起支付 → 取最新会员态
     if (res.payParams) {
-      await invokePay(res.payParams);
+      if (res.provider === 'virtual') await invokeVirtualPay(res.payParams as unknown as Record<string, unknown>);
+      else if (isH5) await invokePay(res.payParams);
+      else throw new Error('小程序支付渠道未升级，请稍后重试');
       // 支付成功后会员由微信回调异步开通，可能略有延迟：短轮询取最新会员态
-      const membership = await pollMembership(planId);
+      const membership = await pollMembership(res.orderNo || '');
       if (membership) return { ok: true, membership };
       return {
         ok: false,
@@ -172,6 +190,8 @@ export interface MyOrder {
   planName: string;
   amount: number;
   status: string;          // pending/paid/refunding/refunded/failed/closed
+  provider: 'wxpay' | 'virtual';
+  paymentPlatform: string;
   isGift: boolean;
   giftCode: string;
   paidAt: string | null;
@@ -185,6 +205,12 @@ export async function getMyOrders(): Promise<MyOrder[]> {
   return request<MyOrder[]>('/api/mp/orders');
 }
 
+export async function refreshMemberRefundCredential(orderNo: string): Promise<void> {
+  if (!isWeapp) return;
+  const code = (await Taro.login()).code;
+  await request('/api/mp/pay/refund-authorize', { method: 'POST', data: { orderNo, code } });
+}
+
 // ── 买卡送人（礼物码）──
 interface GiftOrderResult {
   dev_opened?: boolean;
@@ -192,6 +218,7 @@ interface GiftOrderResult {
   giftCode?: string;
   planName?: string;
   payParams?: PayParams;
+  provider?: 'wxpay' | 'virtual';
 }
 
 export type GiftOutcome =
@@ -229,9 +256,10 @@ export async function purchaseGift(planId: PlanId): Promise<GiftOutcome> {
   }
 
   try {
+    const identity = isWeapp ? await virtualOrderIdentity() : { code: '', platform: 'other' };
     const res = await request<GiftOrderResult>('/api/mp/gift/create-order', {
       method: 'POST',
-      data: { planId, channel: isH5 ? 'h5' : 'weapp' }
+      data: { planId, channel: isH5 ? 'h5' : 'weapp', ...identity }
     });
 
     // 开发期：直接返回礼物码
@@ -241,7 +269,9 @@ export async function purchaseGift(planId: PlanId): Promise<GiftOutcome> {
 
     // 生产：分端拉起支付 → 轮询礼物码
     if (res.payParams && res.orderNo) {
-      await invokePay(res.payParams);
+      if (res.provider === 'virtual') await invokeVirtualPay(res.payParams as unknown as Record<string, unknown>);
+      else if (isH5) await invokePay(res.payParams);
+      else throw new Error('小程序支付渠道未升级，请稍后重试');
       const r = await pollGiftCode(res.orderNo);
       if (r) return { ok: true, giftCode: r.giftCode, planName: r.planName };
       return {

@@ -150,6 +150,8 @@ class Plan(Base):
     featured: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort: Mapped[int] = mapped_column(Integer, default=0)
+    virtual_product: Mapped[str] = mapped_column(String(128), default="")
+    virtual_price_synced: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class User(Base):
@@ -226,6 +228,13 @@ class Order(Base):
     plan_id: Mapped[str] = mapped_column(String(16))
     plan_name: Mapped[str] = mapped_column(String(32), default="")
     amount: Mapped[float] = mapped_column(Float)
+    amount_fen: Mapped[int] = mapped_column(Integer, default=0)
+    provider: Mapped[str] = mapped_column(String(16), default="wxpay")
+    payment_product: Mapped[str] = mapped_column(String(128), default="")
+    payer_openid: Mapped[str] = mapped_column(String(64), default="")
+    payment_platform: Mapped[str] = mapped_column(String(16), default="")
+    refund_credential: Mapped[str] = mapped_column(Text, default="")
+    duration_days: Mapped[int] = mapped_column(Integer, default=0)
     # pending/paid/refunding/refunded/failed/closed
     status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
     transaction_id: Mapped[str] = mapped_column(String(64), default="")  # 微信支付单号

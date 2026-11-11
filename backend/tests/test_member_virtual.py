@@ -1,0 +1,166 @@
+import unittest
+from unittest.mock import patch
+from xml.etree import ElementTree as ET
+
+from fastapi import HTTPException
+from sqlalchemy import create_engine
+from sqlalchemy import inspect, text
+from sqlalchemy.orm import Session
+
+from app import member_virtual, refund_service
+from app.commerce.models import Base as CommerceBase, Job
+from app.models import Base, Cdkey, Order, Plan, User
+from app.models import Setting
+
+
+class MemberVirtualTests(unittest.TestCase):
+    def setUp(self):
+        self.engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(self.engine)
+        CommerceBase.metadata.create_all(self.engine)
+        self.db = Session(self.engine)
+        self.user = User(openid="openid-1")
+        self.plan = Plan(id="month", name="月悦", price=18, duration_days=30,
+            virtual_product="music-month", virtual_price_synced=True)
+        self.db.add_all([self.user, self.plan])
+        self.db.commit()
+
+    def tearDown(self):
+        self.db.close()
+        self.engine.dispose()
+
+    def order(self, gift=False):
+        order = Order(order_no="M202611110001" + str(int(gift)), user_id=self.user.id,
+            plan_id="month", plan_name="月悦", amount=18, amount_fen=1800,
+            duration_days=30, payment_product="music-month", payer_openid="openid-1",
+            provider="virtual", status="pending", is_gift=gift)
+        self.db.add(order)
+        self.db.commit()
+        return order
+
+    def test_membership_settlement_is_idempotent_and_uses_snapshot(self):
+        order = self.order()
+        self.plan.duration_days = 90
+        with patch("app.agent_service.record_commission"):
+            member_virtual.settle(self.db, order, {"paid": True, "amount_fen": 1800, "transaction_id": "tx-1"})
+            first_expiry = self.user.membership_expire_at
+            member_virtual.settle(self.db, order, {"paid": True, "amount_fen": 1800, "transaction_id": "tx-1"})
+        self.assertEqual(self.user.membership_expire_at, first_expiry)
+        self.assertTrue(29 <= (first_expiry - order.paid_at).days <= 30)
+        self.assertEqual(self.db.query(Job).filter_by(kind="member_delivery").count(), 1)
+
+    def test_wrong_amount_cannot_grant(self):
+        order = self.order()
+        with self.assertRaises(HTTPException):
+            member_virtual.settle(self.db, order, {"paid": True, "amount_fen": 1799, "transaction_id": "tx-2"})
+        self.assertEqual(order.status, "pending")
+        self.assertIsNone(self.user.membership_expire_at)
+
+    def test_gift_settlement_issues_one_code_without_granting_buyer(self):
+        order = self.order(gift=True)
+        with patch("app.agent_service.record_commission"):
+            member_virtual.settle(self.db, order, {"paid": True, "amount_fen": 1800, "transaction_id": "tx-3"})
+            member_virtual.settle(self.db, order, {"paid": True, "amount_fen": 1800, "transaction_id": "tx-3"})
+        self.assertEqual(self.db.query(Cdkey).count(), 1)
+        self.assertEqual(self.db.query(Cdkey).one().code, order.gift_code)
+        self.assertIsNone(self.user.membership_expire_at)
+
+    def test_channel_order_amount_must_match_before_grant(self):
+        order = self.order()
+        data = {"order": {"status": 2, "order_id": order.order_no,
+            "order_fee": 1800, "paid_fee": 1799, "wx_order_id": "tx"}}
+        with patch("app.commerce.providers.virtual_request", return_value=data):
+            with self.assertRaises(HTTPException):
+                member_virtual.query(self.db, order)
+
+    def test_push_product_and_openid_must_match(self):
+        order = self.order()
+        data = {"paid": True, "amount_fen": 1800, "transaction_id": "tx"}
+        with patch("app.member_virtual.query", return_value=data):
+            for openid, product in [("other", "music-month"), ("openid-1", "other")]:
+                message = ET.fromstring(f"<xml><OpenId>{openid}</OpenId><GoodsInfo>"
+                    f"<ProductId>{product}</ProductId><Quantity>1</Quantity></GoodsInfo></xml>")
+                with self.assertRaises(HTTPException):
+                    member_virtual.receive(self.db, order, "xpay_goods_deliver_notify", message)
+        self.assertEqual(order.status, "pending")
+
+    def test_weapp_purchase_fails_closed_without_virtual_channel(self):
+        from app.routers.mp import CreateOrderIn, mp_create_order
+        with self.assertRaises(HTTPException) as caught:
+            mp_create_order(CreateOrderIn(planId="month", channel="weapp"), self.user, self.db)
+        self.assertEqual(caught.exception.status_code, 409)
+        self.assertEqual(self.db.query(Order).count(), 0)
+
+    def test_virtual_payment_params_require_matching_wechat_identity(self):
+        from types import SimpleNamespace
+        order = self.order()
+        cfg = SimpleNamespace(commerce_virtual_ios_approved=True,
+            commerce_virtual_offer_id="offer", commerce_virtual_app_key="app-key")
+        response = SimpleNamespace(json=lambda: {"openid": "another-user", "session_key": "session"},
+            raise_for_status=lambda: None)
+        with patch("app.member_virtual.ready", return_value=(True, cfg)), \
+                patch("app.routers.mp._mp_cfg", return_value={"app_id": "app", "app_secret": "secret"}), \
+                patch("app.member_virtual.httpx.get", return_value=response):
+            with self.assertRaises(HTTPException) as caught:
+                member_virtual.create_params(self.db, order, "code", "android")
+        self.assertEqual(caught.exception.status_code, 401)
+        self.assertFalse(order.refund_credential)
+
+    def test_h5_purchase_keeps_ordinary_payment(self):
+        import json
+        from app.routers.mp import CreateOrderIn, mp_create_order
+        self.user.oa_openid = "oa-user"
+        self.db.add(Setting(key="pay_config", value=json.dumps({"enabled": True,
+            "wx_mch_id": "merchant", "wx_key_pem": "test-key", "h5_app_id": "oa-app"})))
+        self.db.commit()
+        with patch("app.routers.mp.wxpay.create_jsapi_order", return_value={"package": "prepay_id=test"}):
+            result = mp_create_order(CreateOrderIn(planId="month", channel="h5"), self.user, self.db)
+        self.assertEqual(result["data"]["payParams"]["package"], "prepay_id=test")
+        self.assertEqual(self.db.query(Order).one().provider, "wxpay")
+
+    def test_virtual_refund_removes_only_its_granted_days(self):
+        first = self.order()
+        second = Order(order_no="M202611110002", user_id=self.user.id, plan_id="month",
+            plan_name="月悦", amount=18, amount_fen=1800, duration_days=30,
+            payment_product="music-month", payer_openid="openid-1", provider="virtual", status="pending")
+        self.db.add(second)
+        self.db.commit()
+        with patch("app.agent_service.record_commission"), patch("app.agent_service.void_commission"):
+            member_virtual.settle(self.db, first, {"paid": True, "amount_fen": 1800, "transaction_id": "tx-4"})
+            member_virtual.settle(self.db, second, {"paid": True, "amount_fen": 1800, "transaction_id": "tx-5"})
+            refund_service.finalize_refund(self.db, first, "test")
+        self.assertEqual(self.user.membership_type, "month")
+        self.assertTrue(29 <= (self.user.membership_expire_at - second.paid_at).days <= 30)
+
+    def test_gift_refund_does_not_remove_buyers_own_membership(self):
+        gift = self.order(gift=True)
+        self.user.membership_type = "month"
+        self.user.membership_source = "purchase"
+        from datetime import datetime, timedelta
+        self.user.membership_expire_at = datetime.utcnow() + timedelta(days=30)
+        self.db.commit()
+        with patch("app.agent_service.void_commission"):
+            refund_service.finalize_refund(self.db, gift, "test")
+        self.assertEqual(self.user.membership_type, "month")
+
+
+class MemberMigrationTests(unittest.TestCase):
+    def test_existing_music_orders_keep_ordinary_provider(self):
+        from app import main
+        engine = create_engine("sqlite:///:memory:")
+        with engine.begin() as conn:
+            conn.execute(text("CREATE TABLE app_order (id INTEGER PRIMARY KEY, order_no VARCHAR(64), amount FLOAT)"))
+            conn.execute(text("INSERT INTO app_order (id, order_no, amount) VALUES (1, 'OLD', 18)"))
+            conn.execute(text("CREATE TABLE plan (id VARCHAR(16) PRIMARY KEY, price FLOAT)"))
+            conn.execute(text("INSERT INTO plan (id, price) VALUES ('month', 18)"))
+        with patch.object(main, "engine", engine):
+            main._auto_migrate()
+        self.assertIn("provider", {c["name"] for c in inspect(engine).get_columns("app_order")})
+        with engine.connect() as conn:
+            self.assertEqual(conn.execute(text("SELECT provider FROM app_order WHERE id=1")).scalar(), "wxpay")
+            self.assertEqual(conn.execute(text("SELECT virtual_price_synced FROM plan WHERE id='month'")).scalar(), 0)
+        engine.dispose()
+
+
+if __name__ == "__main__":
+    unittest.main()

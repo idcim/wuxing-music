@@ -19,6 +19,26 @@ def perform(db, job):
         aftersales.run_refund(db, payload["sale_id"])
     elif job.kind == "course_delivery":
         providers.confirm_course_delivery(db, db.get(Order, payload["order_id"]))
+    elif job.kind == "member_delivery":
+        from app import member_virtual
+        from app.models import Order as MemberOrder
+        member_virtual.confirm_delivery(db, db.get(MemberOrder, payload["order_id"]))
+    elif job.kind == "member_payment":
+        from app import member_virtual
+        from app.models import Order as MemberOrder
+        order = db.get(MemberOrder, payload["order_id"])
+        if order and order.status == "pending":
+            result = member_virtual.query(db, order)
+            if result["paid"]:
+                member_virtual.settle(db, order, result)
+            elif result["closed"]:
+                order.status = "closed"
+                guard_claim(db)
+                db.commit()
+            elif datetime.utcnow() - order.created_at < timedelta(hours=24):
+                raise RetryLater("等待会员订单支付结果")
+            else:
+                raise RuntimeError("会员订单支付结果超过 24 小时仍未确认，需人工核对")
     elif job.kind == "receipt":
         order = db.get(Order, payload["order_id"])
         if order.fulfillment == "shipped":
