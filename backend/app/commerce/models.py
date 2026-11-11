@@ -5,7 +5,7 @@ from sqlalchemy.orm import Mapped, declarative_base, mapped_column
 from app.models import User
 
 Base = declarative_base()
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 class Row:

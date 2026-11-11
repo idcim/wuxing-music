@@ -148,6 +148,31 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, Logisti
             **({"course_id": 100, "quoted_fen": 2000} if kind == "course" else
                {"items": [{"sku_id": 100, "quantity": quantity}], "address_id": 1, "quoted_fen": 1000 * quantity + 600})})
 
+    def test_merged_account_orders_snapshot_verified_miniapp_payer(self):
+        with self.sessions() as db:
+            user = db.get(User, 1)
+            user.openid = "oa-only"
+            user.oa_openid = "oa-only"
+            user.mp_openid = "miniapp-payer"
+            db.commit()
+        physical = self.order(key="payer-physical")
+        course = self.order(key="payer-course", kind="course")
+        self.assertEqual(physical.status_code, 200, physical.text)
+        self.assertEqual(course.status_code, 200, course.text)
+        with self.sessions() as db:
+            for ident in (physical.json()["data"]["id"], course.json()["data"]["id"]):
+                self.assertEqual(db.get(Order, ident).payer_openid, "miniapp-payer")
+
+    def test_pending_order_rejects_changed_miniapp_payer(self):
+        from app.commerce import providers
+        ident = self.order(kind="course").json()["data"]["id"]
+        with self.sessions() as db:
+            db.get(User, 1).mp_openid = "different-payer"
+            db.commit()
+            with patch.object(providers, "capabilities", return_value={"course_payment": True, "course_ios": True}):
+                with self.assertRaises(HTTPException):
+                    providers.preflight(db, db.get(Order, ident))
+
     def paid(self, ident):
         with self.sessions() as db:
             trading.settle_paid(db, ident, f"transaction-{ident}", db.get(Order, ident).amount_fen)
@@ -164,10 +189,8 @@ class CommerceTests(LeaseCases, RefundCases, MediaCases, LogisticsCases, Logisti
 
     def test_v1_upgrade_preserves_operational_data(self):
         with self.sessions() as db:
-            db.delete(db.get(SchemaVersion, 2))
-            db.delete(db.get(SchemaVersion, 3))
-            db.delete(db.get(SchemaVersion, 4))
-            db.delete(db.get(SchemaVersion, 5))
+            for version in range(2, SCHEMA_VERSION + 1):
+                db.delete(db.get(SchemaVersion, version))
             db.get(Product, 100).title = "运营已修改商品"
             db.commit()
         WorkerHeartbeat.__table__.drop(self.engine)

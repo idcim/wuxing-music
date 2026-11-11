@@ -49,12 +49,14 @@ def deactivate_user(db: Session, user: User) -> None:
     for tomb in db.query(User).filter(User.merged_into == user.id).all():
         if not tomb.openid.startswith("deleted:"):
             tomb.openid = f"deleted:{tomb.id}:{uuid.uuid4().hex[:8]}"
+        tomb.mp_openid = None
 
     from app.commerce.lifecycle import erase_profile
     erase_profile(db, user.id)
 
     user.deleted_at = datetime.utcnow()
     user.openid = f"deleted:{user.id}:{uuid.uuid4().hex[:8]}"
+    user.mp_openid = None
     user.unionid = ""
     user.oa_openid = ""
     user.web_openid = ""
@@ -122,6 +124,7 @@ def test_user_candidates(db: Session) -> list[User]:
             User.unionid == "",
             User.oa_openid == "",
             User.web_openid == "",
+            User.mp_openid.is_(None),
             User.phone == "",
             User.membership_type == "free",
             User.nickname.like("律音用户%"),

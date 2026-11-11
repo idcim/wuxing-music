@@ -40,7 +40,7 @@ from app.models import (
 )
 from app.security import hash_password, verify_password
 from app.user_delete import deactivate_user
-from app.user_merge import resolve_login, resolve_user
+from app.user_merge import miniapp_openid, resolve_login, resolve_user
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -210,7 +210,7 @@ def mp_login(body: LoginIn, db: Session = Depends(get_db)):
             raise HTTPException(status_code=400, detail="缺少登录 code")
         sess, sess_err = _jscode2session(db, body.code)
         openid = sess.get("openid", "")
-        unionid = sess.get("unionid") or unionid
+        unionid = sess.get("unionid") or ""
         if not openid:
             # 分清「我们够不到微信」（网络/DNS，可重试）和「微信拒绝 code」（凭证问题），
             # 混成一句「微信登录失败」的话，服务器断网时用户会误以为是自己账号的问题
@@ -234,6 +234,7 @@ def mp_login(body: LoginIn, db: Session = Depends(get_db)):
     if not user:
         user = User(
             openid=openid,
+            mp_openid=openid if configured else None,
             unionid=unionid,
             nickname=body.nickname or _default_nickname(),
             avatar=body.avatar,
@@ -262,6 +263,9 @@ def mp_login(body: LoginIn, db: Session = Depends(get_db)):
             db.commit()
             db.refresh(user)
 
+    if configured and user.mp_openid != openid:
+        user.mp_openid = openid
+        db.commit()
     token = create_user_token(user.id)
     return ok({"token": token, "user": _user_dict(user)})
 
@@ -1275,7 +1279,9 @@ def _resolve_pay_payer(db: Session, user: User, channel: str, order: Order):
         # 支付设置里单独配的 H5 AppID 优先；留空才回退公众号配置那一份
         app_id = cfg.get("h5_app_id") or _oa_cfg(db).get("app_id") or None
         return user.oa_openid, app_id
-    if not user.openid:
+    try:
+        payer_openid = miniapp_openid(db, user)
+    except HTTPException:
         # 早期 dev 兜底账号没有真实 openid，微信只会回「appid和openid不匹配」，
         # 提前拦截给个能看懂的提示
         order.status = "failed"
@@ -1291,8 +1297,8 @@ def _resolve_pay_payer(db: Session, user: User, channel: str, order: Order):
                 "支付设置 wx_app_id(%s) 与小程序设置 app_id(%s) 不一致，下单以小程序设置为准",
                 cfg["wx_app_id"], mp_app_id,
             )
-        return user.openid, mp_app_id
-    return user.openid, cfg.get("wx_app_id") or None
+        return payer_openid, mp_app_id
+    return payer_openid, cfg.get("wx_app_id") or None
 
 
 class CreateOrderIn(BaseModel):
@@ -1359,12 +1365,11 @@ def mp_create_order(
         from app import member_virtual
         if not plan.is_active or not member_virtual.ready(db, plan)[0]:
             raise HTTPException(status_code=409, detail="该套餐的小程序虚拟支付尚未开通或价格未同步")
-        if not user.openid:
-            raise HTTPException(status_code=401, detail="请先微信登录")
+        payer_openid = miniapp_openid(db, user)
         order = Order(order_no=_gen_order_no(), user_id=user.id, plan_id=plan.id,
             plan_name=plan.name, amount=plan.price, amount_fen=member_virtual.price_fen(plan),
             duration_days=plan.duration_days, provider="virtual", payment_product=plan.virtual_product,
-            payer_openid=user.openid, status="pending")
+            payer_openid=payer_openid, status="pending")
         params = member_virtual.create_params(db, order, body.code, body.platform)
         db.add(order)
         db.flush()
@@ -1581,12 +1586,11 @@ def mp_gift_create_order(
         from app import member_virtual
         if not plan.is_active or not member_virtual.ready(db, plan)[0]:
             raise HTTPException(status_code=409, detail="该礼物卡的小程序虚拟支付尚未开通或价格未同步")
-        if not user.openid:
-            raise HTTPException(status_code=401, detail="请先微信登录")
+        payer_openid = miniapp_openid(db, user)
         order = Order(order_no=_gen_order_no(), user_id=user.id, plan_id=plan.id,
             plan_name=plan.name, amount=plan.price, amount_fen=member_virtual.price_fen(plan),
             duration_days=plan.duration_days, provider="virtual", payment_product=plan.virtual_product,
-            payer_openid=user.openid, status="pending", is_gift=True)
+            payer_openid=payer_openid, status="pending", is_gift=True)
         params = member_virtual.create_params(db, order, body.code, body.platform)
         db.add(order)
         db.flush()

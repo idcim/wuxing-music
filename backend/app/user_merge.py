@@ -20,6 +20,7 @@
 import json
 import logging
 from datetime import datetime
+from fastapi import HTTPException
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -58,6 +59,39 @@ def resolve_user(db: Session, user: User | None) -> User | None:
     if user and user.deleted_at:
         return None
     return user
+
+
+def miniapp_openid(db: Session, user: User | None) -> str:
+    """取已验证的小程序付款身份；兼容未回填新字段的存量账号与合并墓碑。"""
+    if not user or user.deleted_at:
+        raise HTTPException(401, "请先微信登录")
+    if user.mp_openid:
+        return user.mp_openid
+
+    def legacy(row: User) -> str:
+        value = row.openid or ""
+        if (not value or value in (row.oa_openid, row.web_openid, user.oa_openid, user.web_openid)
+                or value.startswith(("phone:", "guest-", "web:"))):
+            return ""
+        return value
+
+    if current := legacy(user):
+        return current
+    seen = {user.id}
+    frontier = [user.id]
+    for _ in range(_MAX_HOPS):
+        rows = db.query(User).filter(User.merged_into.in_(frontier)).order_by(User.id).all()
+        frontier = []
+        for row in rows:
+            if row.id in seen:
+                continue
+            seen.add(row.id)
+            if current := row.mp_openid or legacy(row):
+                return current
+            frontier.append(row.id)
+        if not frontier:
+            break
+    raise HTTPException(401, "请在小程序重新微信登录后购买")
 
 
 def _expire_ts(u: User) -> float:
@@ -116,6 +150,8 @@ def merge_users(
 
     from app.commerce.lifecycle import merge as merge_commerce
     merge_commerce(db, keep.id, drop.id)
+    if not keep.mp_openid and drop.mp_openid:
+        keep.mp_openid = drop.mp_openid
 
     # 1) 归属数据改指向
     for model, col in _OWNED:

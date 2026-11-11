@@ -99,6 +99,110 @@ class MemberVirtualTests(unittest.TestCase):
         self.assertEqual(caught.exception.status_code, 409)
         self.assertEqual(self.db.query(Order).count(), 0)
 
+    def test_h5_keeper_uses_verified_miniapp_openid_for_member_order(self):
+        from app.routers.mp import CreateOrderIn, LoginIn, mp_create_order, mp_login
+
+        h5_user = User(openid="oa-only", oa_openid="oa-only", unionid="same-person")
+        self.db.add_all([h5_user, Setting(key="mp_config", value='{"app_id":"app","app_secret":"secret"}')])
+        self.db.commit()
+        with patch("app.routers.mp._jscode2session", return_value=({
+            "openid": "miniapp-payer", "unionid": "same-person"}, "")):
+            login = mp_login(LoginIn(code="verified-code"), self.db)
+            repeated = mp_login(LoginIn(code="another-verified-code"), self.db)
+        self.assertEqual(login["data"]["user"]["id"], h5_user.id)
+        self.assertEqual(repeated["data"]["user"]["id"], h5_user.id)
+        with patch("app.member_virtual.ready", return_value=(True, SimpleNamespace(commerce_virtual_ios_approved=True))), \
+                patch("app.member_virtual.create_params", return_value={"signData": "synthetic"}):
+            mp_create_order(CreateOrderIn(planId="month", code="pay-code"), h5_user, self.db)
+        self.assertEqual(self.db.query(Order).one().payer_openid, "miniapp-payer")
+
+    def test_h5_keeper_uses_verified_miniapp_openid_for_gift_order(self):
+        from app.routers.mp import GiftOrderIn, mp_gift_create_order
+
+        h5_user = User(openid="oa-only", oa_openid="oa-only", mp_openid="miniapp-payer")
+        self.db.add(h5_user)
+        self.db.commit()
+        with patch("app.member_virtual.ready", return_value=(True, SimpleNamespace(commerce_virtual_ios_approved=True))), \
+                patch("app.member_virtual.create_params", return_value={"signData": "synthetic"}):
+            mp_gift_create_order(GiftOrderIn(planId="month", code="pay-code"), h5_user, self.db)
+        self.assertEqual(self.db.query(Order).one().payer_openid, "miniapp-payer")
+
+    def test_merged_tombstone_keeps_miniapp_payer_for_existing_session(self):
+        from app.user_merge import merge_users, miniapp_openid
+
+        h5_user = User(openid="oa-only", oa_openid="oa-only", unionid="same-person")
+        miniapp_user = User(openid="miniapp-payer", mp_openid="miniapp-payer", unionid="same-person")
+        self.db.add_all([h5_user, miniapp_user])
+        self.db.commit()
+        merge_users(self.db, h5_user, miniapp_user)
+        self.db.commit()
+        self.assertEqual(h5_user.mp_openid, "miniapp-payer")
+        self.assertEqual(miniapp_openid(self.db, h5_user), "miniapp-payer")
+
+    def test_h5_only_account_has_no_miniapp_payer(self):
+        from app.user_merge import miniapp_openid
+
+        h5_user = User(openid="oa-only", oa_openid="oa-only")
+        phone_user = User(openid="phone:13800000000")
+        self.db.add_all([h5_user, phone_user])
+        self.db.commit()
+        with self.assertRaises(HTTPException):
+            miniapp_openid(self.db, h5_user)
+        with self.assertRaises(HTTPException):
+            miniapp_openid(self.db, phone_user)
+
+    def test_legacy_merged_tombstone_resolves_miniapp_payer(self):
+        from app.user_merge import miniapp_openid
+
+        h5_user = User(openid="oa-only", oa_openid="oa-only")
+        old_miniapp = User(openid="legacy-miniapp")
+        self.db.add_all([h5_user, old_miniapp])
+        self.db.commit()
+        old_miniapp.merged_into = h5_user.id
+        self.db.commit()
+        self.assertEqual(miniapp_openid(self.db, h5_user), "legacy-miniapp")
+
+    def test_h5_tombstone_is_not_mistaken_for_miniapp_payer(self):
+        from app.user_merge import merge_users, miniapp_openid
+
+        web_user = User(openid="web-only", web_openid="web-only")
+        h5_user = User(openid="oa-only", oa_openid="oa-only")
+        self.db.add_all([web_user, h5_user])
+        self.db.commit()
+        merge_users(self.db, web_user, h5_user)
+        self.db.commit()
+        with self.assertRaises(HTTPException):
+            miniapp_openid(self.db, web_user)
+
+    def test_deactivation_erases_verified_miniapp_identity(self):
+        from app.user_delete import deactivate_user
+
+        self.user.mp_openid = "miniapp-payer"
+        tomb = User(openid="old-miniapp", mp_openid="old-miniapp", merged_into=self.user.id)
+        self.db.add(tomb)
+        self.db.commit()
+        deactivate_user(self.db, self.user)
+        self.assertIsNone(self.user.mp_openid)
+        self.assertIsNone(tomb.mp_openid)
+
+    def test_verified_miniapp_account_is_not_test_cleanup_candidate(self):
+        from app.user_delete import test_user_candidates
+
+        self.user.mp_openid = "verified-miniapp"
+        self.db.commit()
+        self.assertNotIn(self.user, test_user_candidates(self.db))
+
+    def test_wechat_login_ignores_client_unionid_when_channel_does_not_return_one(self):
+        from app.routers.mp import LoginIn, mp_login
+
+        victim = User(openid="victim-miniapp", unionid="victim-union")
+        self.db.add_all([victim, Setting(key="mp_config", value='{"app_id":"app","app_secret":"secret"}')])
+        self.db.commit()
+        with patch("app.routers.mp._jscode2session", return_value=({"openid": "attacker-miniapp"}, "")):
+            login = mp_login(LoginIn(code="attacker-code", unionid="victim-union"), self.db)
+        self.assertNotEqual(login["data"]["user"]["id"], victim.id)
+        self.assertEqual(self.db.get(User, login["data"]["user"]["id"]).mp_openid, "attacker-miniapp")
+
     def test_purchase_status_identifies_virtual_channel_to_new_weapp(self):
         from app.routers.mp import mp_purchase_status
         cfg = SimpleNamespace(commerce_virtual_ios_approved=True)
@@ -308,6 +412,20 @@ class MemberVirtualTests(unittest.TestCase):
 
 
 class MemberMigrationTests(unittest.TestCase):
+    def test_existing_user_table_gets_miniapp_identity_column_without_losing_rows(self):
+        from app.commerce.migrate import upgrade
+
+        engine = create_engine("sqlite:///:memory:")
+        with engine.begin() as conn:
+            conn.exec_driver_sql("CREATE TABLE user (id INTEGER PRIMARY KEY, openid VARCHAR(64) NOT NULL)")
+            conn.exec_driver_sql("INSERT INTO user (id, openid) VALUES (7, 'legacy-openid')")
+        upgrade(engine)
+        upgrade(engine)
+        self.assertIn("mp_openid", {c["name"] for c in inspect(engine).get_columns("user")})
+        with engine.connect() as conn:
+            self.assertEqual(conn.exec_driver_sql("SELECT openid FROM user WHERE id=7").scalar_one(), "legacy-openid")
+        engine.dispose()
+
     def test_existing_music_orders_keep_ordinary_provider(self):
         from app import main
         engine = create_engine("sqlite:///:memory:")

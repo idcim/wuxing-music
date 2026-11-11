@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 from fastapi import HTTPException
 from sqlalchemy import update
+from app.user_merge import miniapp_openid
 
 from .catalog import has_access, sale_issues
 from .common import enabled, enqueue, guard_claim, record, require_row, serialize
@@ -69,7 +70,7 @@ def create_order(db, uid, body):
     if body.quoted_fen != data["amount_fen"]:
         raise HTTPException(409, "价格或运费已变化，请重新确认")
     order = Order(order_no="C" + uuid.uuid4().hex[:30], user_id=uid, request_key=body.request_key, request_hash=fingerprint,
-        kind=body.kind, payer_openid=payer.openid, amount_fen=data["amount_fen"], shipping_fen=data["shipping_fen"],
+        kind=body.kind, payer_openid=miniapp_openid(db, payer), amount_fen=data["amount_fen"], shipping_fen=data["shipping_fen"],
         address=data["address"], provider="virtual" if body.kind == "course" else "wxpay",
         expires_at=datetime.utcnow() + timedelta(minutes=30))
     db.add(order)

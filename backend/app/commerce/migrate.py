@@ -8,11 +8,15 @@ from .models import Base, Category, Course, Lesson, Product, SCHEMA_VERSION, Sch
 
 
 def upgrade(engine):
-    # 仅更新课程商城结构，不修改音乐会员财务数据。DDL 可重复执行。
+    # 更新课程商城结构与合并账号付款身份，不修改音乐会员财务数据。DDL 可重复执行。
     Base.metadata.create_all(engine)
     # 会员权益流水随同一版本化迁移创建，先于新支付回调启用。
     MemberLedger.__table__.create(engine, checkfirst=True)
     MemberGrant.__table__.create(engine, checkfirst=True)
+    if "mp_openid" not in {column["name"] for column in inspect(engine).get_columns("user")}:
+        # 合并账号的付款 OpenID 单独保存；MySQL DDL 隐式提交，检查后允许中断重跑。
+        with engine.begin() as connection:
+            connection.exec_driver_sql("ALTER TABLE user ADD COLUMN mp_openid VARCHAR(64) NULL")
     if "playback_version" not in {column["name"] for column in inspect(engine).get_columns("course_media")}:
         # MySQL 的 DDL 会隐式提交；先检查实际结构，允许中断后安全重跑。
         with engine.begin() as connection:

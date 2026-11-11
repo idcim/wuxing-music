@@ -121,8 +121,9 @@ def refund_session_key(db, order):
 
 def preflight(db, order, platform="other"):
     user = db.get(User, order.user_id)
-    if not user or user.deleted_at or not user.openid:
-        raise HTTPException(409, "请使用有效微信账号登录")
+    from app.user_merge import miniapp_openid
+    if order.payer_openid != miniapp_openid(db, user):
+        raise HTTPException(409, "微信付款身份已变化，请取消待付款订单后重新结算")
     if order.provider == "wxpay":
         pay_cfg(db, require_enabled=True)
         if not capabilities(db)["shipping"]:

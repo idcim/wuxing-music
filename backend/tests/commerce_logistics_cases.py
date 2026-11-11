@@ -12,7 +12,7 @@ from sqlalchemy import update
 from app.routers.mp import get_current_user
 from app.commerce import common, logistics
 from app.commerce.migrate import upgrade
-from app.commerce.models import Event, LogisticsQuery, Order, SchemaVersion, Shipment
+from app.commerce.models import Event, LogisticsQuery, Order, SCHEMA_VERSION, SchemaVersion, Shipment
 
 
 class LogisticsCases:
@@ -142,7 +142,9 @@ class LogisticsCases:
     def test_v3_upgrade_adds_logistics_cache_and_preserves_media_and_orders(self):
         ident, _ = self.logistics_order()
         with self.sessions() as db:
-            db.delete(db.get(SchemaVersion, 4)); db.delete(db.get(SchemaVersion, 5)); db.commit()
+            for version in range(4, SCHEMA_VERSION + 1):
+                db.delete(db.get(SchemaVersion, version))
+            db.commit()
         LogisticsQuery.__table__.drop(self.engine)
         self.assertFalse(self.client.get("/api/admin/commerce/status").json()["data"]["migrated"])
         upgrade(self.engine); upgrade(self.engine)

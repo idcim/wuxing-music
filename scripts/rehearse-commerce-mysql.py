@@ -218,8 +218,14 @@ def rehearse(folder, container, password, port):
         old = snapshot(source)
         legacy_dump = copy_database(names[0], names[1], folder / "legacy.sql")
         check_equal(snapshot(legacy_restore), old, "旧库备份恢复")
+        # 合成 v5 用户结构：旧库没有独立小程序付款 OpenID；升级后原用户资料必须不变。
+        with legacy_restore.begin() as connection:
+            connection.exec_driver_sql("ALTER TABLE user DROP COLUMN mp_openid")
         upgrade(legacy_restore)
         check_equal(snapshot(legacy_restore, old), old, "迁移后旧业务")
+        with legacy_restore.connect() as connection:
+            if connection.execute(text("SELECT mp_openid FROM user WHERE id=1")).scalar() is not None:
+                raise RuntimeError("旧用户小程序付款身份被错误回填")
         migrated = snapshot(legacy_restore)
         upgrade(legacy_restore)
         check_equal(snapshot(legacy_restore), migrated, "重复迁移")
@@ -269,7 +275,7 @@ def rehearse(folder, container, password, port):
                            "expired_lease_recovers", "unpaid_order_closed", "reserved_inventory_released",
                            "failed_history_preserved", "v2_media_version_upgrade", "v2_upgrade_preserves_other_domains",
                            "logistics_cache_restored", "logistics_cooldown_prevents_requery",
-                           "member_provider_default_migrated"]}
+                           "member_provider_default_migrated", "merged_payer_column_migrated"]}
     finally:
         for engine in engines:
             engine.dispose()
