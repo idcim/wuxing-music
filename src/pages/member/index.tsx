@@ -26,7 +26,7 @@ export default function Member() {
   const [posterTitle, setPosterTitle] = useState('');
   const [posterSub, setPosterSub] = useState('我已开通会员，邀你一起听助眠音律');
   const [giftCode, setGiftCode] = useState('');
-  const [purchaseEnabled, setPurchaseEnabled] = useState(true);
+  const [purchaseEnabled, setPurchaseEnabled] = useState(false);
   // 套餐以后台配置为准，接口失败时用本地 PLANS 兜底（与种子数据一致的三档）
   const [plans, setPlans] = useState<Plan[]>(PLANS);
   const purchaseStatusRequestId = useRef(0);
@@ -38,11 +38,14 @@ export default function Member() {
   useDidShow(() => {
     openShareMenu();
     const requestId = ++purchaseStatusRequestId.current;
+    setPurchaseEnabled(false);
     getPurchaseStatus()
       .then((enabled) => {
         if (requestId === purchaseStatusRequestId.current) setPurchaseEnabled(enabled);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (requestId === purchaseStatusRequestId.current) setPurchaseEnabled(false);
+      });
     fetchPlans()
       .then((list) => {
         if (requestId === purchaseStatusRequestId.current && list.length > 0) setPlans(list);
@@ -161,6 +164,7 @@ export default function Member() {
     if (planId === 'free') return '免费方案';
     if (buying === planId) return '处理中…';
     if (isPremium && currentType === planId) return '当前方案';
+    if (!purchaseEnabled) return '暂未开放';
     return '立即开通';
   };
 
@@ -282,7 +286,7 @@ export default function Member() {
                   <View className="member__plan-gift" onClick={() => giftBuy(p.id)}>
                     <Icon name="gift" size={26} color="#94a3b8" strokeWidth={1.5} />
                     <Text className="member__plan-gift-text">
-                      {gifting === p.id ? '生成中…' : '买卡送朋友'}
+                      {gifting === p.id ? '生成中…' : purchaseEnabled ? '买卡送朋友' : '暂未开放'}
                     </Text>
                   </View>
                 )}
