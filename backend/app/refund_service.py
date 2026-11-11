@@ -38,7 +38,7 @@ def finalize_refund(db: Session, order: Order, operator: str) -> None:
 
     # 虚拟支付的累计时长按订单扣回；旧支付保持原套餐匹配规则。
     from app.user_merge import resolve_user
-    user = resolve_user(db, db.query(User).filter(User.id == order.user_id).first())
+    user = None if order.is_gift else resolve_user(db, db.query(User).filter(User.id == order.user_id).first())
     if user:
         user = db.query(User).filter(User.id == user.id).populate_existing().with_for_update().one()
     handled = not order.is_gift and member_ledger.revoke(db, user, kind="order", ref=order.id)
@@ -54,17 +54,22 @@ def finalize_refund(db: Session, order: Order, operator: str) -> None:
             user.membership_expire_at = None
             user.membership_source = ""
 
-    # 礼物单：买家退款后，未兑换的礼物码作废；已兑换的记日志由人工处理
+    # 礼物单：未兑换的码作废；已兑换的只撤销该码发放的天数。
+    # 与兑换路径同样先锁码再锁受赠人，避免退款与兑换并发时漏回收或死锁。
     if order.is_gift and order.gift_code:
-        key = db.query(Cdkey).filter(Cdkey.code == order.gift_code).first()
+        key = db.query(Cdkey).filter(Cdkey.code == order.gift_code).with_for_update().first()
         if key and key.status == "unused":
             key.status = "disabled"
             key.remark = (key.remark or "") + f"｜订单 {order.order_no} 已退款作废"
         elif key and key.status == "used":
-            logger.warning(
-                "礼物单 %s 退款，但礼物码 %s 已被使用，受赠者会员需人工回收",
-                order.order_no, key.code,
-            )
+            recipient = resolve_user(db, db.get(User, key.used_by)) if key.used_by else None
+            if recipient:
+                recipient = db.query(User).filter_by(id=recipient.id).populate_existing().with_for_update().one()
+            if member_ledger.revoke(db, recipient, kind="cdkey", ref=key.id):
+                key.remark = (key.remark or "") + f"｜订单 {order.order_no} 已退款，兑换权益已撤销"
+            else:
+                key.remark = (key.remark or "") + f"｜订单 {order.order_no} 已退款，存量兑换权益待人工核对"
+                logger.warning("礼物单 %s 退款，兑换码 %s 无逐笔权益记录，需人工核对", order.order_no, key.code)
 
     # 代理分成冲正：还没提走的直接作废；已提现的标记 clawback 由人工追讨
     agent_service.void_commission(db, order, reason=f"订单退款（{operator or 'system'}）")

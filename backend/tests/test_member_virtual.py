@@ -240,6 +240,28 @@ class MemberVirtualTests(unittest.TestCase):
             refund_service.finalize_refund(self.db, gift, "test")
         self.assertEqual(self.user.membership_type, "month")
 
+    def test_redeemed_gift_refund_revokes_only_its_recipient_grant(self):
+        from starlette.requests import Request
+        from app.routers.mp import RedeemIn, mp_redeem
+        gift = self.order(gift=True)
+        recipient = User(openid="gift-recipient")
+        self.db.add(recipient)
+        self.db.flush()
+        member_ledger.admin_grant(self.db, recipient, days=20, plan_type="year", plan_name="年藏")
+        self.db.commit()
+        own_expiry = recipient.membership_expire_at
+        with patch("app.agent_service.record_commission"), patch("app.agent_service.void_commission"):
+            member_virtual.settle(self.db, gift, {"paid": True, "amount_fen": 1800,
+                "transaction_id": "tx-gift-refund"})
+            request = Request({"type": "http", "client": ("127.0.0.1", 1234), "headers": []})
+            mp_redeem(RedeemIn(code=gift.gift_code), request, recipient, self.db)
+            self.assertGreater(recipient.membership_expire_at, own_expiry)
+            refund_service.finalize_refund(self.db, gift, "test")
+            refund_service.finalize_refund(self.db, gift, "test")
+        self.assertEqual(recipient.membership_expire_at, own_expiry)
+        self.assertEqual(recipient.membership_source, "gift")
+        self.assertEqual(gift.status, "refunded")
+
     def test_signed_virtual_push_settles_member_order_through_shared_callback(self):
         order = self.order()
         key = b"0123456789abcdef0123456789abcdef"
