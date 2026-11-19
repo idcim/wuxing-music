@@ -12,7 +12,7 @@ import Icon from '@/components/Icon';
 import SeekBar from '@/components/SeekBar';
 import SleepTimer from '@/components/SleepTimer';
 import Playlist from '@/components/Playlist';
-import { isH5 } from '@/utils/platform';
+import { isH5, isRN, isWeapp } from '@/utils/platform';
 import UpgradePrompt from '@/components/UpgradePrompt';
 import type { ElementId } from '@/types';
 import type { IconName } from '@/components/Icon/paths';
@@ -51,6 +51,7 @@ export default function MiniPlayer() {
 
   const [timerOpen, setTimerOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   // 升级引导已抽到 UpgradePrompt（全屏播放器页不渲染 MiniPlayer，那边也要能弹）。
   // 无曲目时本组件不出现，但仍要把引导挂上——试听到限那一刻是有曲目的，
@@ -72,16 +73,37 @@ export default function MiniPlayer() {
   //  凡是时长不等于 36 分钟的曲目，显示的时间都是错的。）
   const curLabel = fmtTime(currentTime);
   const hasTabBar = currentPageHasTabBar();
+  const compact = (isWeapp || isRN) && !expanded;
 
   return (
     <Fragment>
     <View
-      className={`mini-player ${hasTabBar ? 'mini-player--tabbar' : ''}`}
+      className={`mini-player ${hasTabBar ? 'mini-player--tabbar' : ''} ${compact ? 'mini-player--compact' : ''}`}
       style={{
         borderColor: A.a40(el.primary),
         boxShadow: `0 ${rpx(-20)} ${rpx(80)} ${el.glow}`
       }}
     >
+      {compact ? (
+        <View className="mini-player__compact-button" onClick={() => setExpanded(true)} aria-label="展开播放器">
+          <View
+            className="mini-player__cover"
+            style={{
+              background: `radial-gradient(circle, ${A.a30(el.primary)}, ${A.a10(el.primary)})`,
+              borderColor: A.a40(el.primary)
+            }}
+          >
+            {currentTrack.coverUrl ? (
+              <Image className="mini-player__cover-img" src={resolveUrl(currentTrack.coverUrl)} mode="aspectFill" />
+            ) : (
+              <Icon name={el.icon as IconName} size={32} color={el.primary} strokeWidth={1.5} />
+            )}
+          </View>
+          <View className="mini-player__compact-status" style={{ background: loadError ? '#ef4444' : isPlaying ? el.primary : A.a40(el.primary) }} />
+        </View>
+      ) : (
+      <Fragment>
+      {(isWeapp || isRN) && <View className="mini-player__collapse" onClick={() => setExpanded(false)} aria-label="收起播放器"><Icon name="x" size={20} color="#cbd5e1" /></View>}
       <View className="mini-player__body">
         <View
           className="mini-player__cover"
@@ -160,6 +182,8 @@ export default function MiniPlayer() {
           )}
         </View>
       </View>
+      </Fragment>
+      )}
     </View>
 
     {/* 抽屉放到 .mini-player(fixed) 之外，否则 fixed 嵌套 fixed 会相对父级定位、被导航栏遮挡 */}
