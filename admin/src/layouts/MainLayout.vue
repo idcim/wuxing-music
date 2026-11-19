@@ -12,6 +12,7 @@ import { useSiteStore } from '@/stores/site';
 import { NAV_MAIN, NAV_GROUPS, NAV_ALL, type NavItem } from '@/menu';
 import NotifyBell from '@/components/NotifyBell.vue';
 import CheckUpdates from '@/components/shell/CheckUpdates.vue';
+import HelpCenter from '@/components/shell/HelpCenter.vue';
 import MenuSearch from '@/components/shell/MenuSearch.vue';
 import ShellPreferences from '@/components/shell/ShellPreferences.vue';
 import RouteCache from '@/components/shell/RouteCache';
@@ -112,6 +113,7 @@ function logout() {
           <el-breadcrumb-item>{{ route.meta.title }}</el-breadcrumb-item>
         </el-breadcrumb>
         <div class="admin-header__actions">
+          <HelpCenter @check-updates="updates?.check(true)" />
           <MenuSearch v-if="preferences.widget.globalSearch" :menus="NAV_ALL.filter(visible)" />
           <el-tooltip v-if="preferences.widget.refresh" content="刷新当前页面"><el-button text circle aria-label="刷新当前页面" @click="refreshKey++"><el-icon><Icons.Refresh /></el-icon></el-button></el-tooltip>
           <el-tooltip content="检查后台更新"><el-button text circle aria-label="检查后台更新" :loading="updates?.checking" @click="updates?.check(true)"><el-icon><Icons.RefreshRight /></el-icon></el-button></el-tooltip>
