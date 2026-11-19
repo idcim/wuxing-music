@@ -4,6 +4,8 @@ import Taro from '@tarojs/taro';
 import { usePlayerStore } from '@/stores/player';
 import { useUserStore } from '@/stores/user';
 import { useContentStore } from '@/stores/content';
+import { useSiteStore } from '@/stores/site';
+import { THEMES } from '@/theme';
 import { A } from '@/utils/color';
 import { rpx } from '@/utils/unit';
 import { fmtTime } from '@/utils/format';
@@ -34,6 +36,7 @@ function currentPageHasTabBar(): boolean {
 }
 
 export default function MiniPlayer() {
+  const theme = THEMES[useSiteStore((s) => s.site.theme_id)];
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const isLoading = usePlayerStore((s) => s.isLoading);
@@ -172,13 +175,13 @@ export default function MiniPlayer() {
 
         <View className="mini-player__toggle" style={{ background: el.primary }} onClick={toggle}>
           {loadError ? (
-            <Icon name="repeat" size={26} color="#0a0e1a" strokeWidth={2} />
+            <Icon name="repeat" size={26} color={theme.bg} strokeWidth={2} />
           ) : isLoading ? (
             <View className="mini-player__spinner" />
           ) : isPlaying ? (
-            <Icon name="pause" size={28} fill="#0a0e1a" strokeWidth={0} color="#0a0e1a" />
+            <Icon name="pause" size={28} fill={theme.bg} strokeWidth={0} color={theme.bg} />
           ) : (
-            <Icon name="play" size={28} fill="#0a0e1a" strokeWidth={0} color="#0a0e1a" />
+            <Icon name="play" size={28} fill={theme.bg} strokeWidth={0} color={theme.bg} />
           )}
         </View>
       </View>

@@ -2,7 +2,7 @@
   <BusinessPage title="风格管理">
     <BusinessCard v-loading="loading">
       <template #header>全端风格</template>
-      <p class="description">发布后，小程序与 H5 下次打开或回到前台时读取新风格。后续页面沿用统一风格变量。</p>
+      <p class="description">发布后，小程序下次打开或回到前台时读取新风格。App 上线后也将沿用统一风格变量。</p>
       <div class="themes">
         <button v-for="item in options" :key="item.id" type="button" class="theme-option"
           :class="{ selected: selected === item.id }" :style="item.preview" @click="selected = item.id">

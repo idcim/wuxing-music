@@ -5,6 +5,7 @@ import Taro, { useDidShow } from '@tarojs/taro';
 import Icon from '@/components/Icon';
 import { useUserStore } from '@/stores/user';
 import { useSiteStore } from '@/stores/site';
+import { THEMES } from '@/theme';
 import { sendSmsCode, isQrLoginConfigured } from '@/services/auth';
 import { isWeapp, isInWeChat } from '@/utils/platform';
 import { goBack, navBarStyle } from '@/utils/nav';
@@ -22,6 +23,7 @@ const AFTER_LOGIN = '/pages/userinfo/index?from=login';
 
 function Login() {
   const siteName = useSiteStore((s) => s.site.site_name);
+  const theme = THEMES[useSiteStore((s) => s.site.theme_id)];
   const loggingIn = useUserStore((s) => s.loggingIn);
   const login = useUserStore((s) => s.login);
   const loginByPhone = useUserStore((s) => s.loginByPhone);
@@ -187,7 +189,7 @@ function Login() {
           </View>
           <View className="login__consent">
             <CheckboxGroup onChange={(event) => setAgreed(event.detail.value.includes('agreed'))}>
-              <Checkbox className="login__checkbox" value="agreed" checked={agreed} color="#84cc16" />
+              <Checkbox className="login__checkbox" value="agreed" checked={agreed} color={theme.accent} />
             </CheckboxGroup>
             <Text className="login__consent-label">我已阅读并同意</Text>
             <Text className="login__policy-link" onClick={() => Taro.navigateTo({ url: '/pages/agreement/index' })}>《用户服务协议》</Text>
@@ -215,7 +217,7 @@ function Login() {
             className={`login__btn login__btn--wechat ${submitting ? 'login__btn--loading' : ''}`}
             onClick={onWechatLogin}
           >
-            <Icon name="messageCircle" size={38} color="#0a0e1a" strokeWidth={2} />
+            <Icon name="messageCircle" size={38} color={theme.bg} strokeWidth={2} />
             <Text className="login__btn-text">{submitting ? '登录中…' : '微信登录'}</Text>
           </View>
 
@@ -325,7 +327,7 @@ function Login() {
         {/* 微信登录：微信内是网页授权，浏览器里是扫码 */}
         {qrReady && (
           <View className="login__wechat" onClick={onWechatLogin}>
-            <Icon name="messageCircle" size={36} color="#84cc16" strokeWidth={2} />
+            <Icon name="messageCircle" size={36} color={theme.accent} strokeWidth={2} />
             <Text className="login__wechat-text">
               {isInWeChat ? '微信登录' : '微信扫码登录'}
             </Text>

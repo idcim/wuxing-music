@@ -155,7 +155,7 @@ function Home() {
               style={{ background: el.primary }}
               onClick={() => onTrack(hero.id)}
             >
-              <Icon name="play" size={24} fill="#0a0e1a" strokeWidth={0} color="#0a0e1a" />
+              <Icon name="play" size={24} fill={THEMES[themeId].bg} strokeWidth={0} color={THEMES[themeId].bg} />
               <Text className="home__hero-play-text">立即聆听</Text>
             </View>
             <Text

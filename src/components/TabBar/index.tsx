@@ -5,6 +5,8 @@ import { WUXING } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
 import { usePlayerStore } from '@/stores/player';
 import { useContentStore } from '@/stores/content';
+import { useSiteStore } from '@/stores/site';
+import { THEMES } from '@/theme';
 import { isH5 } from '@/utils/platform';
 import { rpx } from '@/utils/unit';
 import Icon from '@/components/Icon';
@@ -31,6 +33,7 @@ interface Props {
 const normalize = (p = '') => p.replace(/^\/+/, '').replace(/\/+$/, '');
 
 export default function TabBar({ active }: Props) {
+  const theme = THEMES[useSiteStore((s) => s.site.theme_id)];
   const commerceConfig = useCommerce(s => s.config);
   useEffect(() => { if (!isH5) useCommerce.getState().load(); }, []);
   const TABS = isH5 ? LEGACY_TABS : [
@@ -76,14 +79,14 @@ export default function TabBar({ active }: Props) {
     const on = active === tab.key;
     return (
       <View key={tab.key} className="tabbar__item" onClick={() => go(tab)}>
-        {on && <View className="tabbar__indicator" style={{ background: el.primary }} />}
+        {on && <View className="tabbar__indicator" style={{ background: isH5 ? el.primary : theme.accent }} />}
         <Icon
           name={tab.icon}
           size={36}
-          color={on ? el.primary : '#334155'}
+          color={on ? (isH5 ? el.primary : theme.accent) : theme.subtle}
           strokeWidth={1.5}
         />
-        <Text className="tabbar__text" style={{ color: on ? el.accent : '#475569' }}>
+        <Text className="tabbar__text" style={{ color: on ? (isH5 ? el.accent : theme.accent) : theme.subtle }}>
           {tab.text}
         </Text>
       </View>

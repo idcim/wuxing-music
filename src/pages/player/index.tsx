@@ -7,7 +7,8 @@ import { openShareMenu, setH5Share } from '@/utils/share';
 import { usePlayerStore } from '@/stores/player';
 import { useUserStore } from '@/stores/user';
 import { useContentStore } from '@/stores/content';
-import { brandLine } from '@/stores/site';
+import { brandLine, useSiteStore } from '@/stores/site';
+import { THEMES } from '@/theme';
 import { fmtTime } from '@/utils/format';
 import { resolveUrl } from '@/utils/url';
 import Icon from '@/components/Icon';
@@ -31,6 +32,7 @@ const MODE_LABEL: Record<string, string> = {
 };
 
 function Player() {
+  const theme = THEMES[useSiteStore((s) => s.site.theme_id)];
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const isLoading = usePlayerStore((s) => s.isLoading);
@@ -215,7 +217,7 @@ function Player() {
           className={`player__skip ${hasQueue ? '' : 'player__skip--off'}`}
           onClick={() => hasQueue && prev()}
         >
-          <Icon name="skipBack" size={40} fill="#e2e8f0" color="#e2e8f0" strokeWidth={0} />
+          <Icon name="skipBack" size={40} fill={theme.text} color={theme.text} strokeWidth={0} />
         </View>
 
         <View className="player__play" style={{ background: el.primary }} onClick={toggle}>
@@ -225,8 +227,8 @@ function Player() {
             <Icon
               name={isPlaying ? 'pause' : 'play'}
               size={48}
-              fill="#0a0e1a"
-              color="#0a0e1a"
+              fill={theme.bg}
+              color={theme.bg}
               strokeWidth={0}
             />
           )}
@@ -236,7 +238,7 @@ function Player() {
           className={`player__skip ${hasQueue ? '' : 'player__skip--off'}`}
           onClick={() => hasQueue && next()}
         >
-          <Icon name="skipForward" size={40} fill="#e2e8f0" color="#e2e8f0" strokeWidth={0} />
+          <Icon name="skipForward" size={40} fill={theme.text} color={theme.text} strokeWidth={0} />
         </View>
       </View>
 

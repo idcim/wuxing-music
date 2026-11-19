@@ -95,10 +95,10 @@
       opacity: 0.6;
     }
 
-    // 微信内的主按钮：沿用「木」色，避免撞进原生微信绿又保持可识别
+    // 主入口使用后台选定风格的强调色。
     &--wechat {
-      background: linear-gradient(135deg, #a3e635, #84cc16);
-      box-shadow: 0 8rpx 32rpx rgba(132, 204, 22, 0.22);
+      background: $theme-accent;
+      box-shadow: 0 8rpx 32rpx $border;
     }
 
     &-text {
@@ -152,7 +152,7 @@
   }
 
   &__policy-link {
-    color: #a3e635;
+    color: $theme-accent;
     text-decoration: underline;
   }
 

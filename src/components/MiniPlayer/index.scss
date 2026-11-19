@@ -9,7 +9,7 @@
   bottom: calc(32rpx + constant(safe-area-inset-bottom));
   bottom: calc(32rpx + env(safe-area-inset-bottom));
   border-radius: 36rpx;
-  background: rgba(10, 14, 26, 0.92);
+  background: $bg-mid;
   border: 2rpx solid;
   padding: 24rpx 28rpx;
   z-index: 50;
@@ -40,7 +40,7 @@
     bottom: 0;
     width: 18rpx;
     height: 18rpx;
-    border: 3rpx solid #0a0e1a;
+    border: 3rpx solid $bg-mid;
     border-radius: 50%;
   }
 
@@ -51,7 +51,7 @@
     width: 44rpx;
     height: 44rpx;
     border-radius: 50%;
-    background: #1e293b;
+    background: $bg-deep;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -169,8 +169,8 @@
     width: 28rpx;
     height: 28rpx;
     border-radius: 50%;
-    border: 4rpx solid rgba(10, 14, 26, 0.3);
-    border-top-color: #0a0e1a;
+    border: 4rpx solid $border;
+    border-top-color: $bg-deep;
     animation: rotate-slow 0.8s linear infinite;
   }
 }
