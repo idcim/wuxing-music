@@ -1,7 +1,11 @@
 import type { CSSProperties } from 'react';
 import Taro from '@tarojs/taro';
-import { isH5 } from './platform';
+import { isAndroidApp, isH5 } from './platform';
 import { rpx } from './unit';
+
+// 原生容器已避让时值为 0；边到边布局时使用容器注入的设备安全区。
+// 不把微信胶囊高度带进 APP，也不重复累加原生状态栏。
+const appSafeTop = 'var(--safe-area-inset-top, env(safe-area-inset-top, 0px))';
 
 // 自定义导航页的安全顶部高度（状态栏 + 胶囊按钮区域），单位 px。
 // 用于避让微信右上角胶囊按钮，防止顶部内容被遮挡。
@@ -31,6 +35,7 @@ export function getNavTop(): number {
  * 自定义导航页头部的顶部内边距。
  *
  * 小程序：必须避让右上角胶囊按钮，用 getNavTop() 实测值。
+ * APP：只保留设备安全区和 32rpx 的页面间距，不预留微信胶囊位置。
  *
  * H5：微信的标题栏在 webview 之外，页面里**没有**胶囊按钮需要避让，
  * 照搬 getNavTop() 会白白空出 64px——H5 下 `statusBarHeight` 是 NaN
@@ -40,6 +45,7 @@ export function getNavTop(): number {
  * 与 userinfo / explore / member / profile 各页样式表里的口径一致。
  */
 export function navTopStyle(): CSSProperties {
+  if (isAndroidApp) return { paddingTop: `calc(${appSafeTop} + ${rpx(32)})` };
   if (isH5) return { paddingTop: rpx(88) };
   return { paddingTop: `${getNavTop()}px` };
 }
@@ -47,6 +53,8 @@ export function navTopStyle(): CSSProperties {
 // 二级页面导航行与右上角胶囊处于同一高度，内容区仍使用 navTopStyle 避让胶囊。
 export function navBarStyle(): CSSProperties {
   // 全局 box-sizing 为 border-box；页头自身的 44px 不能被状态栏内边距挤占。
+  // 行内 px 不经过样式表的设计稿缩放，保证 APP 的导航行实际高 44px。
+  if (isAndroidApp) return { paddingTop: appSafeTop, height: '44px', boxSizing: 'content-box' };
   if (isH5) return { paddingTop: rpx(88), boxSizing: 'content-box' };
   try {
     const info = Taro.getWindowInfo ? Taro.getWindowInfo() : Taro.getSystemInfoSync();

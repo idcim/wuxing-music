@@ -48,7 +48,7 @@ else run('./gradlew', gradleArgs, nativeRoot);
 const { version: appVersion } = require('../package.json');
 const output = path.join(root, 'artifacts/android');
 fs.mkdirSync(output, { recursive: true });
-const name = `wuxing-music-${appVersion}-android-preview.2.apk`;
+const name = `wuxing-music-${appVersion}-android-preview.3.apk`;
 const apk = path.join(output, name);
 fs.copyFileSync(path.join(nativeRoot, 'app/build/outputs/apk/debug/app-debug.apk'), apk);
 const hash = crypto.createHash('sha256').update(fs.readFileSync(apk)).digest('hex');
