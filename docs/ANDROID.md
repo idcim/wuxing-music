@@ -1,5 +1,7 @@
 # 安卓 APP 构建与安装
 
+包名、签名指纹、公开证书、版本及更新交接集中保存在 [android/README.md](../android/README.md)。
+
 页面使用 Taro 构建，现有 Android 容器为 Capacitor，资源内置于 APK；H5 产品停止后续更新。当前支持正式签名 release 与 debug 体验包两个构建，功能仍沿用现有 APP 实现。
 
 ## 安装与使用

@@ -1,5 +1,17 @@
 {
   "package_name": "cn.azureglow.wuxing",
   "certificate_sha256": "eb928c18554b6ea174ca1f0e5ed976166e7a6dc434674b215270db1180ed1ea9",
-  "certificate_md5": "453d82a42eac6bd24178c9f9ae6381cc"
+  "certificate_md5": "453d82a42eac6bd24178c9f9ae6381cc",
+  "certificate_sha1": "53b38d023bb6c09cfda743116fb61679cb183aae",
+  "subject": "CN=WuxingMusic Android Release",
+  "issuer": "CN=WuxingMusic Android Release",
+  "serial_number": "C6E1FBCC70196FB2",
+  "valid_from": "2026-11-19T18:25:34.000Z",
+  "valid_until": "2054-04-06T18:25:34.000Z",
+  "key_algorithm": "rsa",
+  "key_bits": 3072,
+  "key_alias": "wuxing-release",
+  "keystore_type": "PKCS12",
+  "public_certificate_pem": "certificates/release-certificate.pem",
+  "public_certificate_der": "certificates/release-certificate.cer"
 }

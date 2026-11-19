@@ -1,0 +1,45 @@
+{
+  "package_name": "cn.azureglow.wuxing",
+  "version_code": 2000006,
+  "version_name": "2.0.0",
+  "channel": "stable",
+  "debuggable": false,
+  "certificate_sha256": "eb928c18554b6ea174ca1f0e5ed976166e7a6dc434674b215270db1180ed1ea9",
+  "certificate_md5": "453d82a42eac6bd24178c9f9ae6381cc",
+  "sha256": "8c86a22785dcd602dd04d4507ac03f5b60192a1e50e74a8f726715116e6b611d",
+  "size": 3961317,
+  "record_schema_version": 1,
+  "release_date": "2026-11-20",
+  "source_commit": "06f78d3715a49346344dcf8191eef9aaed6873d3",
+  "artifact_path": "artifacts/android/wuxing-music-2.0.0-android-release.apk",
+  "artifact_md5": "1bf7f45da68a54debf30c7315ee980b9",
+  "minimum_android_api": 24,
+  "target_android_api": 36,
+  "compile_android_api": 36,
+  "api_base_default": "https://app.azure-glow.cn",
+  "public_download_entry": "https://app.azure-glow.cn/download?channel=stable",
+  "delivery_status": "signed_and_verified_locally",
+  "distribution_actions": {
+    "oss_upload_performed": false,
+    "download_publication_performed": false,
+    "app_store_submission_performed": false
+  },
+  "checks": [
+    "release_signature_and_certificate_pin",
+    "package_version_and_non_debuggable",
+    "install_and_reinstall_on_mumu_android_15",
+    "cold_start_animation_and_complete_logo",
+    "system_animations_disabled_fallback",
+    "93_frontend_regressions",
+    "typescript_check",
+    "weapp_build",
+    "android_splash_instrumentation_safe_bounds"
+  ],
+  "notes": [
+    "APP原生开屏：双向金色光轨、三部件旋转汇聚、高光定格，正常速度约3秒。",
+    "正式包与体验包独立安装，正式签名未进入源码仓库。",
+    "正式包微信授权需登记正式包名及证书；真实授权未在本次验证。",
+    "APP原生支付和可靠原生后台播放不在此次交付范围。",
+    "发布状态只记录本次本地交付执行的动作，线上最新状态以管理后台为准。"
+  ]
+}
