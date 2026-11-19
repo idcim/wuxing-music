@@ -155,7 +155,7 @@ function logout() {
 .admin-brand__mark { display:flex; align-items:center; justify-content:center; flex-shrink:0; width:30px; height:30px; border-radius:9px; background:#3b82f6; color:white; }
 .admin-brand__name { white-space:nowrap; font-size:17px; font-weight:600; letter-spacing:1px; }
 .admin-header { display:flex; align-items:center; gap:12px; width:100%; height:100%; padding:0 16px; }
-.admin-breadcrumb { flex:1; }
+.admin-breadcrumb { flex:1; min-width:0; }
 .admin-header__actions { display:flex; align-items:center; gap:8px; margin-left:auto; }
 .admin-user { display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--el-text-color-primary); }
 .admin-tabs { display:flex; align-items:center; height:40px; padding:0 12px; gap:4px; overflow:auto; border-bottom:1px solid var(--el-border-color-light); background:var(--el-bg-color); }

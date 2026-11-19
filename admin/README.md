@@ -2,6 +2,8 @@
 
 管理员 Web 界面，连接 `backend/` 的 FastAPI 接口。
 
+页头提供「使用教程」「版本更新」「关于我们」三个直达入口；窄屏统一收在带文字的「教程与帮助」菜单中。教程按账号权限显示业务入口，涵盖音乐、课程商城、订单、APP 发布和微信登录配置。关于我们读取站点设置的介绍，每次打开重新加载；后台自动检查更新及手动检查入口保留。
+
 使用官方 Vben 5.7.0 的布局、菜单、偏好设置、Page、Card、Modal 与 Drawer。
 现有业务页通过 `src/components/business/` 统一接入；表格、表单、分页及输入控件采用 Element Plus 适配 Vben 主题。
 组件约定和验收说明见 [`docs/ADMIN-VBEN.md`](../docs/ADMIN-VBEN.md)。
