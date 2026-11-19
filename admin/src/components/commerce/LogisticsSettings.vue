@@ -29,8 +29,7 @@ onMounted(load);
 <template>
   <div class="logistics-settings">
     <h3>快递100物流查询</h3>
-    <p>在这里填写快递100提供的账号参数，保存后即可使用，无需修改本地文件。</p>
-    <p>还没有参数？请先在 <a href="https://api.kuaidi100.com/" target="_blank" rel="noopener noreferrer">快递100开放平台</a> 开通实时查询服务，获取 Customer 和 Key。</p>
+    <p>填写 <a href="https://api.kuaidi100.com/" target="_blank" rel="noopener noreferrer">快递100开放平台</a> 的 Customer 和 Key，开启订单物流轨迹查询。</p>
     <el-alert v-if="error || status.error" :title="error || status.error" type="error" :closable="false" />
     <BusinessForm v-loading="loading" :model="form" :disabled="saving || !loaded">
       <el-form-item label="物流查询"><el-switch v-model="form.enabled" /><el-tag :type="status.configured ? 'success' : 'info'" style="margin-left:12px">{{ status.configured ? '已配置' : '未开启 / 未配置' }}</el-tag></el-form-item>
@@ -41,10 +40,12 @@ onMounted(load);
       <el-button type="primary" :loading="saving" :disabled="!loaded" @click="save">保存物流账号</el-button>
     </BusinessForm>
     <el-button v-if="error" @click="load">重新加载物流配置</el-button>
-    <p>仅有课程商城配置权限的管理员可修改；同一运单至少间隔 30 分钟向服务商查询。</p>
+    <p class="logistics-settings__footnote">同一运单至少间隔 30 分钟向服务商查询。</p>
   </div>
 </template>
 <style scoped>
-.logistics-settings { margin-bottom:24px; }
-p { line-height:1.7; }
+.logistics-settings { max-width:960px; }
+h3 { margin:0; font-size:16px; font-weight:600; }
+p { margin:8px 0 20px; line-height:1.7; color:var(--el-text-color-secondary); }
+.logistics-settings__footnote { margin-top:16px; font-size:12px; }
 </style>

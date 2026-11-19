@@ -35,7 +35,7 @@ def report(db):
         ("enabled", "物流查询已启用"), ("customer", "Customer"), ("key", "Key"))]
     return dict(verified_external=False, groups=[
         group("physical_payment", "实物支付", physical,
-              "商户参数复用现有音乐支付配置；2.0 通知验签公钥与回调域名可在本页上方维护。"),
+              "商户参数复用现有音乐支付配置；通知验签公钥与回调域名在「支付与课件」中维护。"),
         group("course_payment", "课程数字支付", course,
               "数字支付与音乐会员的普通微信支付独立，批准标记不会因旧会员支付可用而自动开启。"),
         group("course_ios", "iOS 数字支付许可", server("commerce_virtual_ios_approved"),
