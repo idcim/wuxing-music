@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useRef, useState } from 'react';
 import { View, Text, Button, Input, Textarea, Image } from '@tarojs/components';
 import Taro, { useDidShow, useRouter } from '@tarojs/taro';
@@ -11,7 +12,7 @@ const labels: Record<string, string> = { pending: '待付款', closing: '取消�
   requested: '售后待审核', awaiting_return: '等待寄回', returning: '退货待验收', rejected: '申请未通过' };
 const label = (value: string) => labels[value] || value;
 
-export default function Orders() {
+function Orders() {
   const params = useRouter().params;
   const [kind, setKind] = useState(params.kind || '');
   const [page, setPage] = useState(1);
@@ -29,3 +30,5 @@ export default function Orders() {
     <View className='commerce__actions'><Button disabled={page === 1} onClick={() => setPage(page - 1)}>上一页</Button><Text>第 {page} 页 · 共 {data.total} 单</Text><Button disabled={page * 20 >= data.total} onClick={() => setPage(page + 1)}>下一页</Button></View>
   </CommercePage>;
 }
+
+export default withTheme(Orders);

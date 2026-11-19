@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro from '@tarojs/taro';
@@ -24,7 +25,7 @@ function loadProgress(): QuizProgress | null {
   return p;
 }
 
-export default function Quiz() {
+function Quiz() {
   const saved = loadProgress();
   const [step, setStep] = useState(saved?.step ?? 0);
   const [scores, setScores] = useState<ElementScores>(saved?.scores ?? { ...EMPTY_SCORES });
@@ -101,3 +102,5 @@ export default function Quiz() {
     </View>
   );
 }
+
+export default withTheme(Quiz);

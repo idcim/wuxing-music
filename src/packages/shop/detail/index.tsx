@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useState } from 'react';
 import { View, Text, Button, Input, Swiper, SwiperItem, Image } from '@tarojs/components';
 import Taro, { useRouter } from '@tarojs/taro';
@@ -6,7 +7,7 @@ import { resolveUrl } from '@/utils/url';
 import MarkdownView from '@/components/MarkdownView';
 import { action, CommercePage, Cover, CustomerService, Feedback, requireCommerceLogin, useData } from '@/features/commerce/common';
 
-export default function ProductDetail() {
+function ProductDetail() {
   const id = Number(useRouter().params.id);
   const { data: product, loading, error, load } = useData<Entry>(`/products/${id}`, {});
   const shopSaleOpen = useCommerce(s => s.config.shop_sale === true);
@@ -44,3 +45,5 @@ export default function ProductDetail() {
     </>}
   </CommercePage>;
 }
+
+export default withTheme(ProductDetail);

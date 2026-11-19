@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, Button, Slider } from '@tarojs/components';
 import { Video } from '@tarojs/components';
@@ -7,7 +8,7 @@ import { usePlayerStore } from '@/stores/player';
 import MarkdownView from '@/components/MarkdownView';
 import { action, CommercePage, Cover, CustomerService, Feedback, requireCommerceLogin, useData } from '@/features/commerce/common';
 
-export default function CourseDetail() {
+function CourseDetail() {
   const id = Number(useRouter().params.id);
   const { data: course, loading, error, load } = useData<Entry>(`/courses/${id}`, {});
   const courseSaleOpen = useCommerce(s => s.config.courses_sale === true);
@@ -50,3 +51,5 @@ export default function CourseDetail() {
     </>}
   </CommercePage>;
 }
+
+export default withTheme(CourseDetail);

@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useState } from 'react';
 import { View, Text, Button, Input, Swiper, SwiperItem, Image } from '@tarojs/components';
 import Taro, { useRouter } from '@tarojs/taro';
@@ -6,7 +7,7 @@ import { resolveUrl } from '@/utils/url';
 import MarkdownView from '@/components/MarkdownView';
 import { action, CommercePage, Cover, CustomerService, Feedback, requireCommerceLogin, useData } from '@/features/commerce/common';
 
-export default function Cart() {
+function Cart() {
   const { data, loading, error, load } = useData<Entry[]>('/cart', []);
   const shopSaleOpen = useCommerce(s => s.config.shop_sale === true);
   const [selected, setSelected] = useState<number[]>([]);
@@ -27,3 +28,5 @@ export default function Cart() {
     <Button className='commerce__primary' disabled={!selectedItems.length || !shopSaleOpen} onClick={() => Taro.navigateTo({ url: `${shopPath}/checkout/index?kind=physical&cart=${selectedItems.map(item => item.id).join(',')}` })}>{shopSaleOpen ? '去结算' : '暂未开放结算'}</Button>
   </CommercePage>;
 }
+
+export default withTheme(Cart);

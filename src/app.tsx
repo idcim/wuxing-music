@@ -82,6 +82,7 @@ async function bootstrapAuth(): Promise<void> {
 let lastSessionCheck = Date.now();
 function refreshForegroundState(): void {
   usePlayerStore.getState().checkTimer();
+  void useSiteStore.getState().hydrate();
   // 公开音乐接口会将过期令牌视为游客，前台恢复时主动核对一次账号状态。
   // 启动恢复已有请求；间隔检查避免频繁切换微信页面时反复请求。
   if (Date.now() - lastSessionCheck < 5 * 60 * 1000) return;

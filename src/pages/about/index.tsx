@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useEffect, useState } from 'react';
 import { View, Text, Image } from '@tarojs/components';
 import Taro from '@tarojs/taro';
@@ -9,7 +10,7 @@ import { resolveUrl } from '@/utils/url';
 import MarkdownView from '@/components/MarkdownView';
 import './index.scss';
 
-export default function About() {
+function About() {
   const [info, setInfo] = useState<SiteInfo | null>(null);
   // 本页自己也拉一次站点信息（要 about_us / 联系方式），
   // 但首屏那一下先用 store 里已缓存的品牌名，别闪一个写死的名字
@@ -71,3 +72,5 @@ export default function About() {
     </View>
   );
 }
+
+export default withTheme(About);

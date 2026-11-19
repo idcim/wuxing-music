@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Button } from '@tarojs/components';
 import Taro, { useDidHide, useDidShow, useRouter } from '@tarojs/taro';
@@ -5,7 +6,7 @@ import { commerceApi, shopPath, money, type Entry } from '@/services/commerce';
 import { payCommerceOrder } from '@/services/commerce-payment';
 import { action, CommercePage, Feedback } from '@/features/commerce/common';
 
-export default function Checkout() {
+function Checkout() {
   const params = useRouter().params;
   const kind = params.kind === 'course' ? 'course' : 'physical';
   const [addresses, setAddresses] = useState<Entry[]>([]);
@@ -97,3 +98,5 @@ export default function Checkout() {
       <Button className='commerce__primary' loading={busy} disabled={!agreed || busy} onClick={submit}>确认并支付 {money(quote.amount_fen)}</Button></>}
   </CommercePage>;
 }
+
+export default withTheme(Checkout);

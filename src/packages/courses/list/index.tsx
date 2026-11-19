@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, Button, Image, Slider } from '@tarojs/components';
 import { Video } from '@tarojs/components';
@@ -8,7 +9,7 @@ import MarkdownView from '@/components/MarkdownView';
 import { action, CommercePage, Cover, CustomerService, Feedback, requireCommerceLogin, useData } from '@/features/commerce/common';
 import courseBanner from '@/assets/commerce/course-banner.jpg';
 
-export default function CourseList() {
+function CourseList() {
   const [category, setCategory] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const { data, loading, error, load } = useData<Entry>(`/catalog/course?page=${page}${category === null ? '' : `&category=${category}`}`, { items: [], categories: [], total: 0 });
@@ -32,3 +33,5 @@ export default function CourseList() {
     </>}
   </CommercePage>;
 }
+
+export default withTheme(CourseList);

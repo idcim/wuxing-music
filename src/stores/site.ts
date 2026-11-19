@@ -3,6 +3,7 @@ import type { SiteInfo } from '@/services/site';
 import { getSiteInfo, DEFAULT_SITE } from '@/services/site';
 import { storage, STORAGE_KEYS } from '@/services/storage';
 import { isH5 } from '@/utils/platform';
+import { applyTheme, normalizeTheme } from '@/theme';
 
 /**
  * 站点品牌信息（后台「设置中心 → 站点信息」）。
@@ -21,18 +22,21 @@ interface SiteStore {
 // 缓存可能是旧版本写的（缺 site_slogan），按兜底补齐再用
 function cached(): SiteInfo {
   const c = storage.get<Partial<SiteInfo>>(STORAGE_KEYS.SITE);
-  return c ? { ...DEFAULT_SITE, ...c } : DEFAULT_SITE;
+  return c ? { ...DEFAULT_SITE, ...c, theme_id: normalizeTheme(c.theme_id) } : DEFAULT_SITE;
 }
 
 export const useSiteStore = create<SiteStore>((set, get) => ({
   site: cached(),
 
   hydrate: async () => {
+    applyTheme(get().site.theme_id);
     applyDocTitle(get().site.site_name);   // 先用缓存值刷标题，别等网络
     try {
       const site = await getSiteInfo();
-      storage.set(STORAGE_KEYS.SITE, site);
-      set({ site });
+      const next = { ...site, theme_id: normalizeTheme(site.theme_id) };
+      storage.set(STORAGE_KEYS.SITE, next);
+      set({ site: next });
+      applyTheme(next.theme_id);
       applyDocTitle(site.site_name);
     } catch {
       // 拉取失败保留缓存/兜底

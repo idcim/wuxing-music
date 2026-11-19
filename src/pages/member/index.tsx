@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useRef, useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro, { useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/taro';
@@ -18,7 +19,7 @@ import type { Plan, PlanId } from '@/types';
 import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
 
-export default function Member() {
+function Member() {
   const [cdkeyOpen, setCdkeyOpen] = useState(false);
   const [buying, setBuying] = useState<PlanId | null>(null);
   const [gifting, setGifting] = useState<PlanId | null>(null);
@@ -328,3 +329,5 @@ export default function Member() {
     </View>
   );
 }
+
+export default withTheme(Member);

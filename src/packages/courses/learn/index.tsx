@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { View, Text, Button, Slider, Video } from '@tarojs/components';
 import Taro, { useDidHide, useDidShow, useRouter } from '@tarojs/taro';
@@ -112,7 +113,7 @@ function LessonPlayer({ lesson, cover, control }: { lesson: number; cover: strin
   </>;
 }
 
-export default function LearnCourse() {
+function LearnCourse() {
   const visible = useRef(true);
   const control = useRef<PlaybackControl>();
   useDidShow(() => { visible.current = true; });
@@ -130,3 +131,5 @@ export default function LearnCourse() {
     }}><Text>{item.title}{item.preview ? ' · 免费' : ''}</Text></View>)}
   </CommercePage>;
 }
+
+export default withTheme(LearnCourse);

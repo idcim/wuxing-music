@@ -1,3 +1,3 @@
-export default definePageConfig({
+export default definePageConfig({ enablePageMeta: true,
   navigationStyle: 'custom'
 });

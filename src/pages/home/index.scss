@@ -25,7 +25,7 @@
 
   &__el {
     display: block;
-    color: #e2e8f0;
+    color: $text-primary;
     font-size: 52rpx;
     font-weight: 200;
     letter-spacing: 6rpx;
@@ -86,7 +86,7 @@
 
   &__member-name {
     display: block;
-    color: #e2e8f0;
+    color: $text-primary;
     font-size: 24rpx;
     font-weight: 500;
   }
@@ -149,7 +149,7 @@
 
   &__hero-title {
     display: block;
-    color: #e2e8f0;
+    color: $text-primary;
     font-size: 44rpx;
     font-weight: 300;
     letter-spacing: 2rpx;

@@ -1,12 +1,13 @@
 // ─── 全局基色 ───────────────────────────────────────
-$bg-deep: #03050a;
-$bg-mid: #0a0e1a;
-$text-primary: #e2e8f0;
-$text-secondary: #94a3b8;
-$text-tertiary: #64748b;
-$text-quaternary: #475569;
-$border: rgba(255, 255, 255, 0.06);
-$surface: rgba(255, 255, 255, 0.025);
+$bg-deep: var(--theme-bg, #03050a);
+$bg-mid: var(--theme-bg-mid, #0a0e1a);
+$text-primary: var(--theme-text, #e2e8f0);
+$text-secondary: var(--theme-muted, #94a3b8);
+$text-tertiary: var(--theme-subtle, #64748b);
+$text-quaternary: var(--theme-faint, #475569);
+$border: var(--theme-border, rgba(255, 255, 255, 0.06));
+$surface: var(--theme-surface, rgba(255, 255, 255, 0.025));
+$theme-accent: var(--theme-accent, #84cc16);
 
 // ─── 圆角 ───────────────────────────────────────────
 $radius-sm: 16rpx;

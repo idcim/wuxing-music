@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
@@ -44,7 +45,7 @@ function fmt(s: string | null): string {
 
 const money = (v: number | undefined) => Number(v || 0).toFixed(2);
 
-export default function AgentCenter() {
+function AgentCenter() {
   const [me, setMe] = useState<AgentMe>({ isAgent: false });
   const [rows, setRows] = useState<CommissionItem[]>([]);
   const [withdrawals, setWithdrawals] = useState<WithdrawalItem[]>([]);
@@ -329,3 +330,5 @@ export default function AgentCenter() {
     </View>
   );
 }
+
+export default withTheme(AgentCenter);

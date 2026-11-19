@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
@@ -27,7 +28,7 @@ function fmt(s: string | null): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-export default function Orders() {
+function Orders() {
   const [list, setList] = useState<MyOrder[]>([]);
   const [state, setState] = useState<LoadState>('loading');
   const element = useUserStore((s) => s.element);
@@ -144,3 +145,5 @@ export default function Orders() {
     </View>
   );
 }
+
+export default withTheme(Orders);

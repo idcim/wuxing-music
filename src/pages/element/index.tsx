@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { View, Text } from '@tarojs/components';
 import { useRouter, useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/taro';
 import { goBack, navTopStyle, navBarStyle } from '@/utils/nav';
@@ -25,7 +26,7 @@ const FACTS: [string, keyof ElementMeta][] = [
   ['空间感', 'spaceFeel']
 ];
 
-export default function ElementDetail() {
+function ElementDetail() {
   const router = useRouter();
   const id = (decodeURIComponent(router.params.id || '木') as ElementId);
   const el = WUXING[id];
@@ -113,3 +114,5 @@ export default function ElementDetail() {
     </View>
   );
 }
+
+export default withTheme(ElementDetail);

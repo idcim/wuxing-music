@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useState } from 'react';
 import { View, Text, Image } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
@@ -27,7 +28,7 @@ interface MenuItem {
   danger?: boolean;
 }
 
-export default function Profile() {
+function Profile() {
   const commerceReady = useCommerce(s => !!s.config.commerce_ready);
   const element = useUserStore((s) => s.element);
   const isPremium = useUserStore((s) => s.isPremium);
@@ -309,3 +310,5 @@ export default function Profile() {
     </View>
   );
 }
+
+export default withTheme(Profile);

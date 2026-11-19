@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { View, Text } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import Icon from '@/components/Icon';
@@ -24,7 +25,7 @@ const NODES = ELEMENT_LIST.map((el, i) => {
   return { el, x, y };
 });
 
-export default function Onboard() {
+function Onboard() {
   const stars = STARS;
   const nodes = NODES;
 
@@ -91,3 +92,5 @@ export default function Onboard() {
     </View>
   );
 }
+
+export default withTheme(Onboard);

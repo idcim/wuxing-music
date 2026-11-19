@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
@@ -58,7 +59,7 @@ function relTime(iso: string): string {
   return iso.slice(0, 10);
 }
 
-export default function History() {
+function History() {
   const [list, setList] = useState<HistoryItem[]>([]);
   const [state, setState] = useState<LoadState>('loading');
 
@@ -136,3 +137,5 @@ export default function History() {
     </View>
   );
 }
+
+export default withTheme(History);

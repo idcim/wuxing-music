@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro, { useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/taro';
@@ -16,7 +17,7 @@ import type { ElementId } from '@/types';
 import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
 
-export default function Explore() {
+function Explore() {
   const userElement = useUserStore((s) => s.element);
   // 默认选中用户本命体质（未测评则默认木），切换会更新
   const [selected, setSelected] = useState<ElementId>(
@@ -180,3 +181,5 @@ export default function Explore() {
     </View>
   );
 }
+
+export default withTheme(Explore);

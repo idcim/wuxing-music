@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useEffect, useRef, useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import { useRouter } from '@tarojs/taro';
@@ -10,7 +11,7 @@ import './index.scss';
 // PC 微信小程序的音频运行时是坏的（BGM 假 onPlay + 10004，InnerAudioContext
 // 解不了大文件），PC 端由小程序 web-view 内嵌本页播放——完整浏览器内核，
 // 通用 MP3/AAC/WAV 都能放。也支持 ?url= 直放任意音频做对照实验。
-export default function H5Play() {
+function H5Play() {
   const router = useRouter();
   const [title, setTitle] = useState('加载中…');
   const [state, setState] = useState<'loading' | 'ready' | 'playing' | 'error'>('loading');
@@ -107,3 +108,5 @@ export default function H5Play() {
     </View>
   );
 }
+
+export default withTheme(H5Play);

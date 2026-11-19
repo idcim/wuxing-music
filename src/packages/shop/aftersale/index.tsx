@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useRef, useState } from 'react';
 import { View, Text, Button, Input, Textarea, Image } from '@tarojs/components';
 import Taro, { useDidShow, useRouter } from '@tarojs/taro';
@@ -11,7 +12,7 @@ const labels: Record<string, string> = { pending: '待付款', closing: '取消�
   requested: '售后待审核', awaiting_return: '等待寄回', returning: '退货待验收', rejected: '申请未通过' };
 const label = (value: string) => labels[value] || value;
 
-export default function AfterSale() {
+function AfterSale() {
   const params = useRouter().params;
   const id = Number(params.order), itemId = Number(params.item);
   const { data: order, loading, error, load } = useData<Entry>(`/orders/${id}`, {});
@@ -47,3 +48,5 @@ export default function AfterSale() {
     </>}
   </CommercePage>;
 }
+
+export default withTheme(AfterSale);

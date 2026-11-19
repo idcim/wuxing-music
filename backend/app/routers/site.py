@@ -10,6 +10,7 @@ from app.schemas import ok
 router = APIRouter(prefix="/api/site", tags=["site-public"])
 
 SITE_KEY = "site_config"
+THEME_KEY = "theme_config"
 
 
 @router.get("/info")
@@ -17,7 +18,10 @@ def site_info(db: Session = Depends(get_db)):
     """小程序公开读取站点信息（免登录）。"""
     row = db.query(Setting).filter(Setting.key == SITE_KEY).first()
     cfg = json.loads(row.value) if row and row.value else {}
+    theme_row = db.query(Setting).filter(Setting.key == THEME_KEY).first()
+    theme = json.loads(theme_row.value) if theme_row and theme_row.value else {}
     return ok({
+        "theme_id": theme.get("theme_id") if theme.get("theme_id") in ("starlight", "chinese_classic") else "starlight",
         # 前端的品牌名与副标题都以这两项为准（未配置时兜底，与 SiteSettingIn 的默认值一致）
         "site_name": cfg.get("site_name") or "五行律音",
         "site_slogan": cfg.get("site_slogan") or "按体质定制的助眠音律",

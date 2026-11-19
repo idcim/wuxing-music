@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useState } from 'react';
 import { View, Text, ScrollView } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
@@ -38,7 +39,7 @@ function readVersion(): string {
   }
 }
 
-export default function Settings() {
+function Settings() {
   const [cacheKB, setCacheKB] = useState<number | null>(null);
   const [version, setVersion] = useState(APP_VERSION);
   const [cancelling, setCancelling] = useState(false);
@@ -167,3 +168,5 @@ export default function Settings() {
     </View>
   );
 }
+
+export default withTheme(Settings);

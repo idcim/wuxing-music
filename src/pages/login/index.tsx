@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useEffect, useState } from 'react';
 import { View, Text, Input, Checkbox, CheckboxGroup } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
@@ -19,7 +20,7 @@ const PLACEHOLDER_STYLE = 'color:#475569';
 // H5 登录沿用个人信息页；小程序登录直接回首页，在“我的”页提示补全资料。
 const AFTER_LOGIN = '/pages/userinfo/index?from=login';
 
-export default function Login() {
+function Login() {
   const siteName = useSiteStore((s) => s.site.site_name);
   const loggingIn = useUserStore((s) => s.loggingIn);
   const login = useUserStore((s) => s.login);
@@ -336,3 +337,5 @@ export default function Login() {
     </View>
   );
 }
+
+export default withTheme(Login);

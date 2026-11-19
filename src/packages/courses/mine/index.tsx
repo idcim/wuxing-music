@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, Button, Slider } from '@tarojs/components';
 import { Video } from '@tarojs/components';
@@ -7,7 +8,7 @@ import { usePlayerStore } from '@/stores/player';
 import MarkdownView from '@/components/MarkdownView';
 import { action, CommercePage, Cover, CustomerService, Feedback, requireCommerceLogin, useData } from '@/features/commerce/common';
 
-export default function MyCourses() {
+function MyCourses() {
   const { data, loading, error, load } = useData<Entry[]>('/courses/mine', []);
   return <CommercePage title='我的课程'><Feedback loading={loading} error={error} retry={load} />
     {!loading && !error && !data.length && <Text className='commerce__empty'>还没有课程，先去课程页看看吧</Text>}
@@ -20,3 +21,5 @@ export default function MyCourses() {
       </View></View>)}
   </CommercePage>;
 }
+
+export default withTheme(MyCourses);

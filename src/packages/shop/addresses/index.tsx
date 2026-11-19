@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, Button, Input, Picker } from '@tarojs/components';
 import Taro, { useDidShow, useRouter } from '@tarojs/taro';
@@ -6,7 +7,7 @@ import { payCommerceOrder } from '@/services/commerce-payment';
 import { action, CommercePage, Feedback, useData } from '@/features/commerce/common';
 
 const emptyAddress = { name: '', phone: '', province: '', city: '', district: '', detail: '' };
-export default function Addresses() {
+function Addresses() {
   const { data, loading, error, load } = useData<Entry[]>('/addresses', []);
   const [editing, setEditing] = useState(0);
   const [form, setForm] = useState({ ...emptyAddress });
@@ -28,3 +29,5 @@ export default function Addresses() {
     <View className='commerce__actions'><Button className='commerce__primary' loading={busy} onClick={save}>保存地址</Button>{!!editing && <Button onClick={() => { setEditing(0); setForm({ ...emptyAddress }); }}>取消编辑</Button>}</View>
   </CommercePage>;
 }
+
+export default withTheme(Addresses);

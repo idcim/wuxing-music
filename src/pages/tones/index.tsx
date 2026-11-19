@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import { useRouter } from '@tarojs/taro';
@@ -95,7 +96,7 @@ const SECTIONS: {
   }
 ];
 
-export default function Tones() {
+function Tones() {
   const router = useRouter();
   const userElement = useUserStore((s) => s.element);
   const initial = (router.params.id
@@ -217,3 +218,5 @@ export default function Tones() {
     </View>
   );
 }
+
+export default withTheme(Tones);

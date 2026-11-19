@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { View, Text, Image, Button, Picker } from '@tarojs/components';
 import Taro, { useDidShow, useRouter } from '@tarojs/taro';
 import { useState } from 'react';
@@ -41,7 +42,7 @@ function todayStr(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-export default function UserInfo() {
+function UserInfo() {
   const router = useRouter();
   // 登录成功后会带 from=login 进来：引导补全资料，返回键与「完成」都回首页
   const fromLogin = router.params.from === 'login';
@@ -321,3 +322,5 @@ export default function UserInfo() {
     </View>
   );
 }
+
+export default withTheme(UserInfo);

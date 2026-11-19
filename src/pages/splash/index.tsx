@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { View, Text } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import Icon from '@/components/Icon';
@@ -16,7 +17,7 @@ const STARS = Array.from({ length: 50 }).map(() => ({
   delay: Math.random() * 3
 }));
 
-export default function Splash() {
+function Splash() {
   const stars = STARS;
   // 品牌名取后台站点设置（冷启动先用本地缓存，hydrate 完自动重渲染）
   const name = useSiteStore((s) => s.site.site_name);
@@ -65,3 +66,5 @@ export default function Splash() {
     </View>
   );
 }
+
+export default withTheme(Splash);

@@ -9,7 +9,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(ellipse at 50% 40%, #0a0e1a 0%, #03050a 100%);
+  background: radial-gradient(ellipse at 50% 40%, $bg-mid 0%, $bg-deep 100%);
 
   &__star {
     position: absolute;

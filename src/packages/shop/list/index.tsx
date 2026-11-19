@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useState } from 'react';
 import { View, Text, Button, Input, Swiper, SwiperItem, Image } from '@tarojs/components';
 import Taro, { useRouter } from '@tarojs/taro';
@@ -7,7 +8,7 @@ import MarkdownView from '@/components/MarkdownView';
 import { action, CommercePage, Cover, CustomerService, Feedback, requireCommerceLogin, useData } from '@/features/commerce/common';
 import shopBanner from '@/assets/commerce/shop-banner.jpg';
 
-export default function ShopList() {
+function ShopList() {
   const [category, setCategory] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const { data, loading, error, load } = useData<Entry>(`/catalog/physical?page=${page}${category === null ? '' : `&category=${category}`}`, { items: [], categories: [], total: 0 });
@@ -30,3 +31,5 @@ export default function ShopList() {
     </>}
   </CommercePage>;
 }
+
+export default withTheme(ShopList);

@@ -1,7 +1,9 @@
 import { USE_MOCK } from '@/constants/env';
 import { request } from '@/services/api';
+import { storage, STORAGE_KEYS } from '@/services/storage';
 
 export interface SiteInfo {
+  theme_id: 'starlight' | 'chinese_classic';
   site_name: string;
   site_slogan: string;   // 副标题：分享描述 / 海报品牌行 / 锁屏专辑名
   logo_url: string;
@@ -15,6 +17,7 @@ export interface SiteInfo {
 // 后端未配 / 拉取失败时的兜底。品牌文案的最后一道防线——
 // 页面里不要再各自硬编码「五行律音」，一律经 stores/site.ts 取。
 export const DEFAULT_SITE: SiteInfo = {
+  theme_id: 'starlight',
   site_name: '五行律音',
   site_slogan: '按体质定制的助眠音律',
   logo_url: '',
@@ -44,6 +47,7 @@ export async function getSiteInfo(): Promise<SiteInfo> {
       site_slogan: info.site_slogan || DEFAULT_SITE.site_slogan
     };
   } catch {
-    return DEFAULT_SITE;
+    // 临时断网时维持上次发布的风格和品牌，避免回到前台突然闪回默认值。
+    return { ...DEFAULT_SITE, ...storage.get<Partial<SiteInfo>>(STORAGE_KEYS.SITE) };
   }
 }

@@ -14,15 +14,15 @@
   &__placeholder { display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,$bg-mid,rgba(190,242,100,.08)); color:$text-tertiary; font-size:32rpx; }
   &__name { display:block; font-size:34rpx; font-weight:500; margin:14rpx 0; line-height:1.5; }
   &__muted, &__contact { display:block; color:$text-secondary; font-size:26rpx; line-height:1.8; margin:12rpx 0; overflow-wrap:anywhere; }
-  &__price { display:block; color:#bef264; font-size:36rpx; margin:16rpx 0; }
+  &__price { display:block; color:$theme-accent; font-size:36rpx; margin:16rpx 0; }
   &__chips, &__row { display:flex; flex-wrap:wrap; gap:16rpx; align-items:center; margin:20rpx 0; }
   &__chip { padding:14rpx 22rpx; border:1rpx solid $border; border-radius:$radius-pill; font-size:28rpx; color:$text-secondary; }
-  &__chip--active { border-color:#84cc16; color:#bef264; }
+  &__chip--active { border-color:$theme-accent; color:$theme-accent; }
   &__empty { display:block; text-align:center; color:$text-secondary; padding:64rpx 12rpx; font-size:30rpx; line-height:1.8; }
   &__actions { display:flex; flex-wrap:wrap; gap:16rpx; margin:28rpx 0; }
   button { font-size:28rpx; line-height:1.6; border-radius:$radius-sm; padding:18rpx 22rpx; margin:0; }
   button::after { border:none; }
-  &__primary { background:#84cc16; color:$bg-deep; flex:1; }
+  &__primary { background:$theme-accent; color:$bg-deep; flex:1; }
   &__secondary { background:$bg-mid; color:$text-primary; border:1rpx solid $border; }
   &__field { margin:24rpx 0; }
   &__label { display:block; font-size:28rpx; color:$text-secondary; margin-bottom:12rpx; }

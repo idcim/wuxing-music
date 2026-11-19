@@ -80,6 +80,8 @@ export const updatePaySetting = (data: any) => req.put('/api/admin/settings/pay'
 // ── 站点设置 ──
 export const getSiteSetting = () => req.get('/api/admin/settings/site');
 export const updateSiteSetting = (data: any) => req.put('/api/admin/settings/site', data);
+export const getThemeSetting = () => req.get('/api/admin/settings/theme');
+export const updateThemeSetting = (theme_id: string) => req.put('/api/admin/settings/theme', { theme_id });
 // 公开的站点信息（免鉴权）。登录页在拿到 token 之前就要显示品牌名，只能走这个。
 export const getSiteInfo = () => req.get('/api/site/info');
 

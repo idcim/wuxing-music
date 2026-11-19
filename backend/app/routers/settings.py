@@ -14,6 +14,7 @@ from app.schemas import (
     OpenSettingIn,
     PaySettingIn,
     SiteSettingIn,
+    ThemeSettingIn,
     SmsSettingIn,
     StorageSettingIn,
     ok,
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/api/admin/settings", tags=["settings"])
 
 PAY_KEY = "pay_config"
 SITE_KEY = "site_config"
+THEME_KEY = "theme_config"
 STORAGE_KEY = "storage_config"
 MP_KEY = "mp_config"
 OA_KEY = "oa_config"
@@ -104,6 +106,21 @@ def update_site(
     _: Admin = Depends(require_perm("settings:edit")),
 ):
     _save_setting(db, SITE_KEY, body.model_dump())
+    return ok({"saved": True})
+
+
+@router.get("/theme")
+def get_theme(db: Session = Depends(get_db), _: Admin = Depends(require_perm("settings:view"))):
+    return ok({"theme_id": _get_setting(db, THEME_KEY).get("theme_id", "starlight")})
+
+
+@router.put("/theme")
+def update_theme(
+    body: ThemeSettingIn,
+    db: Session = Depends(get_db),
+    _: Admin = Depends(require_perm("settings:edit")),
+):
+    _save_setting(db, THEME_KEY, body.model_dump())
     return ok({"saved": True})
 
 

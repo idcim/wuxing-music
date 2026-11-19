@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { View, Text } from '@tarojs/components';
 import Taro, { useRouter } from '@tarojs/taro';
 import Icon from '@/components/Icon';
@@ -11,7 +12,7 @@ import './index.scss';
 
 const ALL_ELEMENTS: ElementId[] = ['木', '火', '土', '金', '水'];
 
-export default function Result() {
+function Result() {
   const router = useRouter();
   const storeEl = useUserStore((s) => s.element);
   const storeScores = useUserStore((s) => s.scores);
@@ -150,3 +151,5 @@ export default function Result() {
     </View>
   );
 }
+
+export default withTheme(Result);

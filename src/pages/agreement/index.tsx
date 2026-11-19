@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useEffect, useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import { goBack, navBarStyle } from '@/utils/nav';
@@ -5,7 +6,7 @@ import { getSiteInfo } from '@/services/site';
 import MarkdownView from '@/components/MarkdownView';
 import './index.scss';
 
-export default function Agreement() {
+function Agreement() {
   const [terms, setTerms] = useState<string | null>(null);
 
   useEffect(() => {
@@ -30,3 +31,5 @@ export default function Agreement() {
     </View>
   );
 }
+
+export default withTheme(Agreement);

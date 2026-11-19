@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useState } from 'react';
 import { View, Text, Image } from '@tarojs/components';
 import Taro, { useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/taro';
@@ -29,7 +30,7 @@ const MODE_LABEL: Record<string, string> = {
   pulse: '悦动'
 };
 
-export default function Player() {
+function Player() {
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const isLoading = usePlayerStore((s) => s.isLoading);
@@ -246,3 +247,5 @@ export default function Player() {
     </View>
   );
 }
+
+export default withTheme(Player);

@@ -28,6 +28,7 @@ const router = createRouter({
         { path: 'withdrawals', component: () => import('@/views/Withdrawals.vue'), meta: { title: '提现审核', perm: 'agents:view', feature: 'agent' } },
         { path: 'agent-settings', component: () => import('@/views/AgentPanel.vue'), meta: { title: '分成设置', perm: 'settings:view' } },
         { path: 'settings', component: () => import('@/views/SettingsCenter.vue'), meta: { title: '站点设置', perm: 'settings:view' } },
+        { path: 'theme', component: () => import('@/views/Theme.vue'), meta: { title: '风格管理', perm: 'settings:view' } },
         { path: 'admins', component: () => import('@/views/Admins.vue'), meta: { title: '管理员', perm: 'admins:manage' } },
         { path: 'roles', component: () => import('@/views/Roles.vue'), meta: { title: '角色权限', perm: 'admins:manage' } },
         { path: 'commerce-catalog', component: () => import('@/views/commerce/Catalog.vue'), meta: { title: '课程与商品', perm: 'commerce:view' } },

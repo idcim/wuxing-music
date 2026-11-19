@@ -1,9 +1,10 @@
+import { withTheme } from '@/theme/withTheme';
 import { View, Text, Button } from '@tarojs/components';
 import Taro, { useRouter } from '@tarojs/taro';
 import { type Entry } from '@/services/commerce';
 import { CommercePage, CustomerService, Feedback, useData } from '@/features/commerce/common';
 
-export default function OrderLogistics() {
+function OrderLogistics() {
   const id = Number(useRouter().params.id);
   const { data, loading, error, load } = useData<Entry>(`/orders/${id}/logistics`, {});
   const trace = data.trace;
@@ -27,3 +28,5 @@ export default function OrderLogistics() {
     <View className='commerce__actions'><Button className='commerce__secondary' loading={loading} disabled={loading} onClick={load}>刷新物流</Button><CustomerService /></View>
   </CommercePage>;
 }
+
+export default withTheme(OrderLogistics);

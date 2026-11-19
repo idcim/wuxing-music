@@ -9,7 +9,7 @@
   align-items: center;
   justify-content: center;
   padding: 0 64rpx;
-  background: radial-gradient(ellipse at 50% 30%, #0a0e1a 0%, #03050a 100%);
+  background: radial-gradient(ellipse at 50% 30%, $bg-mid 0%, $bg-deep 100%);
 
   &__nav {
     position: absolute;

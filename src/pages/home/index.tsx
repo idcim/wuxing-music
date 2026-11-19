@@ -1,3 +1,4 @@
+import { withTheme } from '@/theme/withTheme';
 import { useState } from 'react';
 import { View, Text, Button } from '@tarojs/components';
 import Taro, { useShareAppMessage, useShareTimeline, useDidShow } from '@tarojs/taro';
@@ -5,7 +6,8 @@ import { openShareMenu, setH5Share } from '@/utils/share';
 import { WUXING, ELEMENT_LIST } from '@/constants/wuxing';
 import { useUserStore } from '@/stores/user';
 import { usePlayerStore } from '@/stores/player';
-import { siteName, brandLine } from '@/stores/site';
+import { siteName, brandLine, useSiteStore } from '@/stores/site';
+import { THEMES } from '@/theme';
 import Icon from '@/components/Icon';
 import { A } from '@/utils/color';
 import { navTopStyle } from '@/utils/nav';
@@ -20,7 +22,8 @@ import { isH5 } from '@/utils/platform';
 
 const TIMER_OPTS = [15, 30, 45, 60];
 
-export default function Home() {
+function Home() {
+  const themeId = useSiteStore(s => s.site.theme_id);
   const element = useUserStore((s) => s.element) || ('木' as ElementId);
   const isPremium = useUserStore((s) => s.isPremium);
   const user = useUserStore((s) => s.user);
@@ -77,7 +80,7 @@ export default function Home() {
     : null;
 
   return (
-    <View className="home" style={{ background: el.bg }}>
+    <View className="home" style={{ background: THEMES[themeId].homeBg || el.bg }}>
       {/* Header（顶部留出胶囊按钮安全高度，避免礼物按钮被遮挡） */}
       <View className="home__header fade-up" style={navTopStyle()}>
         <View>
@@ -295,3 +298,5 @@ export default function Home() {
     </View>
   );
 }
+
+export default withTheme(Home);

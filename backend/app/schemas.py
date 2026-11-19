@@ -1,4 +1,4 @@
-from typing import Any, Generic, Optional, TypeVar
+from typing import Any, Generic, Literal, Optional, TypeVar
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -141,6 +141,10 @@ class SiteSettingIn(BaseModel):
     contact_phone: str = ""
     about_us: str = ""          # 关于我们（Markdown）
     service_terms: str = ""     # 服务条款（Markdown）
+
+
+class ThemeSettingIn(BaseModel):
+    theme_id: Literal["starlight", "chinese_classic"] = "starlight"
 
 
 # ── 存储设置 ──
