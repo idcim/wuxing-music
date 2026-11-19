@@ -129,7 +129,7 @@
 
 ## 自动部署顺序
 
-按用户要求，备份、版本化迁移和 Worker 首次启动已纳入部署文件。沿用现有 1Panel 自动部署任务即可，无需另填数据库账号，也不需要管理员逐条执行初始化命令。`docker compose up -d --build` 同样遵守下列依赖顺序：
+按用户要求，备份、版本化迁移和 Worker 首次启动已纳入部署文件。沿用现有 1Panel 自动部署任务即可，无需另填数据库账号，也不需要管理员逐条执行初始化命令。手动更新使用 `docker compose build api admin` 和 `docker compose up -d api admin`，保留 H5 原版本，并遵守下列依赖顺序：
 
 1. `database-prepare` 使用 `backend/.env` 已有的数据库连接，检查事务备份条件，将 MySQL 客户端配置写入专用临时凭证卷；不输出密码。未支持的连接参数或非 InnoDB 表会停止部署。
 2. `database-backup` 用官方 MySQL 8.0 客户端做单库事务快照，包含表、触发器、存储过程和事件，压缩后校验 gzip 并生成 SHA-256。默认文件保存在服务器 `/var/backups/wuxing-music`，目录 700、文件 600，不在站点或 Git 中；可由 `WUXING_BACKUP_DIR` 指定受控路径。备份失败、超时（默认 30 分钟）或写入失败会阻止迁移。请监控备份容量并按运维保留政策归档，脚本不自动删除历史备份。

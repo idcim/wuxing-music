@@ -3,6 +3,8 @@
 课程商城 2.0 另需显式数据库迁移、独立 Worker 和私有课件存储，默认关闭；按 [2.0 部署顺序](V2-COMMERCE.md) 在测试环境预演后再发布。不要只推送代码就开启收款。
 
 monorepo：**小程序 / H5 前端（Taro）** + **后端 API（FastAPI）** + **管理后台（Vue3）**。
+
+> **2026-11-19 起**：H5 已停止更新，自动部署仅构建并启动 API、后台及其依赖 Worker。已有 H5 镜像与静态文件保留运行；后端重建后仅重载旧 H5 的 Nginx 反代配置。后续前端功能只交付小程序。
 后端与后台用 Docker 部署（`docker-compose.yml`），连**外部 MySQL**（1Panel 网络内）。
 
 ## 架构与端口
@@ -59,7 +61,8 @@ H5 相关域名散落三处，逐一配好：
 git clone https://github.com/idcim/wuxing-music.git /opt/1panel/www/sites/app/index/wuxing-music
 cd /opt/1panel/www/sites/app/index/wuxing-music
 cp backend/.env.example backend/.env      # 按上表填真实值
-docker compose up -d --build              # 起 后端 + 后台 + H5
+docker compose build api admin
+docker compose up -d api admin             # 起后端、后台及数据库/Worker 依赖；不更新 H5
 docker compose logs -f
 ```
 - 后端 API 文档 `http://<服务器>:8000/docs`，健康检查 `/api/health`
@@ -97,7 +100,7 @@ docker compose ps -a
 
 日志中的构建阶段、超时或回滚结果可以区分卡在拉取、构建、备份迁移还是容器健康。旧脚本已经持锁运行时，新提交中的超时保护要等该进程结束、下一轮拉取后才生效；处理旧进程前应先核对实际 PID 和容器状态。分享日志时去除凭证与私有地址。
 
-课程商城 2.0 的首次初始化已纳入 Compose 和自动部署：临时配置 → MySQL 单库备份与校验 → v6 幂等迁移 → 两个 Worker 健康 → API／后台／H5。无需额外填写数据库账号，复用服务器已有 `backend/.env`。备份默认在 `/var/backups/wuxing-music`（700/600 权限），可用 `WUXING_BACKUP_DIR` 改为受控目录；失败则阻止迁移和新应用启动，回滚仅恢复应用、不覆盖数据库。Worker 已纳入默认服务，售卖仍由后台关闭；详细恢复与检查说明见 [2.0 部署顺序](V2-COMMERCE.md#自动部署顺序)。自动部署在发布成功后记录标记，失败且代码已拉取时仍会重试。请监控容器 unhealthy 与备份容量。
+课程商城 2.0 的首次初始化已纳入 Compose 和自动部署：临时配置 → MySQL 单库备份与校验 → v6 幂等迁移 → 两个 Worker 健康 → API／后台。无需额外填写数据库账号，复用服务器已有 `backend/.env`。备份默认在 `/var/backups/wuxing-music`（700/600 权限），可用 `WUXING_BACKUP_DIR` 改为受控目录；失败则阻止迁移和新应用启动，回滚仅恢复应用、不覆盖数据库。Worker 已纳入默认服务，售卖仍由后台关闭；详细恢复与检查说明见 [2.0 部署顺序](V2-COMMERCE.md#自动部署顺序)。自动部署在发布成功后记录标记，失败且代码已拉取时仍会重试。请监控容器 unhealthy 与备份容量。
 
 2.0 支付、私有课程 OSS、数字支付和发货参数可在后台“课程商城配置”维护，API/Worker 保存后自动读取，不需要填写本地 `.env`。现有音乐支付及小程序身份继续复用；渠道凭证加密保存在数据库，恢复数据库时应保留原服务器 `JWT_SECRET`，轮换后需在后台重新填写凭证。数据库连接与 JWT 根密钥继续由服务器管理。
 
@@ -119,8 +122,8 @@ Windows 可使用绝对 Windows 路径；报告文件必须尚不存在，父目
 
 ## H5 前端（已容器化）
 
-H5 已作为 `wuxing-h5` 服务并入 `docker-compose.yml`——`docker compose up -d --build`
-会自动 `build:h5` 并用 Nginx 托管（:8081），且**同源反代 `/api`、`/uploads` 到后端容器**
+历史 H5 仍作为 `wuxing-h5` 服务保留在 `docker-compose.yml` 的 `legacy-h5` profile 中，以 Nginx 托管（:8081），且**同源反代 `/api`、`/uploads` 到后端容器**。
+常规自动部署不再构建或重建该服务；不要用未指定服务的 `docker compose up -d --build` 执行常规更新。
 （见 `docker/Dockerfile.h5` + `docker/h5.nginx.conf`）。因此 H5 免 CORS、不依赖外部后端域名，
 `git push` 后由自动部署脚本一并重建。
 
@@ -181,7 +184,7 @@ H5 已作为 `wuxing-h5` 服务并入 `docker-compose.yml`——`docker compose 
 
 ### 小程序端需手工重新上传
 
-服务器自动部署只覆盖 后端 / 后台 / H5。**小程序包不随之更新**——
+服务器自动部署只覆盖后端、后台和 Worker。H5 保持原版本，**小程序包也不随之更新**——
 必须 `npm run build:weapp` → 微信开发者工具上传 → 提审 → 发布。
 
 因此小程序的欠账会独立累积，**单独记在 [`WEAPP-TODO.md`](WEAPP-TODO.md)**（合法域名、

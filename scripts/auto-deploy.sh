@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # 五行律音 · 自动部署（单次幂等，供 1Panel「计划任务」定时调用）
 # ================================================================
-# 作用：拉取 → 构建 → 数据库备份校验 → 幂等迁移 → Worker/API/后台/H5 → 健康检查。
+# 作用：拉取 → 构建 → 数据库备份校验 → 幂等迁移 → Worker/API/后台 → 健康检查。
+#       H5 已冻结：不构建或重建其容器，旧站点继续运行。
 #       构建失败保留旧容器并在下轮重试；启动失败只回滚应用，不回退数据库。
 #       成功部署且无更新则退出；带文件锁防并发重入。
 #
@@ -110,6 +111,13 @@ database_setup_logs() {
   done
 }
 
+refresh_legacy_h5_proxy() {
+  # H5 静态文件保持原样；Nginx 仅重载旧配置，使 api 容器换 IP 后反代仍可连接。
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx wuxing-h5; then
+    docker exec wuxing-h5 nginx -s reload >>"$LOG_FILE" 2>&1 || log "⚠️ 旧 H5 反代重载失败，请检查容器连接。"
+  fi
+}
+
 # ── 单实例锁：拿不到说明上次部署还在跑（构建慢于调用间隔），本次跳过 ──
 # ⚠️ 先单独判断 flock 在不在。否则它缺失时 `! flock` 同样为真，会走进
 #    「已有部署进程在运行 → exit 0」——**每次都静默跳过、永远返回 0**，
@@ -184,7 +192,7 @@ esac
 BUILD_OK=0
 for attempt in 1 2 3; do
   log "开始构建第 $attempt 次（单次上限 ${BUILD_TIMEOUT}s）。"
-  if timeout --kill-after=30s "${BUILD_TIMEOUT}s" $COMPOSE build >>"$LOG_FILE" 2>&1; then
+  if timeout --kill-after=30s "${BUILD_TIMEOUT}s" $COMPOSE build api admin >>"$LOG_FILE" 2>&1; then
     BUILD_OK=1
     break
   else
@@ -205,7 +213,8 @@ if [ "$BUILD_OK" != "1" ]; then
   exit 1
 fi
 
-if $COMPOSE up -d >>"$LOG_FILE" 2>&1 && health_ok; then
+if $COMPOSE up -d api admin >>"$LOG_FILE" 2>&1 && health_ok; then
+  refresh_legacy_h5_proxy
   database_setup_logs
   printf '%s\n' "$REMOTE" >"$DEPLOYED_FILE"
   log "✅ 部署成功，健康检查通过（$(git rev-parse --short HEAD)）。"
@@ -224,12 +233,13 @@ if [ "$ROLLBACK_ON_FAIL" = "1" ]; then
   # 数据库迁移只向前；恢复旧应用时不重复执行初始化依赖链。
   # 仅选择回滚版本实际声明的运行服务（兼容尚无 Worker 的旧版本）。
   ROLLBACK_SERVICES=""
-  for service in api admin h5 commerce-worker commerce-media-worker; do
+  for service in api admin commerce-worker commerce-media-worker; do
     if $COMPOSE config --services 2>/dev/null | grep -qx "$service"; then
       ROLLBACK_SERVICES="$ROLLBACK_SERVICES $service"
     fi
   done
   if [ -n "$ROLLBACK_SERVICES" ] && $COMPOSE up -d --build --no-deps $ROLLBACK_SERVICES >>"$LOG_FILE" 2>&1 && health_ok; then
+    refresh_legacy_h5_proxy
     log "✅ 已回滚到旧版本，服务恢复。"; notify "部署失败已回滚到 ${OLD_SHA:0:7}"
   else
     log "🔥 回滚后仍不健康，请立即人工介入！"; notify "部署+回滚均失败，需人工介入！"

@@ -120,7 +120,7 @@ docker() {
     'config --services') printf '%s\n' api admin h5 commerce-worker commerce-media-worker commerce-init ;;
     'ps -q commerce-worker') echo worker-id ;;
     'ps -q commerce-media-worker') echo media-id ;;
-    build) echo build >>"$MOCK_OPERATIONS" ;;
+    build*) echo "$*" >>"$MOCK_OPERATIONS" ;;
     'up '*)
       printf '%s\n' "$*" >>"$MOCK_OPERATIONS"
       case "$*" in *--no-deps*) return 0 ;; esac
@@ -133,7 +133,9 @@ sleep() { :; }
 flock() { return 0; }
 timeout() {
   shift 2
-  if [ "${MOCK_BUILD_TIMEOUT:-0}" = 1 ] && [ "${*: -1}" = build ]; then return 124; fi
+  if [ "${MOCK_BUILD_TIMEOUT:-0}" = 1 ]; then
+    case " $* " in *' build '*) return 124 ;; esac
+  fi
   "$@"
 }
 export -f git docker curl sleep flock timeout
@@ -160,6 +162,16 @@ bash "$MOCK_SOURCE"
             self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
             self.assertEqual((folder / "operations").read_text(), before)
 
+    def test_release_does_not_build_or_recreate_h5(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            result = self.deploy(folder)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            operations = (folder / "operations").read_text().splitlines()
+            self.assertIn("build api admin", operations)
+            self.assertIn("up -d api admin", operations)
+            self.assertFalse(any("h5" in operation for operation in operations))
+
     def test_failed_initialization_is_not_marked_success_and_next_run_retries(self):
         with tempfile.TemporaryDirectory() as temporary:
             folder = Path(temporary)
@@ -168,7 +180,7 @@ bash "$MOCK_SOURCE"
             self.assertFalse((folder / "success").exists())
             passed = self.deploy(folder)
             self.assertEqual(passed.returncode, 0, passed.stdout + passed.stderr)
-            self.assertEqual((folder / "operations").read_text().count("build\n"), 2)
+            self.assertEqual((folder / "operations").read_text().count("build api admin\n"), 2)
 
     def test_rollback_restores_runtime_without_rerunning_database_setup(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -176,7 +188,7 @@ bash "$MOCK_SOURCE"
             failed = self.deploy(folder, fail=True, rollback=True)
             self.assertNotEqual(failed.returncode, 0)
             self.assertFalse((folder / "success").exists())
-            self.assertIn("up -d --build --no-deps api admin h5 commerce-worker commerce-media-worker", (folder / "operations").read_text())
+            self.assertIn("up -d --build --no-deps api admin commerce-worker commerce-media-worker", (folder / "operations").read_text())
 
     def test_retry_rolls_back_to_last_success_instead_of_failed_head(self):
         with tempfile.TemporaryDirectory() as temporary:

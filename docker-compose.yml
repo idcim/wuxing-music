@@ -1,5 +1,6 @@
 # 五行律音 · 一键启动后端 API + 管理后台
-# 用法：docker compose up -d --build
+# 常规更新：docker compose build api admin && docker compose up -d api admin
+# H5 为冻结的历史站点；常规更新不构建或重建 h5 服务。
 # 数据库连接、JWT、管理员账号等配置读取 backend/.env
 #
 # 部署到 1Panel：MySQL 在 1Panel 的 1panel-network 网络内，
@@ -153,6 +154,7 @@ services:
       - default
 
   h5:
+    profiles: [legacy-h5]  # 仅显式启用时才构建；旧自动部署脚本首次拉到本版也会跳过
     build:
       context: .
       dockerfile: docker/Dockerfile.h5
