@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, Image, Input, Button, Checkbox, CheckboxGroup } from '@tarojs/components';
+import { View, Text, Image, Input, Button, Checkbox, CheckboxGroup, Label } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { useSiteStore } from '@/stores/site';
 import { useUserStore } from '@/stores/user';
@@ -81,7 +81,19 @@ export default function AppLogin() {
       <View className='app-auth__field'><Text className='app-auth__prefix'>+86</Text><Input className='app-auth__input' type='number' maxlength={11} value={phone} disabled={submitting || sending} placeholder='请输入手机号' onInput={e => setPhone(e.detail.value.replace(/\D/g, ''))} /></View>
       <View className='app-auth__field'><Input className='app-auth__input' type='number' maxlength={6} value={code} disabled={submitting} placeholder='六位短信验证码' onInput={e => setCode(e.detail.value.replace(/\D/g, ''))} /><Button className='app-auth__send' disabled={sending || submitting || countdown > 0} onClick={sendCode}>{sending ? '发送中…' : countdown ? `${countdown}s 后重发` : '获取验证码'}</Button></View>
     </> : <View className='app-auth__unavailable'><Text>短信登录暂未开启</Text><Button className='app-auth__retry' onClick={() => void loadCapabilities()}>重新检查</Button></View>}
-    <View className='app-auth__consent'><CheckboxGroup onChange={e => setAgreed(e.detail.value.includes('agreed'))}><Checkbox value='agreed' checked={agreed} color={THEMES[site.theme_id].accent} /></CheckboxGroup><View><Text>我已阅读并同意</Text><Text className='app-auth__link' onClick={() => Taro.navigateTo({ url: '/pages/agreement/index' })}>《用户服务协议》</Text><Text>和</Text><Text className='app-auth__link' onClick={() => Taro.navigateTo({ url: '/pages/agreement/index?kind=app-privacy' })}>《隐私政策》</Text></View></View>
+    <View className='app-auth__consent'>
+      <CheckboxGroup className='app-auth__consent-control' onChange={e => setAgreed(e.detail.value.includes('agreed'))}>
+        <Label className='app-auth__consent-hit' for='app-login-consent'>
+          <Checkbox id='app-login-consent' className='app-auth__checkbox' value='agreed' checked={agreed} color={THEMES[site.theme_id].accent} nativeProps={{ 'aria-label': '同意用户服务协议和隐私政策' }} />
+        </Label>
+      </CheckboxGroup>
+      <View className='app-auth__consent-copy'>
+        <Label className='app-auth__consent-label' for='app-login-consent'>我已阅读并同意</Label>
+        <Text className='app-auth__link' onClick={() => Taro.navigateTo({ url: '/pages/agreement/index' })}>《用户服务协议》</Text>
+        <Text>和</Text>
+        <Text className='app-auth__link' onClick={() => Taro.navigateTo({ url: '/pages/agreement/index?kind=app-privacy' })}>《隐私政策》</Text>
+      </View>
+    </View>
     {capabilities?.sms && <Button className='app-auth__primary' loading={submitting} disabled={submitting || sending} onClick={() => void submit('sms')}>登录 / 注册</Button>}
     {capabilities?.wechat && <Button className={`app-auth__wechat ${capabilities.sms ? '' : 'app-auth__primary'}`} disabled={submitting || sending} onClick={() => void submit('wechat')}>微信登录</Button>}
     {capabilities?.sms && <Text className='app-auth__hint'>未注册的手机号验证后将自动创建账号</Text>}

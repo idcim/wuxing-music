@@ -16,9 +16,27 @@
   &__prefix { flex-shrink:0; color:$text-secondary; font-size:28rpx; border-right:1rpx solid $border; padding-right:20rpx; }
   &__input { min-width:0; flex:1; height:96rpx; font-size:32rpx; color:$text-primary; }
   button.app-auth__send { width:auto; flex-shrink:0; min-height:88rpx; padding:0; border:0; background:transparent; color:$theme-accent; font-size:24rpx; }
-  &__consent { display:flex; align-items:flex-start; gap:12rpx; color:$text-tertiary; font-size:22rpx; line-height:1.9; padding:12rpx 0 28rpx; }
-  &__consent checkbox { transform:scale(.8); transform-origin:top left; }
-  &__link { color:$text-secondary; }
+  &__consent { display:flex; align-items:flex-start; gap:8rpx; color:$text-secondary; font-size:24rpx; line-height:44rpx; padding:12rpx 0 28rpx; }
+  &__consent-control { flex:0 0 64rpx; margin-left:-12rpx; }
+  // 标签选择器会被 Taro 转成 taro-label-core；用属性命中内部原生 label。
+  &__consent-hit, &__consent-hit > [for] { display:flex; align-items:center; justify-content:center; width:64rpx; min-height:88rpx; cursor:pointer; }
+  &__consent-copy { flex:1; min-width:0; padding-top:22rpx; }
+  &__consent-label { display:inline; cursor:pointer; }
+  // APP 使用 Taro WebComponents，需命中内部 input，而非小程序 checkbox 标签。
+  &__checkbox { display:flex; align-items:center; justify-content:center; }
+  &__checkbox .taro-checkbox_checked {
+    appearance:none; box-sizing:border-box; position:relative; top:0; margin:0;
+    width:36rpx; height:36rpx; border:2rpx solid $text-tertiary; border-radius:10rpx;
+    background:$surface; cursor:pointer; transition:background-color .15s, border-color .15s;
+  }
+  &__checkbox .taro-checkbox_checked:checked { background:$theme-accent; border-color:$theme-accent; }
+  &__checkbox .taro-checkbox_checked:checked::before {
+    content:''; display:block; position:absolute; width:8rpx; height:16rpx;
+    border:solid $bg-deep; border-width:0 3rpx 3rpx 0;
+    left:50%; top:44%; transform:translate(-50%, -50%) rotate(45deg);
+  }
+  &__checkbox .taro-checkbox_checked:focus-visible { outline:3rpx solid $theme-accent; outline-offset:4rpx; }
+  &__link { color:$text-primary; text-decoration:underline; text-underline-offset:4rpx; }
   button.app-auth__primary { width:100%; background:$theme-accent; color:$bg-deep; border-color:transparent; }
   button.app-auth__wechat { width:100%; margin-top:20rpx; }
   button.app-auth__guest { width:100%; margin-top:16rpx; border:0; background:transparent; color:$text-tertiary; font-size:24rpx; }

@@ -103,7 +103,7 @@ test('体验版登录入口说明能力范围，允许返回且不触发账号�
     react: React, 'react/jsx-runtime': require('react/jsx-runtime'),
     '@/theme/withTheme': { withTheme: Page => Page },
     '@/theme': { THEMES: { starlight: { accent: '#84cc16' } } },
-    '@tarojs/components': Object.fromEntries(['View','Text','Image','Input','Button','Checkbox','CheckboxGroup'].map(name => [name, name.toLowerCase()])),
+    '@tarojs/components': Object.fromEntries(['View','Text','Image','Input','Button','Checkbox','CheckboxGroup','Label'].map(name => [name, name.toLowerCase()])),
     '@tarojs/taro': { default: {}, useDidShow: () => {} },
     '@/components/Icon': { default: () => null },
     '@/stores/user': { useUserStore: userStore },
@@ -130,7 +130,7 @@ test('体验版登录入口说明能力范围，允许返回且不触发账号�
 test('安卓微信授权需自主勾选，拒绝后仍可返回游客浏览', async () => {
   const React = require('react');
   const { act, create } = require('react-test-renderer');
-  let backs = 0, logins = 0, toasts = [];
+  let backs = 0, logins = 0, toasts = [], routes = [];
   const state = { user: null, loggingIn: false };
   const userStore = selector => selector(state);
   userStore.getState = () => state;
@@ -138,8 +138,8 @@ test('安卓微信授权需自主勾选，拒绝后仍可返回游客浏览', as
     react: React, 'react/jsx-runtime': require('react/jsx-runtime'),
     '@/theme/withTheme': { withTheme: Page => Page },
     '@/theme': { THEMES: { starlight: { accent: '#84cc16' } } },
-    '@tarojs/components': Object.fromEntries(['View','Text','Image','Input','Button','Checkbox','CheckboxGroup'].map(name => [name, name.toLowerCase()])),
-    '@tarojs/taro': { default: { showToast: ({ title }) => toasts.push(title) }, useDidShow: () => {} },
+    '@tarojs/components': Object.fromEntries(['View','Text','Image','Input','Button','Checkbox','CheckboxGroup','Label'].map(name => [name, name.toLowerCase()])),
+    '@tarojs/taro': { default: { showToast: ({ title }) => toasts.push(title), navigateTo: ({ url }) => routes.push(url) }, useDidShow: () => {} },
     '@/components/Icon': { default: () => null }, '@/stores/user': { useUserStore: userStore },
     '@/stores/site': { useSiteStore: selector => selector({ site: { site_name: '体验测试', theme_id: 'starlight' } }) },
     '@/services/auth': {},
@@ -162,6 +162,13 @@ test('安卓微信授权需自主勾选，拒绝后仍可返回游客浏览', as
     await act(async () => { await loginButton().props.onClick(); });
     assert.equal(logins, 1);
     assert.ok(toasts.includes('已取消微信登录'));
+    await act(async () => { renderer.root.findAllByType('text').find(node => node.children.join('') === '《隐私政策》').props.onClick(); });
+    assert.deepEqual(routes, ['/pages/agreement/index?kind=app-privacy']);
+    assert.equal(renderer.root.findByType('checkbox').props.checked, true);
+    await act(async () => { renderer.root.findByType('checkboxgroup').props.onChange({ detail: { value: [] } }); });
+    assert.equal(renderer.root.findByType('checkbox').props.checked, false);
+    await act(async () => { await loginButton().props.onClick(); });
+    assert.equal(logins, 1);
     await act(async () => { renderer.root.findAllByType('button').find(node => node.props.className === 'app-auth__guest').props.onClick(); });
     assert.equal(backs, 1);
   } finally { act(() => renderer.unmount()); }

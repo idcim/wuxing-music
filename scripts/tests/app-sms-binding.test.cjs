@@ -29,7 +29,7 @@ async function loginPage(overrides = {}) {
   const timers = new Map(); let timerId = 0;
   const module = load('src/features/auth/AppLogin.tsx', {
     react: React, 'react/jsx-runtime': require('react/jsx-runtime'),
-    '@tarojs/components': Object.fromEntries(['View', 'Text', 'Image', 'Input', 'Button', 'Checkbox', 'CheckboxGroup'].map(name => [name, name.toLowerCase()])),
+    '@tarojs/components': Object.fromEntries(['View', 'Text', 'Image', 'Input', 'Button', 'Checkbox', 'CheckboxGroup', 'Label'].map(name => [name, name.toLowerCase()])),
     '@tarojs/taro': { default: { showToast: ({ title }) => calls.toasts.push(title), reLaunch: ({ url }) => calls.routes.push(url), navigateTo: () => {} }, useDidShow: () => {} },
     '@/stores/site': { useSiteStore: selector => selector({ site: { site_name: '测试品牌', site_slogan: '测试副标题', theme_id: 'starlight' } }) },
     '@/stores/user': { useUserStore }, '@/theme': { THEMES: { starlight: { accent: '#84cc16' } } },

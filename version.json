@@ -1,11 +1,11 @@
 {
   "current": {
-    "app": "2.0.0",
+    "app": "2.0.1",
     "api": "1.3.0"
   },
   "channels": {
     "weapp": {
-      "version": "2.0.0",
+      "version": "2.0.1",
       "published": "unconfirmed",
       "note": "version 为源码版本；线上已发布的包版本待人工确认（不随服务器自动部署，需 build:weapp + 开发者工具上传）。发布后请把实际版本填进 published。欠账清单见 docs/WEAPP-TODO.md"
     },
@@ -14,7 +14,7 @@
       "note": "H5 端，随 master 自动部署。微信内走公众号授权，微信外浏览器走开放平台扫码登录"
     },
     "android": {
-      "version": "2.0.0",
+      "version": "2.0.1",
       "url": "",
       "forceUpdate": false,
       "minSupported": "",
@@ -29,6 +29,14 @@
     }
   },
   "changelog": [
+    {
+      "version": "2.0.1",
+      "date": "2026-11-20",
+      "notes": [
+        "修复APP协议勾选框尺寸、对齐与主题样式，扩大触区并支持点击文字自主勾选或取消",
+        "保留默认不勾选、独立阅读协议和继续游客体验；APK下载使用后台独立CDN域名"
+      ]
+    },
     {
       "version": "2.0.0",
       "date": "2026-11-20",
