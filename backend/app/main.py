@@ -286,6 +286,9 @@ app.include_router(orders.router)
 app.include_router(agents.router)
 app.include_router(upload.router)
 app.include_router(site.router)
+from app.routers import app_releases, app_wechat
+app.include_router(app_releases.router)
+app.include_router(app_wechat.router)
 app.include_router(mp.router)
 
 # 新域使用独立 metadata，只由显式版本化迁移创建，不在生产启动时隐式迁移。

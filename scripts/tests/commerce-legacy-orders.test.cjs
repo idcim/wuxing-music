@@ -8,6 +8,7 @@ const React = require('react');
 const { create, act } = require('react-test-renderer');
 
 function page(file, mocks) {
+  mocks['@/theme/withTheme'] = { withTheme: Page => Page };
   const source = fs.readFileSync(path.join(__dirname, '../../src/packages/shop', file), 'utf8');
   const exports = {};
   vm.runInNewContext(ts.transpileModule(source, { compilerOptions: {

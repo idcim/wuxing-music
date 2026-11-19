@@ -8,6 +8,8 @@ import { isH5, isInWeChat } from '@/utils/platform';
 import { getToken, hasQrLoginCallback } from '@/services/auth';
 import { captureAgentCode } from '@/services/agent';
 import { setupAndroid } from '@/services/android';
+import { checkAppUpdate } from '@/services/appUpdate';
+import AppUpdatePrompt from '@/components/AppUpdatePrompt';
 import './app.scss';
 
 function App({ children }: PropsWithChildren) {
@@ -24,9 +26,10 @@ function App({ children }: PropsWithChildren) {
     usePlayerStore.getState().checkTimer();
     watchForeground();
     void setupAndroid(refreshForegroundState);
+    void checkAppUpdate().catch(() => {});
   });
 
-  return children;
+  return <>{children}<AppUpdatePrompt /></>;
 }
 
 // 启动登录引导：
@@ -83,6 +86,7 @@ async function bootstrapAuth(): Promise<void> {
 // 定时可能晚触发甚至不触发，必须按真实时间重新判定。
 let lastSessionCheck = Date.now();
 function refreshForegroundState(): void {
+  void checkAppUpdate().catch(() => {});
   usePlayerStore.getState().checkTimer();
   void useSiteStore.getState().hydrate();
   // 公开音乐接口会将过期令牌视为游客，前台恢复时主动核对一次账号状态。

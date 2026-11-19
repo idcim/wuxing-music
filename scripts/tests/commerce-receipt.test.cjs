@@ -15,6 +15,7 @@ async function receiptScenario(confirmReceipt, receive = async () => {}, showDur
     transaction_id: 'wx-transaction', order_no: 'C42', amount_fen: 1000, shipping_fen: 0,
     refund_fen: 0, items: [], aftersales: [], address: {} };
   const mocks = {
+    '@/theme/withTheme': { withTheme: Page => Page },
     react: React,
     'react/jsx-runtime': require('react/jsx-runtime'),
     '@tarojs/components': Object.fromEntries(['View', 'Text', 'Button', 'Input', 'Textarea', 'Image'].map(name => [name, name.toLowerCase()])),

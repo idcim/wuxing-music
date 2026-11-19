@@ -112,8 +112,19 @@ database_setup_logs() {
 }
 
 refresh_legacy_h5_proxy() {
-  # H5 静态文件保持原样；Nginx 仅重载旧配置，使 api 容器换 IP 后反代仍可连接。
+  # 保留 H5 静态文件，仅同步反代配置（含独立 APP 下载页）并重载。
   if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx wuxing-h5; then
+    if [ -f "$REPO_DIR/docker/h5.nginx.conf" ]; then
+      if docker exec wuxing-h5 cp /etc/nginx/conf.d/default.conf /tmp/wuxing-previous-nginx.conf >>"$LOG_FILE" 2>&1; then
+        if ! docker cp "$REPO_DIR/docker/h5.nginx.conf" wuxing-h5:/etc/nginx/conf.d/default.conf >>"$LOG_FILE" 2>&1 \
+          || ! docker exec wuxing-h5 nginx -t >>"$LOG_FILE" 2>&1; then
+          docker exec wuxing-h5 cp /tmp/wuxing-previous-nginx.conf /etc/nginx/conf.d/default.conf >>"$LOG_FILE" 2>&1 || true
+          log "⚠️ 旧 H5 新反代配置校验失败，已恢复旧配置。"
+        fi
+      else
+        log "⚠️ 旧 H5 反代配置未同步，保留旧站点。"
+      fi
+    fi
     docker exec wuxing-h5 nginx -s reload >>"$LOG_FILE" 2>&1 || log "⚠️ 旧 H5 反代重载失败，请检查容器连接。"
   fi
 }

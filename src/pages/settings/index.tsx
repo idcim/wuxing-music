@@ -9,7 +9,8 @@ import { cancelAccount } from '@/services/user';
 import { logsToText } from '@/utils/logger';
 import { usePlayerStore } from '@/stores/player';
 import { useUserStore } from '@/stores/user';
-import { isWeapp } from '@/utils/platform';
+import { isWeapp, isAndroidApp } from '@/utils/platform';
+import { getNativeAppInfo, checkAppUpdate, useAppUpdate } from '@/services/appUpdate';
 import { goBack, navBarStyle } from '@/utils/nav';
 import Icon from '@/components/Icon';
 import './index.scss';
@@ -28,7 +29,7 @@ function readCacheKB(): number | null {
   }
 }
 
-// 小程序能读到微信平台上的线上版本号；H5 没有该 API，用构建时写死的 APP_VERSION。
+// 小程序读微信版本；安卓在页面显示时读取原生版本；普通 H5 使用构建版本。
 function readVersion(): string {
   if (!isWeapp) return APP_VERSION;
   try {
@@ -44,6 +45,7 @@ function Settings() {
   const [version, setVersion] = useState(APP_VERSION);
   const [cancelling, setCancelling] = useState(false);
   const [diagOpen, setDiagOpen] = useState(false);
+  const checkingUpdate = useAppUpdate(s => s.checking);
 
   const copyLogs = async () => {
     await Taro.setClipboardData({ data: logsToText() || '暂无日志' });
@@ -53,7 +55,18 @@ function Settings() {
   useDidShow(() => {
     setCacheKB(readCacheKB());
     setVersion(readVersion());
+    if (isAndroidApp) void getNativeAppInfo().then(info => {
+      if (info) setVersion(`${info.version} (${info.build})`);
+    }).catch(() => {});
   });
+
+  const checkUpdate = async () => {
+    if (checkingUpdate) return;
+    try {
+      const result = await checkAppUpdate(true);
+      if (result !== 'update') Taro.showToast({ title: result === 'current' ? '已是最新版本' : '暂未开放版本更新', icon: 'none' });
+    } catch { Taro.showToast({ title: '检查更新失败，请稍后重试', icon: 'none' }); }
+  };
 
   const goAbout = () => Taro.navigateTo({ url: '/pages/about/index' });
 
@@ -115,6 +128,10 @@ function Settings() {
       </View>
 
       <View className="settings__list">
+        {isAndroidApp && <View className="settings__row settings__row--divider" onClick={checkUpdate}>
+          <Text className="settings__label">{checkingUpdate ? '正在检查更新…' : '检查 APP 更新'}</Text>
+          <Icon name="chevronRight" size={28} color="#334155" strokeWidth={1.5} />
+        </View>}
         <View className="settings__row settings__row--divider" onClick={clearCache}>
           <Text className="settings__label">清除缓存</Text>
           <View className="settings__row-right">

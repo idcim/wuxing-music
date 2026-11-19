@@ -11,6 +11,7 @@ const { create, act } = require('react-test-renderer');
 function mount(relativeFile, config = {}) {
   const requests = [];
   const mocks = {
+    '@/theme/withTheme': { withTheme: Page => Page },
     react: React,
     'react/jsx-runtime': require('react/jsx-runtime'),
     '@tarojs/components': { View: 'view', Text: 'text', Button: 'button', Image: 'image' },

@@ -1,0 +1,13 @@
+# Root context is needed for the shared release manifest. Send only admin sources.
+*
+!admin/
+!admin/**
+!version.json
+admin/node_modules/
+admin/dist/
+admin/.git/
+**/*.tsbuildinfo
+**/.env*
+**/*.jks
+**/*.keystore
+**/*.pem

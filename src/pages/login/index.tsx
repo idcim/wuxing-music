@@ -1,11 +1,12 @@
 import { withTheme } from '@/theme/withTheme';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { View, Text, Input, Checkbox, CheckboxGroup } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import Icon from '@/components/Icon';
 import { useUserStore } from '@/stores/user';
 import { useSiteStore } from '@/stores/site';
 import { THEMES } from '@/theme';
+import { appWechatAvailable, loginByAppWechat, cancelAppWechatLogin } from '@/services/appWechat';
 import { sendSmsCode, isQrLoginConfigured } from '@/services/auth';
 import { isWeapp, isInWeChat, isAndroidApp } from '@/utils/platform';
 import { goBack, navBarStyle } from '@/utils/nav';
@@ -44,6 +45,15 @@ function Login() {
   const [qrReady, setQrReady] = useState(isInWeChat);
   // 每次进入登录页都由用户自行选择，不从缓存或平台授权状态预选。
   const [agreed, setAgreed] = useState(false);
+  const [appWechatReady, setAppWechatReady] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      if (isAndroidApp) cancelAppWechatLogin();
+    };
+  }, []);
 
   // 已登录用户直接跳走
   useDidShow(() => {
@@ -56,6 +66,27 @@ function Login() {
     if (isInWeChat || isAndroidApp) return;
     isQrLoginConfigured().then(setQrReady);
   }, []);
+
+  useEffect(() => {
+    if (isAndroidApp) appWechatAvailable().then((ready) => { if (mounted.current) setAppWechatReady(ready); }).catch(() => { if (mounted.current) setAppWechatReady(false); });
+  }, []);
+
+  const onAppWechatLogin = async () => {
+    if (submitting) return;
+    if (!agreed) {
+      Taro.showToast({ title: '请先阅读并勾选用户服务协议和隐私政策', icon: 'none' });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const user = await loginByAppWechat();
+      if (!mounted.current) return;
+      useUserStore.getState().setUser(user);
+      Taro.reLaunch({ url: '/pages/home/index' });
+    } catch (error: any) {
+      if (mounted.current) Taro.showToast({ title: error?.message || '微信登录未完成，可继续游客体验', icon: 'none' });
+    } finally { if (mounted.current) setSubmitting(false); }
+  };
 
   // 发送验证码倒计时
   useEffect(() => {
@@ -172,16 +203,29 @@ function Login() {
     </View>
   );
 
-  // 体验包先提供游客浏览，正式安卓账号授权另行接入。
+  // Android 使用移动应用原生授权，独立于 H5 网站扫码登录。
   if (isAndroidApp) {
+    const continueGuest = () => { cancelAppWechatLogin(); goBack(); };
     return <View className="login">
       <View className="login__nav" style={navBarStyle()}>
-        <Text className="login__back" onClick={() => goBack()}>‹ 返回</Text>
+        <Text className="login__back" onClick={continueGuest}>‹ 返回</Text>
       </View>
       {brand}
       <View className="login__actions">
-        <Text className="login__terms">安卓体验版支持页面浏览与音乐试听，账号登录将在后续版本开放。</Text>
-        <View className="login__guest" onClick={() => goBack()}><Text>继续体验</Text></View>
+        {appWechatReady ? <>
+          <View className={`login__btn ${submitting ? 'login__btn--loading' : ''}`} onClick={onAppWechatLogin}>
+            <Text className="login__btn-text">{submitting ? '登录中…' : '微信登录'}</Text>
+          </View>
+          <View className="login__consent">
+            <CheckboxGroup onChange={(event) => setAgreed(event.detail.value.includes('agreed'))}>
+              <Checkbox className="login__checkbox" value="agreed" checked={agreed} color={theme.accent} />
+            </CheckboxGroup>
+            <Text className="login__consent-label">我已阅读并同意</Text>
+            <Text className="login__policy-link" onClick={() => Taro.navigateTo({ url: '/pages/agreement/index' })}>《用户服务协议》</Text>
+            <Text className="login__policy-link" onClick={() => Taro.navigateTo({ url: '/pages/agreement/index?kind=app-privacy' })}>《隐私政策》</Text>
+          </View>
+        </> : <Text className="login__terms">APP 微信登录暂未开启，可以继续游客体验。</Text>}
+        <View className="login__guest" onClick={continueGuest}><Text>继续体验</Text></View>
       </View>
     </View>;
   }

@@ -7,13 +7,15 @@
 - 应用名称：五行律音体验版。
 - 应用标识：`cn.azureglow.wuxing.preview`，与未来正式应用隔离。
 - 最低 Android 7.0（API 24）；使用系统 WebView，建议保持 WebView 更新。
-- 构建产物：`artifacts/android/wuxing-music-2.0.0-rc.2-android-preview.1.apk`，同目录附 `.sha256` 校验文件。
+- 构建产物：`artifacts/android/wuxing-music-2.0.0-rc.3-android-preview.2.apk`，同目录附 `.sha256` 校验文件。
 - 使用 Android debug 签名供本地安装体验，未做应用商店发布。debug 签名由本机 Android 工具管理，不进入仓库；换机器打包可能需要先卸载旧体验版。
 - 图标与原生启动页使用用户提供的蓝底金色 LOGO，源文件随 Android 资源保存，后续打包不依赖原素材目录。
 
 连接现有 API，默认 `https://app.azure-glow.cn`。后台修改品牌和风格后，重启应用或从后台切回应用会重新读取配置。课程、商城入口遵守后台展示开关。
 
-支持游客浏览、音乐前台试听、播放器收展，以及课程商品展示。体验包登录页明确提示账号登录尚未开放，可以返回继续体验，不复用旧 H5 的默认同意登录流程。未新增安卓账号授权、支付、分享 SDK 或可靠的原生后台音乐服务；音乐会员、礼物卡和课程商城下单在体验包中关闭。不得将体验版验证视为这些原生能力验收。
+版本发布、公开下载与移动应用微信配置见 [APP 管理](APP-MANAGEMENT.md)。当前 versionCode 为 `2000002`，支持启动/回前台及设置页检查更新。
+
+支持游客浏览、音乐前台试听、播放器收展，以及课程商品展示。APP 登录页接入微信移动应用原生授权，须在后台 APP 管理的「微信登录」填写并开启；用户自行勾选协议，允许拒绝或返回游客体验，不复用旧 H5 网站扫码流程。未新增安卓支付、分享 SDK 或可靠的原生后台音乐服务；音乐会员、礼物卡和课程商城下单在体验包中关闭。不得将体验版验证视为这些原生能力验收。
 
 ## 重新构建
 
@@ -54,3 +56,15 @@ npm run build:android
 - 已安装至 MuMu（Android 15）：游客首页、五栏导航、课程和商城列表、前台音乐真实播放、播放器展开与收起、游客登录说明及安卓返回键通过；验证过程中未捕获 JavaScript 异常。
 - 在已安装应用中通过本地接口响应替身验证 `starlight → chinese_classic → starlight`，未改动生产后台配置。真实后台改风格后重新进入应用的联动仍需运营环境复核。
 - APK、截图及本次界面检查结果保存在忽略的 `artifacts/android/`，不进入源代码仓库。
+
+
+## APP 微信登录配置与验证范围
+
+- 在后台「APP 管理 → 微信登录」填写微信开放平台已审核的**移动应用** AppID/AppSecret、安卓包名及 APK 签名证书 MD5。网站扫码应用、小程序及公众号凭据不能代替移动应用凭据。
+- 签名需与用户实际安装包一致；debug 体验包与未来 release 包须分别核验。iOS Bundle ID 仅预留，当前未生成 iOS 原生工程。
+- 后台维护 APP 隐私政策正文；在登录前可打开服务协议、隐私政策阅读。未完整填写配置或隐私政策时登录关闭，游客浏览保留。
+- AppSecret 仅保存服务端；回读只返回已填写标记、留空保留，APP 仅持有公开 AppID 与自身包名、签名 MD5。
+- 原生 SDK 在用户勾选协议并主动点击后初始化。服务端生成五分钟一次性校验、使用微信 code 换身份；微信返回 unionid 时沿用小程序/H5 账号归并。APP 身份不会作为小程序支付 OpenID，也不会进入早期游客测试号清理列表。
+- 本地自动验证覆盖默认不选、未开启、拒绝/取消可继续游客、SDK state 不匹配、重复点击、配置脱敏、服务端权限、网络错误、无效微信 code、校验过期与重放、账号复用及注销后重新登录；实际 SDK 授权仍需已审核移动应用与匹配真实包名/签名的微信客户端联调。当前未将编译通过视为真实微信登录通过。
+
+官方文档：[微信 Android 接入](https://developers.weixin.qq.com/doc/oplatform/Mobile_App/Access_Guide/Android.html)、[移动应用微信登录](https://developers.weixin.qq.com/doc/oplatform/Mobile_App/WeChat_Login/Development_Guide.html)、[Capacitor Android 插件](https://capacitorjs.com/docs/plugins/android)。

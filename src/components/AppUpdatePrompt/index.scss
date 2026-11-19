@@ -1,0 +1,36 @@
+@use '../../styles/variables.scss' as *;
+
+.app-update-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: max(32rpx, env(safe-area-inset-top)) 36rpx max(32rpx, env(safe-area-inset-bottom));
+  background: rgba(0, 0, 0, .72);
+  overscroll-behavior: contain;
+}
+
+.app-update {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 680rpx;
+  max-height: 90dvh;
+  padding: $pad-card;
+  border: 2rpx solid $border;
+  border-radius: $radius-lg;
+  background: $bg-mid;
+  color: $text-primary;
+
+  &__title { display: block; font-size: 38rpx; margin-bottom: 16rpx; }
+  &__version { display: block; font-size: 25rpx; color: $text-secondary; margin-bottom: 28rpx; }
+  &__body { max-height: 45dvh; overflow-y: auto; touch-action: pan-y; }
+  &__notes { display: block; font-size: 29rpx; line-height: 1.8; white-space: pre-wrap; }
+  &__guide, &__required { display: block; margin-top: 24rpx; font-size: 25rpx; line-height: 1.8; color: $text-secondary; white-space: pre-wrap; }
+  &__required { color: $theme-accent; }
+  &__primary, &__secondary { text-align: center; font-size: 29rpx; padding: 24rpx; border-radius: $radius-pill; }
+  &__primary { margin-top: 32rpx; background: $theme-accent; color: $bg-deep; }
+  &__secondary { margin-top: 12rpx; color: $text-secondary; }
+}

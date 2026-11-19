@@ -15,6 +15,7 @@ const quote = shipping => ({ amount_fen: 1000 + shipping, shipping_fen: shipping
 async function page(api, params = { kind: 'physical', sku: '1', quantity: '1' }) {
   let show, hide; const orders = [], payments = [], redirects = [], errors = [];
   const mocks = {
+    '@/theme/withTheme': { withTheme: Page => Page },
     react: React, 'react/jsx-runtime': require('react/jsx-runtime'),
     '@tarojs/components': { View: 'view', Text: 'text', Button: 'button' },
     '@tarojs/taro': { default: { navigateTo: async () => {}, redirectTo: options => { redirects.push(options.url); } },

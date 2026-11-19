@@ -59,6 +59,7 @@ export const NAV_AGENT: NavItem[] = [
 ];
 
 export const NAV_SYSTEM: NavItem[] = [
+  { path: '/apps', title: 'APP管理', perm: 'apps:view', icon: 'Cellphone' },
   { path: '/theme', title: '风格管理', perm: 'settings:view', icon: 'Brush' },
   { path: '/commerce-settings', title: '课程商城配置', perm: 'commerce:view', icon: 'SetUp' },
   { path: '/settings', title: '站点设置', perm: 'settings:view', icon: 'Setting' },

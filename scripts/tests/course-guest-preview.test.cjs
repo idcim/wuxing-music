@@ -11,6 +11,7 @@ test('游客可打开免费试听，付费章节仍引导登录', () => {
   const navigations = [];
   let loginPrompts = 0;
   const mocks = {
+    '@/theme/withTheme': { withTheme: Page => Page },
     react: React,
     'react/jsx-runtime': require('react/jsx-runtime'),
     '@tarojs/components': { View: 'view', Text: 'text', Button: 'button', Slider: 'slider', Video: 'video' },

@@ -125,6 +125,7 @@ def test_user_candidates(db: Session) -> list[User]:
             User.oa_openid == "",
             User.web_openid == "",
             User.mp_openid.is_(None),
+            ~User.openid.like("app:%"),  # 已验证的移动应用身份不属于早期游客测试号
             User.phone == "",
             User.membership_type == "free",
             User.nickname.like("律音用户%"),

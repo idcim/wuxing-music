@@ -13,14 +13,17 @@ test('小程序微信登录由用户选择协议，拒绝后仍可作为游客�
   const useUserStore = selector => selector(userState);
   useUserStore.getState = () => userState;
   const mocks = {
+    '@/theme/withTheme': { withTheme: Page => Page },
+    '@/theme': { THEMES: { starlight: { accent: '#84cc16' } } },
     react: React,
     'react/jsx-runtime': require('react/jsx-runtime'),
     '@tarojs/components': Object.fromEntries(['View', 'Text', 'Input', 'Checkbox', 'CheckboxGroup'].map(name => [name, name.toLowerCase()])),
     '@tarojs/taro': { default: { showToast: options => { calls.toasts.push(options.title); },
-      reLaunch: options => { calls.routes.push(options.url); }, navigateTo: () => {} }, useDidShow: () => {} },
+      reLaunch: options => { calls.routes.push(options.url); }, navigateTo: () => {} }, useDidShow: () => {}, useDidHide: () => {} },
     '@/components/Icon': { default: () => React.createElement('icon') },
     '@/stores/user': { useUserStore },
-    '@/stores/site': { useSiteStore: selector => selector({ site: { site_name: '测试品牌' } }) },
+    '@/stores/site': { useSiteStore: selector => selector({ site: { site_name: '测试品牌', theme_id: 'starlight' } }) },
+    '@/services/appWechat': { appWechatAvailable: async () => false, loginByAppWechat: async () => {}, cancelAppWechatLogin: () => {} },
     '@/services/auth': { sendSmsCode: async () => {}, isQrLoginConfigured: async () => false },
     '@/utils/platform': { isWeapp: true, isInWeChat: true },
     '@/utils/nav': { goBack: () => { calls.back++; }, navBarStyle: () => ({}) },

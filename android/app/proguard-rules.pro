@@ -19,3 +19,6 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+# 微信官方 SDK 通过固定包名与类名处理回调。
+-keep class com.tencent.mm.opensdk.** { *; }
+-keep class cn.azureglow.wuxing.preview.wxapi.WXEntryActivity { *; }

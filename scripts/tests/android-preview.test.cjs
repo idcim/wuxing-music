@@ -108,6 +108,7 @@ test('体验版登录入口说明能力范围，允许返回且不触发账号�
     '@/components/Icon': { default: () => null },
     '@/stores/user': { useUserStore: userStore },
     '@/stores/site': { useSiteStore: selector => selector({ site: { site_name: '体验测试', theme_id: 'starlight' } }) },
+    '@/services/appWechat': { appWechatAvailable: async () => false, cancelAppWechatLogin: () => {} },
     '@/services/auth': { isQrLoginConfigured: () => { qrRequests++; return Promise.resolve(true); } },
     '@/utils/platform': { isAndroidApp: true, isWeapp: false, isInWeChat: false },
     '@/utils/nav': { goBack: () => { backs++; }, navBarStyle: () => ({}) },
@@ -118,8 +119,103 @@ test('体验版登录入口说明能力范围，允许返回且不触发账号�
   try {
     assert.equal(renderer.root.findAllByType('input').length, 0);
     assert.equal(qrRequests, 0);
-    assert.ok(renderer.root.findAllByType('text').some(node => node.children.join('').includes('账号登录将在后续版本开放')));
+    assert.ok(renderer.root.findAllByType('text').some(node => node.children.join('').includes('APP 微信登录暂未开启')));
     await act(async () => { renderer.root.findAllByType('view').find(node => node.props.className === 'login__guest').props.onClick(); });
     assert.equal(backs, 1);
   } finally { act(() => renderer.unmount()); }
+});
+
+// 用同一个真实页面验证未勾选、取消授权、游客返回；不调用外部账号。
+test('安卓微信授权需自主勾选，拒绝后仍可返回游客浏览', async () => {
+  const React = require('react');
+  const { act, create } = require('react-test-renderer');
+  let backs = 0, logins = 0, toasts = [];
+  const state = { user: null, loggingIn: false };
+  const userStore = selector => selector(state);
+  userStore.getState = () => state;
+  const module = load('src/pages/login/index.tsx', {
+    react: React, 'react/jsx-runtime': require('react/jsx-runtime'),
+    '@/theme/withTheme': { withTheme: Page => Page },
+    '@/theme': { THEMES: { starlight: { accent: '#84cc16' } } },
+    '@tarojs/components': Object.fromEntries(['View','Text','Input','Checkbox','CheckboxGroup'].map(name => [name, name.toLowerCase()])),
+    '@tarojs/taro': { default: { showToast: ({ title }) => toasts.push(title) }, useDidShow: () => {} },
+    '@/components/Icon': { default: () => null }, '@/stores/user': { useUserStore: userStore },
+    '@/stores/site': { useSiteStore: selector => selector({ site: { site_name: '体验测试', theme_id: 'starlight' } }) },
+    '@/services/auth': {},
+    '@/services/appWechat': { appWechatAvailable: async () => true, cancelAppWechatLogin: () => {}, loginByAppWechat: async () => { logins++; throw new Error('已取消微信登录'); } },
+    '@/utils/platform': { isAndroidApp: true, isWeapp: false, isInWeChat: false },
+    '@/utils/nav': { goBack: () => { backs++; }, navBarStyle: () => ({}) },
+    '@/services/privacy': {}, './index.scss': {},
+  });
+  let renderer;
+  await act(async () => { renderer = create(React.createElement(module.default)); });
+  try {
+    assert.equal(logins, 0);
+    assert.equal(renderer.root.findByType('checkbox').props.checked, false);
+    const loginButton = () => renderer.root.findAllByType('view').find(node => /^login__btn /.test(node.props.className || ''));
+    await act(async () => { await loginButton().props.onClick(); });
+    assert.equal(logins, 0);
+    assert.ok(toasts[0].includes('勾选'));
+    await act(async () => { renderer.root.findByType('checkboxgroup').props.onChange({ detail: { value: ['agreed'] } }); });
+    await act(async () => { await loginButton().props.onClick(); });
+    assert.equal(logins, 1);
+    assert.ok(toasts.includes('已取消微信登录'));
+    await act(async () => { renderer.root.findAllByType('view').find(node => node.props.className === 'login__guest').props.onClick(); });
+    assert.equal(backs, 1);
+  } finally { act(() => renderer.unmount()); }
+});
+
+test('安卓微信服务校验 SDK state，凭据只交服务端并保存统一登录态', async () => {
+  let authorizations = 0, stored = {}, loginRequests = 0;
+  let mismatch = true;
+  const user = { id: 42 };
+  const service = load('src/services/appWechat.ts', {
+    '@capacitor/core': { registerPlugin: () => ({ authorize: async ({ state }) => { authorizations++; return { state: mismatch ? 'forged' : state, code: 'sdk-code' }; } }) },
+    '@/services/api': { request: async (url, options) => {
+      if (url.endsWith('/config')) return { enabled: true, app_id: 'wx1234567890abcdef', android_package: 'cn.azureglow.wuxing.preview', android_signature: 'a'.repeat(32) };
+      if (url.endsWith('/challenge')) return { state: 'server-state', proof: 'server-proof' };
+      if (url.endsWith('/login')) { loginRequests++; assert.equal(options.data.proof, 'server-proof'); return { token: 'user-token', user }; }
+      throw new Error(url);
+    } },
+    '@/services/storage': { storage: { set: (key, value) => stored[key] = value }, STORAGE_KEYS: { USER: 'user' } },
+    '@/constants/env': { TOKEN_KEY: 'token' }, '@/utils/platform': { isAndroidApp: true },
+  });
+  await assert.rejects(service.loginByAppWechat(), /校验失败/);
+  assert.equal(loginRequests, 0);
+  mismatch = false;
+  const first = service.loginByAppWechat(), second = service.loginByAppWechat();
+  assert.equal(first, second);
+  assert.equal(await first, user);
+  assert.equal(authorizations, 2);
+  assert.equal(loginRequests, 1);
+  assert.equal(stored.token, 'user-token');
+  assert.equal(stored.user, user);
+});
+
+test('安卓登录等待服务端期间取消，迟到响应不会保存登录态', async () => {
+  let finishLogin, requests = 0, saved = 0, cancelled = 0;
+  const started = new Promise(resolve => { finishLogin = resolve; });
+  const service = load('src/services/appWechat.ts', {
+    '@capacitor/core': { registerPlugin: () => ({
+      authorize: async ({ state }) => ({ state, code: 'sdk-code' }),
+      cancel: async () => { cancelled++; },
+    }) },
+    '@/services/api': { request: async url => {
+      if (url.endsWith('/config')) return { enabled: true };
+      if (url.endsWith('/challenge')) return { state: 'server-state', proof: 'server-proof' };
+      requests++;
+      return started;
+    } },
+    '@/services/storage': { storage: { set: () => saved++ }, STORAGE_KEYS: { USER: 'user' } },
+    '@/constants/env': { TOKEN_KEY: 'token' }, '@/utils/platform': { isAndroidApp: true },
+  });
+  const login = service.loginByAppWechat();
+  // Promise microtasks drive config → challenge → SDK → backend, without a real timer.
+  for (let i = 0; i < 20 && requests === 0; i++) await Promise.resolve();
+  assert.equal(requests, 1);
+  service.cancelAppWechatLogin();
+  finishLogin({ token: 'late-token', user: { id: 42 } });
+  await assert.rejects(login, /已取消/);
+  assert.equal(cancelled, 1);
+  assert.equal(saved, 0);
 });

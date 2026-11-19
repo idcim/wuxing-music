@@ -1,5 +1,7 @@
 # 部署与配置说明
 
+APP 版本、OSS 安装包与固定公开下载页见 [APP 管理](APP-MANAGEMENT.md)。后台镜像从仓库根目录构建（`docker build -f admin/Dockerfile .`），文件级忽略规则仅包含后台源码及共享 `version.json`；避免帮助中心漏掉版本文件。自动部署仅同步旧 H5 的 Nginx 配置并校验、重载，不重建其静态业务。
+
 课程商城 2.0 另需显式数据库迁移、独立 Worker 和私有课件存储，默认关闭；按 [2.0 部署顺序](V2-COMMERCE.md) 在测试环境预演后再发布。不要只推送代码就开启收款。
 
 monorepo：**小程序 / H5 前端（Taro）** + **后端 API（FastAPI）** + **管理后台（Vue3）**。

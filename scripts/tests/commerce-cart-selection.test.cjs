@@ -12,6 +12,7 @@ test('购物车条目已被结算移除后，不再保留可结算的幽灵勾�
   let setCart;
   const navigations = [];
   const mocks = {
+    '@/theme/withTheme': { withTheme: Page => Page },
     react: React,
     'react/jsx-runtime': require('react/jsx-runtime'),
     '@tarojs/components': { View: 'view', Text: 'text', Button: 'button' },

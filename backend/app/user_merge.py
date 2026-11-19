@@ -71,7 +71,7 @@ def miniapp_openid(db: Session, user: User | None) -> str:
     def legacy(row: User) -> str:
         value = row.openid or ""
         if (not value or value in (row.oa_openid, row.web_openid, user.oa_openid, user.web_openid)
-                or value.startswith(("phone:", "guest-", "web:"))):
+                or value.startswith(("phone:", "guest-", "web:", "app:"))):
             return ""
         return value
 

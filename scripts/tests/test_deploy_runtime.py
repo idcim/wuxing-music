@@ -45,6 +45,49 @@ docker() {
 '''
 
 
+@unittest.skipUnless(BASH, "需要 Bash 执行反代配置更新检查")
+class LegacyDownloadProxyTests(unittest.TestCase):
+    def check_proxy(self, mode):
+        function = SOURCE[SOURCE.index('refresh_legacy_h5_proxy() {'):SOURCE.index('# ── 单实例锁')]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'docker').mkdir()
+            (root / 'docker/h5.nginx.conf').write_text('test nginx configuration')
+            script = r'''
+REPO_DIR="$PWD"
+LOG_FILE=/dev/null
+log() { :; }
+docker() {
+  printf '%s\n' "$*" >> operations
+  if [ "$1" = ps ]; then echo wuxing-h5; return 0; fi
+  if [ "$MODE" = bad ] && [ "${3:-}" = nginx ] && [ "${4:-}" = -t ]; then return 1; fi
+  if [ "$MODE" = backup-fail ] && [ "${3:-}" = cp ] && [ "${4:-}" = /etc/nginx/conf.d/default.conf ]; then return 1; fi
+  return 0
+}
+''' + function + '\nrefresh_legacy_h5_proxy\n'
+            result = subprocess.run([BASH, '-c', script], cwd=root, env={**os.environ, 'MODE': mode}, text=True, capture_output=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            return (root / 'operations').read_text()
+
+    def test_valid_download_proxy_is_copied_tested_and_reloaded(self):
+        trace = self.check_proxy('good')
+        self.assertIn('h5.nginx.conf wuxing-h5:/etc/nginx/conf.d/default.conf', trace)
+        self.assertIn('nginx -t', trace)
+        self.assertIn('nginx -s reload', trace)
+        self.assertNotIn('cp /tmp/wuxing-previous-nginx.conf', trace)
+
+    def test_invalid_proxy_restores_original_without_rebuilding_h5(self):
+        trace = self.check_proxy('bad')
+        self.assertIn('cp /tmp/wuxing-previous-nginx.conf /etc/nginx/conf.d/default.conf', trace)
+        self.assertIn('nginx -s reload', trace)
+        self.assertNotIn('build', trace)
+
+    def test_failed_backup_does_not_restore_a_stale_backup(self):
+        trace = self.check_proxy('backup-fail')
+        self.assertNotIn('cp /tmp/wuxing-previous-nginx.conf', trace)
+        self.assertNotIn('h5.nginx.conf wuxing-h5:', trace)
+
+
 @unittest.skipUnless(BASH, "需要 Bash 执行发布检查函数")
 class DeployRuntimeTests(unittest.TestCase):
     def check(self, expected_profile, expected_health, **values):

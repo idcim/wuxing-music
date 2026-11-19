@@ -9,6 +9,11 @@ GET /api/admin/permissions 拉取后渲染角色的勾选矩阵、并据此显�
 """
 
 PERMISSION_GROUPS: list[dict] = [
+    {"module": "apps", "label": "APP 管理", "items": [
+        {"key": "apps:view", "label": "查看 APP 配置与版本"},
+        {"key": "apps:edit", "label": "修改配置、上传安装包与编辑草稿"},
+        {"key": "apps:publish", "label": "发布与撤回 APP 版本"},
+    ]},
     {"module": "commerce", "label": "课程与商城", "items": [
         {"key": "commerce:view", "label": "查看内容、交易和任务"},
         {"key": "commerce:content", "label": "编辑课程与商品"},

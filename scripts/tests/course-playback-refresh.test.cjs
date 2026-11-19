@@ -21,6 +21,7 @@ test('课程媒体播放报错后自动重新授权一次，重复报错仍可�
     showToast: options => { toasts.push(options.title); },
   };
   const mocks = {
+    '@/theme/withTheme': { withTheme: Page => Page },
     react: React,
     'react/jsx-runtime': require('react/jsx-runtime'),
     '@tarojs/components': { View: 'view', Text: 'text', Button: 'button', Slider: 'slider', Video: 'video' },

@@ -50,6 +50,8 @@ npm run build:android    # 安卓体验版 APK（需要 Java 21 与 Android SDK�
 
 安卓体验版的安装、构建与能力范围见 [docs/ANDROID.md](docs/ANDROID.md)。页面内置在 APK，使用后台品牌与风格；不恢复 H5 产品更新。
 
+后台 APP 配置、微信移动应用登录、OSS 安装包发布和固定公开下载页见 [docs/APP-MANAGEMENT.md](docs/APP-MANAGEMENT.md)。
+
 **Mock 模式**：后端就绪前，`src/constants/env.ts` 的 `USE_MOCK=true` 让登录 / 支付 / 兑换 / 音频全链路本地跑通。后端上线后置 `false`，并在 `.env.local` 填好 `TARO_APP_API_BASE` 即切真实接口。H5 始终使用同源 `/api`，不需要配置该变量。
 
 ### 已实现

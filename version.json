@@ -1,11 +1,11 @@
 {
   "current": {
-    "app": "2.0.0-rc.2",
+    "app": "2.0.0-rc.3",
     "api": "1.3.0"
   },
   "channels": {
     "weapp": {
-      "version": "2.0.0-rc.2",
+      "version": "2.0.0-rc.3",
       "published": "unconfirmed",
       "note": "version 为源码版本；线上已发布的包版本待人工确认（不随服务器自动部署，需 build:weapp + 开发者工具上传）。发布后请把实际版本填进 published。欠账清单见 docs/WEAPP-TODO.md"
     },
@@ -14,11 +14,11 @@
       "note": "H5 端，随 master 自动部署。微信内走公众号授权，微信外浏览器走开放平台扫码登录"
     },
     "android": {
-      "version": "2.0.0-rc.2-android-preview.1",
+      "version": "2.0.0-rc.3-android-preview.2",
       "url": "",
       "forceUpdate": false,
       "minSupported": "",
-      "note": "本地 debug 签名体验版，内置页面并连接现有后台；购买关闭，未发布应用商店，正式下载地址留空"
+      "note": "后台 APP 管理发布与 OSS 下载；新版支持更新检查及微信移动应用登录配置，真实授权需匹配已审核参数与安装签名"
     },
     "ios": {
       "version": "",
@@ -29,6 +29,15 @@
     }
   },
   "changelog": [
+    {
+      "version": "2.0.0-rc.3",
+      "date": "2026-11-19",
+      "notes": [
+        "后台新增 APP 管理：基础配置、OSS 安装包、版本草稿发布与撤回、固定公开下载页",
+        "安卓新增更新检查、可取消更新提示与微信开放平台移动应用登录；不沿用网站扫码参数",
+        "APP 微信密钥仅服务端保存，用户主动勾选协议后发起登录，支持拒绝和游客返回"
+      ]
+    },
     {
       "version": "2.0.0-rc.2",
       "date": "2026-11-19",

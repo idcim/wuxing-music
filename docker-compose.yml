@@ -142,7 +142,9 @@ services:
       - onepanel
 
   admin:
-    build: ./admin
+    build:
+      context: .
+      dockerfile: admin/Dockerfile
     image: wuxing-admin:latest
     container_name: wuxing-admin
     restart: unless-stopped

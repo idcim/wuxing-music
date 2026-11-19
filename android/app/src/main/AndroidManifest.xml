@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <queries><package android:name="com.tencent.mm" /></queries>
     <application
         android:allowBackup="false"
         android:usesCleartextTraffic="false"
@@ -25,6 +26,7 @@
 
         </activity>
 
+        <activity android:name=".wxapi.WXEntryActivity" android:exported="true" android:launchMode="singleTop" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:taskAffinity="cn.azureglow.wuxing.preview" />
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
