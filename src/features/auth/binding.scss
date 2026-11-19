@@ -1,0 +1,11 @@
+@use '../../styles/variables.scss' as *;
+.app-binding {
+  display:flex; align-items:center; gap:24rpx; padding:28rpx; margin:0 0 28rpx; border:1rpx solid $border; border-radius:24rpx; background:$surface;
+  &__copy { flex:1; min-width:0; }
+  &__title { display:block; font-size:28rpx; color:$text-primary; }
+  &__description { display:block; font-size:22rpx; color:$text-tertiary; line-height:1.8; margin-top:8rpx; }
+  &__button { flex-shrink:0; width:auto; min-height:88rpx; margin:0; padding:20rpx; border:1rpx solid $border; border-radius:16rpx; font-size:24rpx; line-height:1.5; background:$bg-mid; color:$theme-accent; }
+  &__button::after { border:0; }
+  &__button[disabled='true'], &__button[disabled=''] { opacity:.4; }
+  &__done { font-size:24rpx; color:$theme-accent; flex-shrink:0; }
+}

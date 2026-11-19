@@ -1,0 +1,28 @@
+@use '../../styles/variables.scss' as *;
+.app-auth {
+  min-height:100vh; min-height:100dvh; padding:0 40rpx calc(32rpx + env(safe-area-inset-bottom)); color:$text-primary; background:$bg-deep;
+  &__nav { display:flex; align-items:center; }
+  button { display:flex; align-items:center; justify-content:center; min-height:88rpx; margin:0; padding:16rpx 24rpx; font-size:28rpx; line-height:1.5; border-radius:20rpx; color:$text-primary; background:$surface; border:1rpx solid $border; }
+  button::after { border:0; }
+  button[disabled='true'], button[disabled=''] { opacity:.45; }
+  button.app-auth__back { width:auto; min-height:88rpx; padding:0; border:0; background:transparent; font-size:28rpx; }
+  &__brand { display:flex; align-items:center; gap:24rpx; padding:24rpx 0 32rpx; }
+  &__logo { flex-shrink:0; width:112rpx; height:112rpx; padding:20rpx; display:flex; align-items:center; justify-content:center; border:1rpx solid $border; border-radius:28rpx; color:$theme-accent; font-size:48rpx; background:$surface; }
+  &__logo-image { display:block; width:100%; height:100%; }
+  &__name { display:block; font-size:40rpx; letter-spacing:4rpx; }
+  &__caption { display:block; max-width:440rpx; font-size:22rpx; color:$text-tertiary; margin-top:8rpx; overflow-wrap:anywhere; }
+  &__title { display:block; font-size:36rpx; line-height:1.5; margin:16rpx 0 32rpx; }
+  &__field { display:flex; align-items:center; gap:16rpx; min-height:96rpx; padding:0 24rpx; margin-bottom:20rpx; border:1rpx solid $border; border-radius:20rpx; background:$surface; }
+  &__prefix { flex-shrink:0; color:$text-secondary; font-size:28rpx; border-right:1rpx solid $border; padding-right:20rpx; }
+  &__input { min-width:0; flex:1; height:96rpx; font-size:32rpx; color:$text-primary; }
+  button.app-auth__send { width:auto; flex-shrink:0; min-height:88rpx; padding:0; border:0; background:transparent; color:$theme-accent; font-size:24rpx; }
+  &__consent { display:flex; align-items:flex-start; gap:12rpx; color:$text-tertiary; font-size:22rpx; line-height:1.9; padding:12rpx 0 28rpx; }
+  &__consent checkbox { transform:scale(.8); transform-origin:top left; }
+  &__link { color:$text-secondary; }
+  button.app-auth__primary { width:100%; background:$theme-accent; color:$bg-deep; border-color:transparent; }
+  button.app-auth__wechat { width:100%; margin-top:20rpx; }
+  button.app-auth__guest { width:100%; margin-top:16rpx; border:0; background:transparent; color:$text-tertiary; font-size:24rpx; }
+  &__hint { display:block; color:$text-tertiary; font-size:22rpx; line-height:1.7; text-align:center; margin:20rpx 0; }
+  &__unavailable { display:flex; align-items:center; justify-content:space-between; padding:24rpx 0; color:$text-secondary; font-size:26rpx; }
+  button.app-auth__retry { width:auto; border:0; background:transparent; color:$theme-accent; font-size:24rpx; }
+}

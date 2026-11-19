@@ -13,6 +13,7 @@ test('小程序微信登录由用户选择协议，拒绝后仍可作为游客�
   const useUserStore = selector => selector(userState);
   useUserStore.getState = () => userState;
   const mocks = {
+    '@/features/auth/AppLogin': { default: () => null },
     '@/theme/withTheme': { withTheme: Page => Page },
     '@/theme': { THEMES: { starlight: { accent: '#84cc16' } } },
     react: React,

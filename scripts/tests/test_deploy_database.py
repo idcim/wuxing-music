@@ -58,13 +58,16 @@ class CredentialsTests(unittest.TestCase):
                 deploy.migrate(directory)
             (directory / "backup.ok").write_text("new")
             upgrade = MagicMock()
+            upgrade_identity = MagicMock()
             with patch.dict(sys.modules, {
                 "app.database": SimpleNamespace(engine="synthetic-engine"),
+                "app.app_identity_migrate": SimpleNamespace(upgrade=upgrade_identity),
                 "app.commerce.migrate": SimpleNamespace(upgrade=upgrade),
                 "app.commerce.models": SimpleNamespace(SCHEMA_VERSION=4),
             }):
                 deploy.migrate(directory)
             upgrade.assert_called_once_with("synthetic-engine")
+            upgrade_identity.assert_called_once_with("synthetic-engine")
 
 
 @unittest.skipUnless(BASH, "需要 Bash")

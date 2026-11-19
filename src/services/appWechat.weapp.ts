@@ -4,3 +4,5 @@ export async function appWechatAvailable(): Promise<boolean> { return false; }
 export async function loginByAppWechat(): Promise<User> { throw new Error('请使用小程序微信登录'); }
 
 export function cancelAppWechatLogin(): void {}
+export async function appWechatBinding(): Promise<boolean> { return false; }
+export async function bindAppWechat(): Promise<User> { throw new Error('请在 APP 中绑定微信'); }

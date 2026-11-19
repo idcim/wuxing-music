@@ -16,8 +16,10 @@ from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, Up
 from fastapi.responses import JSONResponse, RedirectResponse
 from jose import JWTError, jwt
 from pydantic import BaseModel
+from sqlalchemy import case, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from app.identity_lock import lock_auth_identities
 
 from app import agent_service, member_ledger, ratelimit, refund_service, sms, storage, streaming, wxpay
 from app.config import settings
@@ -361,13 +363,20 @@ def _consume_sms_code(db: Session, phone: str, code: str, scene: str) -> None:
     if row.expire_at and row.expire_at < now:
         raise HTTPException(status_code=400, detail="验证码已过期")
     if row.code != code:
-        row.attempts += 1
-        if row.attempts >= 5:
-            row.used = True
+        # MySQL 按 SET 顺序计算，先根据旧计数标记锁定，再加一次失败，保持第 5 次才作废。
+        db.execute(update(SmsCode).where(SmsCode.id == row.id, SmsCode.used == False,
+            SmsCode.attempts < 5).ordered_values(
+                (SmsCode.used, case((SmsCode.attempts >= 4, True), else_=False)),
+                (SmsCode.attempts, SmsCode.attempts + 1)), execution_options={'synchronize_session': False})
         db.commit()
         raise HTTPException(status_code=400, detail="验证码错误")
-    row.used = True
+    # 条件更新是真正的一次性核销：并发读取到同一验证码也只有一个请求能成功。
+    consumed = db.query(SmsCode).filter(SmsCode.id == row.id, SmsCode.used == False,
+        SmsCode.code == code, SmsCode.attempts < 5, SmsCode.expire_at >= now).update(
+            {SmsCode.used: True}, synchronize_session=False)
     db.commit()
+    if consumed != 1:
+        raise HTTPException(status_code=400, detail="验证码错误或已失效")
 
 
 class PhoneLoginIn(BaseModel):
@@ -384,9 +393,12 @@ def mp_login_phone(body: PhoneLoginIn, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="手机号或验证码不能为空")
 
     _consume_sms_code(db, phone, code, "login")
+    lock_auth_identities(db)
 
     # 按手机号匹配；无则新建（openid 用合成唯一值满足 NOT NULL/unique）
-    user = db.query(User).filter(User.phone == phone).first()
+    # 合并墓碑可能保留手机号，返回最终存活账号，避免短信登录读到搬空的旧资料。
+    user = next((resolved for candidate in db.query(User).filter(User.phone == phone).order_by(User.id)
+                 if (resolved := resolve_user(db, candidate)) is not None), None)
     if not user:
         user = User(
             openid=f"phone:{phone}",
@@ -394,8 +406,8 @@ def mp_login_phone(body: PhoneLoginIn, db: Session = Depends(get_db)):
             nickname=_default_nickname(),
         )
         db.add(user)
-        db.commit()
-        db.refresh(user)
+    db.commit()
+    db.refresh(user)
 
     token = create_user_token(user.id)
     return ok({"token": token, "user": _user_dict(user)})

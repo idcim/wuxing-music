@@ -11,7 +11,7 @@ function load(file, dependencies = {}, env = {}) {
   }).outputText;
   const exports = {};
   vm.runInNewContext(compiled, {
-    exports, process: { env }, require: name => {
+    setTimeout, clearTimeout, exports, process: { env }, require: name => {
       if (Object.hasOwn(dependencies, name)) return dependencies[name];
       throw new Error(`Unexpected dependency ${name}`);
     },
@@ -99,11 +99,11 @@ test('体验版登录入口说明能力范围，允许返回且不触发账号�
   const state = { user: null, loggingIn: false };
   const userStore = selector => selector(state);
   userStore.getState = () => state;
-  const module = load('src/pages/login/index.tsx', {
+  const module = load('src/features/auth/AppLogin.tsx', {
     react: React, 'react/jsx-runtime': require('react/jsx-runtime'),
     '@/theme/withTheme': { withTheme: Page => Page },
     '@/theme': { THEMES: { starlight: { accent: '#84cc16' } } },
-    '@tarojs/components': Object.fromEntries(['View','Text','Input','Checkbox','CheckboxGroup'].map(name => [name, name.toLowerCase()])),
+    '@tarojs/components': Object.fromEntries(['View','Text','Image','Input','Button','Checkbox','CheckboxGroup'].map(name => [name, name.toLowerCase()])),
     '@tarojs/taro': { default: {}, useDidShow: () => {} },
     '@/components/Icon': { default: () => null },
     '@/stores/user': { useUserStore: userStore },
@@ -112,15 +112,16 @@ test('体验版登录入口说明能力范围，允许返回且不触发账号�
     '@/services/auth': { isQrLoginConfigured: () => { qrRequests++; return Promise.resolve(true); } },
     '@/utils/platform': { isAndroidApp: true, isWeapp: false, isInWeChat: false },
     '@/utils/nav': { goBack: () => { backs++; }, navBarStyle: () => ({}) },
-    '@/services/privacy': {}, './index.scss': {},
+    '@/services/appAuth': { appSmsAvailable: async () => false, cancelAppSmsLogin: () => {} },
+    '@/utils/url': { resolveUrl: value => value }, './app-auth.scss': {},
   });
   let renderer;
   await act(async () => { renderer = create(React.createElement(module.default)); });
   try {
     assert.equal(renderer.root.findAllByType('input').length, 0);
     assert.equal(qrRequests, 0);
-    assert.ok(renderer.root.findAllByType('text').some(node => node.children.join('').includes('APP 微信登录暂未开启')));
-    await act(async () => { renderer.root.findAllByType('view').find(node => node.props.className === 'login__guest').props.onClick(); });
+    assert.ok(renderer.root.findAllByType('text').some(node => node.children.join('').includes('短信登录暂未开启')));
+    await act(async () => { renderer.root.findAllByType('button').find(node => node.props.className === 'app-auth__guest').props.onClick(); });
     assert.equal(backs, 1);
   } finally { act(() => renderer.unmount()); }
 });
@@ -133,11 +134,11 @@ test('安卓微信授权需自主勾选，拒绝后仍可返回游客浏览', as
   const state = { user: null, loggingIn: false };
   const userStore = selector => selector(state);
   userStore.getState = () => state;
-  const module = load('src/pages/login/index.tsx', {
+  const module = load('src/features/auth/AppLogin.tsx', {
     react: React, 'react/jsx-runtime': require('react/jsx-runtime'),
     '@/theme/withTheme': { withTheme: Page => Page },
     '@/theme': { THEMES: { starlight: { accent: '#84cc16' } } },
-    '@tarojs/components': Object.fromEntries(['View','Text','Input','Checkbox','CheckboxGroup'].map(name => [name, name.toLowerCase()])),
+    '@tarojs/components': Object.fromEntries(['View','Text','Image','Input','Button','Checkbox','CheckboxGroup'].map(name => [name, name.toLowerCase()])),
     '@tarojs/taro': { default: { showToast: ({ title }) => toasts.push(title) }, useDidShow: () => {} },
     '@/components/Icon': { default: () => null }, '@/stores/user': { useUserStore: userStore },
     '@/stores/site': { useSiteStore: selector => selector({ site: { site_name: '体验测试', theme_id: 'starlight' } }) },
@@ -145,14 +146,15 @@ test('安卓微信授权需自主勾选，拒绝后仍可返回游客浏览', as
     '@/services/appWechat': { appWechatAvailable: async () => true, cancelAppWechatLogin: () => {}, loginByAppWechat: async () => { logins++; throw new Error('已取消微信登录'); } },
     '@/utils/platform': { isAndroidApp: true, isWeapp: false, isInWeChat: false },
     '@/utils/nav': { goBack: () => { backs++; }, navBarStyle: () => ({}) },
-    '@/services/privacy': {}, './index.scss': {},
+    '@/services/appAuth': { appSmsAvailable: async () => false, cancelAppSmsLogin: () => {} },
+    '@/utils/url': { resolveUrl: value => value }, './app-auth.scss': {},
   });
   let renderer;
   await act(async () => { renderer = create(React.createElement(module.default)); });
   try {
     assert.equal(logins, 0);
     assert.equal(renderer.root.findByType('checkbox').props.checked, false);
-    const loginButton = () => renderer.root.findAllByType('view').find(node => /^login__btn /.test(node.props.className || ''));
+    const loginButton = () => renderer.root.findAllByType('button').find(node => /app-auth__wechat/.test(node.props.className || ''));
     await act(async () => { await loginButton().props.onClick(); });
     assert.equal(logins, 0);
     assert.ok(toasts[0].includes('勾选'));
@@ -160,7 +162,7 @@ test('安卓微信授权需自主勾选，拒绝后仍可返回游客浏览', as
     await act(async () => { await loginButton().props.onClick(); });
     assert.equal(logins, 1);
     assert.ok(toasts.includes('已取消微信登录'));
-    await act(async () => { renderer.root.findAllByType('view').find(node => node.props.className === 'login__guest').props.onClick(); });
+    await act(async () => { renderer.root.findAllByType('button').find(node => node.props.className === 'app-auth__guest').props.onClick(); });
     assert.equal(backs, 1);
   } finally { act(() => renderer.unmount()); }
 });

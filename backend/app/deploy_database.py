@@ -62,6 +62,8 @@ def migrate(directory=DIRECTORY):
     from app.database import engine
     from app.commerce.migrate import upgrade
     from app.commerce.models import SCHEMA_VERSION
+    from app.app_identity_migrate import upgrade as upgrade_identity
+    upgrade_identity(engine)
     upgrade(engine)
     print(f"数据库备份已确认；commerce schema v{SCHEMA_VERSION} 迁移完成", flush=True)
 

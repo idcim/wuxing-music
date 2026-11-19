@@ -14,6 +14,7 @@ import { navTopStyle } from '@/utils/nav';
 import CdkeyModal from '@/components/CdkeyModal';
 import MiniPlayer from '@/components/MiniPlayer';
 import TabBar from '@/components/TabBar';
+import AppWechatBinding from '@/features/auth/AppWechatBinding';
 import type { ElementId } from '@/types';
 import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
@@ -226,6 +227,8 @@ function Profile() {
           <Text className="profile__complete-action">去完善 ›</Text>
         </View>
       )}
+
+      <AppWechatBinding />
 
       {/* 会员卡片 */}
       <View

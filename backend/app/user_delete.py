@@ -8,7 +8,9 @@ import logging
 import uuid
 from datetime import datetime
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
+from app.identity_lock import lock_auth_identities
 
 from app.models import (
     Agent,
@@ -31,7 +33,14 @@ def is_deleted(user: User | None) -> bool:
 
 def deactivate_user(db: Session, user: User) -> None:
     """注销账号：匿名化身份字段，保留财务与审计记录。"""
+    lock_auth_identities(db)
+    # 绑定可能发生在鉴权读取之后；刷新锁住的当前行，不能让旧的 None/空串漏写清理。
+    db.refresh(user, with_for_update=True)
+    if user.merged_into:
+        db.rollback()
+        raise HTTPException(409, '账号已发生合并，请重新登录后再注销')
     if user.deleted_at:
+        db.rollback()
         return
 
     db.query(PlayHistory).filter(PlayHistory.user_id == user.id).delete(synchronize_session=False)
@@ -46,10 +55,21 @@ def deactivate_user(db: Session, user: User) -> None:
     # 并入本账号的墓碑行必须连坐释放 openid：墓碑刻意保留原 openid 供旧端登录解析，
     # 但注销后本人重新注册会 INSERT 同一个 openid，撞上唯一键（线上实测 1062）。
     # 注销意味着账号体系里此人已不存在，旧端解析没有保留意义。
-    for tomb in db.query(User).filter(User.merged_into == user.id).all():
-        if not tomb.openid.startswith("deleted:"):
-            tomb.openid = f"deleted:{tomb.id}:{uuid.uuid4().hex[:8]}"
-        tomb.mp_openid = None
+    frontier, seen = [user.id], {user.id}
+    while frontier:
+        # 遍历期间只收集及修改 ORM 对象，避免下一层查询提前刷出半套匿名化状态。
+        with db.no_autoflush:
+            tombs = db.query(User).filter(User.merged_into.in_(frontier)).populate_existing().with_for_update().all()
+        frontier = []
+        for tomb in tombs:
+            if tomb.id in seen:
+                continue
+            seen.add(tomb.id)
+            frontier.append(tomb.id)
+            if not tomb.openid.startswith("deleted:"):
+                tomb.openid = f"deleted:{tomb.id}:{uuid.uuid4().hex[:8]}"
+            tomb.mp_openid = None
+            tomb.app_openid = None
 
     from app.commerce.lifecycle import erase_profile
     erase_profile(db, user.id)
@@ -57,6 +77,7 @@ def deactivate_user(db: Session, user: User) -> None:
     user.deleted_at = datetime.utcnow()
     user.openid = f"deleted:{user.id}:{uuid.uuid4().hex[:8]}"
     user.mp_openid = None
+    user.app_openid = None
     user.unionid = ""
     user.oa_openid = ""
     user.web_openid = ""
@@ -125,6 +146,7 @@ def test_user_candidates(db: Session) -> list[User]:
             User.oa_openid == "",
             User.web_openid == "",
             User.mp_openid.is_(None),
+            User.app_openid.is_(None),
             ~User.openid.like("app:%"),  # 已验证的移动应用身份不属于早期游客测试号
             User.phone == "",
             User.membership_type == "free",

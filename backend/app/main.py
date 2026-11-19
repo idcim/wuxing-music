@@ -230,6 +230,11 @@ async def lifespan(app: FastAPI):
         raise SystemExit(1)
 
     Base.metadata.create_all(bind=engine)
+    from app.app_identity_migrate import is_current as identity_is_current, upgrade as upgrade_identity
+    if settings.debug:
+        upgrade_identity(engine)
+    elif not identity_is_current(engine):
+        raise RuntimeError('APP 身份结构未迁移：请先备份数据库并执行 python -m app.app_identity_migrate')
     _auto_migrate()
     _fix_commission_index()   # 一单两条分成后，order_id 不能再是单列唯一
     _fix_cancelled_tombstones()

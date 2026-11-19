@@ -47,7 +47,7 @@ def is_configured(db: Session) -> bool:
         cfg.get(k)
         for k in ("access_key_id", "access_key_secret", "sign_name", "template_code")
     )
-    return bool(cfg.get("enabled") and configured)
+    return bool(cfg.get("enabled") and configured and cfg.get("provider", "aliyun") == "aliyun")
 
 
 def send_code(db: Session, phone: str, code: str) -> dict:

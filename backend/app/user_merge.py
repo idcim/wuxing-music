@@ -152,6 +152,12 @@ def merge_users(
     merge_commerce(db, keep.id, drop.id)
     if not keep.mp_openid and drop.mp_openid:
         keep.mp_openid = drop.mp_openid
+    # 唯一的 APP 别名先从原行释放再转入；已存在另一别名时保留在墓碑供旧授权解析。
+    if not keep.app_openid and drop.app_openid:
+        alias = drop.app_openid
+        drop.app_openid = None
+        db.flush()
+        keep.app_openid = alias
 
     # 1) 归属数据改指向
     for model, col in _OWNED:
@@ -207,6 +213,7 @@ def resolve_login(
     openid: str = "",
     oa_openid: str = "",
     web_openid: str = "",
+    app_openid: str = "",
 ) -> User | None:
     """按一次微信授权拿到的标识解析用户，顺带把撞上的重复账号并掉。
 
@@ -220,7 +227,9 @@ def resolve_login(
         by_union = resolve_user(db, by_union)
 
     by_open = None
-    if openid:
+    if app_openid:
+        by_open = db.query(User).filter(User.app_openid == app_openid).first()
+    if by_open is None and openid:
         by_open = db.query(User).filter(User.openid == openid).first()
     if by_open is None and oa_openid:
         by_open = db.query(User).filter(User.oa_openid == oa_openid).first()
@@ -252,6 +261,9 @@ def resolve_login(
         changed = True
     if web_openid and not user.web_openid:
         user.web_openid = web_openid
+        changed = True
+    if app_openid and not user.app_openid:
+        user.app_openid = app_openid
         changed = True
 
     if merged or changed:

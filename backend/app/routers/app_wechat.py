@@ -11,14 +11,16 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
-from app import ratelimit
+from app import ratelimit, sms
 from app.database import get_db
 from app.models import Admin, Setting, User
+from app.identity_lock import lock_auth_identities
 from app.schemas import ok
 from app.security import require_perm
-from app.user_merge import resolve_login
-from app.routers.mp import create_user_token, _default_nickname, _user_dict
+from app.user_merge import resolve_login, resolve_user
+from app.routers.mp import create_user_token, get_current_user, _default_nickname, _user_dict
 
 router = APIRouter(tags=['app-wechat'])
 CONFIG_KEY = 'app_wechat_config'
@@ -82,6 +84,11 @@ def privacy(db: Session = Depends(get_db)):
     return ok({'content': configuration(db)['privacy_policy']})
 
 
+@router.get('/api/app/auth/config')
+def auth_config(db: Session = Depends(get_db)):
+    return ok({'sms_enabled': sms.is_configured(db)})
+
+
 def throttle(request, action):
     if not ratelimit.check_and_record(f'appwx:{action}:{ratelimit.client_ip(request)}', 20, 60):
         raise HTTPException(429, '操作过于频繁，请稍后再试')
@@ -93,10 +100,14 @@ def challenge(request: Request, db: Session = Depends(get_db)):
     cfg = configuration(db)
     if not ready(cfg):
         raise HTTPException(503, 'APP 微信登录尚未开启')
-    # 短命挑战共用数据库，API 多 worker 仍能防重放；不记录 code 或微信 access_token。
+    return new_challenge(db, cfg, 'login')
+
+
+def new_challenge(db, cfg, purpose, user_id=None):
+    # 短命挑战共用数据库；不记录 code 或微信 access_token。
     state, proof = secrets.token_hex(16), secrets.token_urlsafe(32)
     db.query(Setting).filter(Setting.key.like('appwx:%'), Setting.updated_at < datetime.utcnow() - timedelta(minutes=10)).delete(synchronize_session=False)
-    db.add(Setting(key='appwx:' + state, value=json.dumps({'proof': hashlib.sha256(proof.encode()).hexdigest(), 'expires': int(time.time()) + 300, 'app_id': cfg['app_id']})))
+    db.add(Setting(key='appwx:' + state, value=json.dumps({'proof': hashlib.sha256(proof.encode()).hexdigest(), 'expires': int(time.time()) + 300, 'app_id': cfg['app_id'], 'purpose': purpose, 'user_id': user_id})))
     db.commit()
     return ok({'state': state, 'proof': proof})
 
@@ -128,33 +139,115 @@ def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
     cfg = configuration(db)
     if not ready(cfg):
         raise HTTPException(503, 'APP 微信登录尚未开启')
+    consume_challenge(db, cfg, body, 'login')
+    identity = exchange_code(cfg, body.code)
+    openid = app_identity(cfg, identity)
+    unionid = str(identity.get('unionid') or '')
+    try:
+        lock_identities(db)
+        user = resolve_login(db, unionid, openid=openid, app_openid=openid)
+        if user is None:
+            user = User(openid=openid, app_openid=openid, unionid=unionid, nickname=_default_nickname())
+            db.add(user)
+        db.commit()
+        db.refresh(user)
+    except IntegrityError:
+        db.rollback()
+        user = resolve_login(db, unionid, openid=openid, app_openid=openid)
+        if user is None:
+            raise HTTPException(409, '账号状态已变化，请重新登录') from None
+    return ok({'token': create_user_token(user.id), 'user': _user_dict(user)})
+
+
+def consume_challenge(db, cfg, body, purpose, user_id=None):
     if not re.fullmatch(r'[a-f0-9]{32}', body.state):
         raise HTTPException(400, '登录校验已失效，请重试')
     row = db.get(Setting, 'appwx:' + body.state)
     record = json.loads(row.value) if row else {}
     proof_hash = hashlib.sha256(body.proof.encode()).hexdigest()
-    if not record or record.get('expires', 0) < time.time() or record.get('app_id') != cfg['app_id'] or not hmac.compare_digest(record.get('proof', ''), proof_hash):
+    if (not record or record.get('expires', 0) < time.time() or record.get('app_id') != cfg['app_id']
+            or record.get('purpose') != purpose or record.get('user_id') != user_id
+            or not hmac.compare_digest(record.get('proof', ''), proof_hash)):
         raise HTTPException(400, '登录校验已失效，请重试')
     # 条件删除是真正的一次性消费：并发请求仅一个成功，外部换码前提交。
     consumed = db.query(Setting).filter(Setting.key == row.key, Setting.value == row.value).delete(synchronize_session=False)
     db.commit()
     if consumed != 1:
         raise HTTPException(400, '登录校验已失效，请重试')
+
+
+def app_identity(cfg, identity):
+    return 'app:' + hashlib.sha256((cfg['app_id'] + ':' + identity['openid']).encode()).hexdigest()[:56]
+
+
+def lock_identities(db):
+    # 与短信账号创建、注销共用数据库锁，外部换码期间不持锁。
+    lock_auth_identities(db)
+
+
+def account_app_identities(db, user):
+    aliases, seen, frontier = set(), set(), [user]
+    while frontier:
+        next_ids = []
+        for row in frontier:
+            if row.id in seen:
+                continue
+            seen.add(row.id)
+            next_ids.append(row.id)
+            if row.app_openid:
+                aliases.add(row.app_openid)
+            if row.openid.startswith('app:'):
+                aliases.add(row.openid)
+        frontier = db.query(User).filter(User.merged_into.in_(next_ids)).all() if next_ids else []
+    return aliases
+
+
+@router.get('/api/app/wechat/binding')
+def binding(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    return ok({'bound': bool(account_app_identities(db, user))})
+
+
+@router.post('/api/app/wechat/bind/challenge')
+def bind_challenge(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    throttle(request, 'bind-challenge')
+    cfg = configuration(db)
+    if not ready(cfg):
+        raise HTTPException(503, 'APP 微信登录尚未开启')
+    return new_challenge(db, cfg, 'bind', user.id)
+
+
+@router.post('/api/app/wechat/bind')
+def bind(body: LoginIn, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    throttle(request, 'bind')
+    cfg = configuration(db)
+    if not ready(cfg):
+        raise HTTPException(503, 'APP 微信登录尚未开启')
+    uid = user.id
+    consume_challenge(db, cfg, body, 'bind', uid)
     identity = exchange_code(cfg, body.code)
-    # 不占用网站/小程序 OpenID 字段；同一开放平台 unionid 沿用既有账号合并。
-    openid = 'app:' + hashlib.sha256((cfg['app_id'] + ':' + identity['openid']).encode()).hexdigest()[:56]
-    unionid = str(identity.get('unionid') or '')
-    user = resolve_login(db, unionid, openid=openid)
-    if user is None:
-        user = User(openid=openid, unionid=unionid, nickname=_default_nickname())
-        db.add(user)
-        from sqlalchemy.exc import IntegrityError
-        try:
-            db.commit()
-        except IntegrityError:
-            db.rollback()
-            user = resolve_login(db, unionid, openid=openid)
-            if user is None:
-                raise HTTPException(409, '账号状态已变化，请重新登录') from None
+    alias, unionid = app_identity(cfg, identity), str(identity.get('unionid') or '')
+    try:
+        lock_identities(db)
+        user = db.query(User).filter(User.id == uid).populate_existing().with_for_update().first()
+        if not user or user.deleted_at or user.merged_into:
+            raise HTTPException(409, '账号状态已变化，请重新登录')
+        aliases = account_app_identities(db, user)
+        if (aliases and alias not in aliases) or (user.unionid and unionid and user.unionid != unionid):
+            raise HTTPException(409, '当前账号已绑定其他微信，请联系客服')
+        owners = db.query(User).filter((User.app_openid == alias) | (User.openid == alias) |
+                                      ((User.unionid == unionid) if unionid else False)).all()
+        if any((owner := resolve_user(db, row)) is not None and owner.id != uid for row in owners):
+            raise HTTPException(409, '该微信已属于其他账号，请使用原账号登录或联系客服')
+        if not user.app_openid and not aliases:
+            user.app_openid = alias
+        if unionid and not user.unionid:
+            user.unionid = unionid
+        db.commit()
         db.refresh(user)
-    return ok({'token': create_user_token(user.id), 'user': _user_dict(user)})
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, '该微信已绑定其他账号，或账号状态已变化') from None
+    except HTTPException:
+        db.rollback()
+        raise
+    return ok({'user': _user_dict(user)})

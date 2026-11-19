@@ -161,6 +161,8 @@ class User(Base):
     openid: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     # 微信小程序 jscode2session 确认的付款 OpenID。账号合并后 user.openid 可能来自公众号或网站应用。
     mp_openid: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # 移动应用身份独立保存，绑定手机号账号时不覆盖原登录/付款标识。
+    app_openid: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
     unionid: Mapped[str] = mapped_column(String(64), default="", index=True)
     oa_openid: Mapped[str] = mapped_column(String(64), default="", index=True)  # 公众号 openid（H5 网页授权/JSAPI 支付 payer）
     # 开放平台「网站应用」openid（微信外浏览器的扫码登录）。这是第三种 openid——
