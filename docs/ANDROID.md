@@ -9,7 +9,7 @@
 - 正式应用名称：五行律音；包名 `cn.azureglow.wuxing`，更新渠道 `stable`。
 - 体验包保留 `cn.azureglow.wuxing.preview`，更新渠道 `preview`；两者可并存，不覆盖安装或迁移本地缓存，登录后使用同一后端账号。
 - 最低 Android 7.0（API 24）；使用系统 WebView，建议保持 WebView 更新。
-- 正式产物：`artifacts/android/wuxing-music-2.0.0-android-release.apk`，附 SHA256、包名/版本/公开证书摘要 JSON。
+- 正式产物：`artifacts/android/wuxing-music-2.0.1-android-release.apk`，附 SHA256、包名/版本/公开证书摘要 JSON。
 - 正式包使用独立长期发布签名，关闭调试；体验包继续使用 debug 签名。生成 release APK 不等于已上架应用商店或发布下载。
 - 启动 LOGO 沿原图轮廓拆成三个矢量部件，Android 12+ 播放约 3 秒的双向光轨、金线汇聚与火焰合成动画；原始 JPG 保留。旧系统及关闭动画时显示完整静态标识，APP 不再追加旧月亮等待页。
 
@@ -17,7 +17,7 @@
 
 APP 页面不预留微信胶囊空间。后续页面统一使用 `navTopStyle()`（设备安全区加 32rpx 页面间距）或 `navBarStyle()`（设备安全区加实际 44px 导航行）；安全区优先采用原生容器注入值，避免重复增加状态栏高度。小程序胶囊避让和旧 H5 间距各自保留。
 
-版本发布、公开下载与移动应用微信配置见 [APP 管理](APP-MANAGEMENT.md)。当前 versionCode 为 `2000006`，支持启动/回前台及设置页检查更新。
+版本发布、公开下载与移动应用微信配置见 [APP 管理](APP-MANAGEMENT.md)。当前 versionCode 为 `2000007`，支持启动/回前台及设置页检查更新。`2.0.1` 的协议勾选修复与验证见 [版本记录](../android/RELEASES.md)。APP 样式若需命中 Taro 内部原生标签，使用类或属性选择器：直接写 `label` 会被编译为 `taro-label-core`，不能命中其内部的 `<label>`。
 
 支持短信登录、绑定微信、游客浏览、音乐前台试听、播放器收展及课程商品展示。微信移动应用原生授权须在后台及微信开放平台登记实际包名、证书后开启；协议自主勾选，允许返回游客。正式签名不增加原生支付、分享 SDK 或可靠后台音乐服务，APP 音乐会员、礼物卡及课程商城下单仍关闭，不能把发布构建当成这些能力已验收。
 

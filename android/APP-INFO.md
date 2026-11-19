@@ -10,7 +10,7 @@
 | 实际应用包名 / applicationId | `cn.azureglow.wuxing` | `cn.azureglow.wuxing.preview` |
 | 更新渠道 | `stable` | `preview` |
 | 签名 | 长期发布签名 | 本机 Android debug 签名 |
-| 当前正式版本 | `2.0.0` / `2000006` | 上次交付为 `2.0.0-rc.3-android-preview.5` / `2000005` |
+| 当前正式版本 | `2.0.1` / `2000007` | 上次交付为 `2.0.0-rc.3-android-preview.5` / `2000005` |
 | 安装关系 | 与体验包并存 | 不能作为正式包覆盖更新 |
 
 工程 `namespace` 仍为 `cn.azureglow.wuxing.preview`，用于内部 Java/R 资源定位；向后台、微信开放平台或应用商店登记时填写上表的**实际应用包名**。正式微信回调为 `cn.azureglow.wuxing.wxapi.WXEntryActivity`。

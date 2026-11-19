@@ -10,7 +10,7 @@
 4. 在「基础与下载」开启公开下载。固定地址 `/download` 默认体验版渠道 `preview`；正式渠道为 `/download?channel=stable`。后台可复制链接，页面无需登录，跟随站点名称和风格。
 5. 在「微信登录」填写已审核的微信开放平台移动应用参数及 APP 隐私政策，保存并启用。AppSecret 留空保留，回读不返回密钥明文。
 
-当前正式产物：`artifacts/android/wuxing-music-2.0.0-android-release.apk`，包名 `cn.azureglow.wuxing`，versionCode `2000006`，正式证书 MD5 为 `453d82a42eac6bd24178c9f9ae6381cc`（公开指纹）。上传前在「基础与下载」将包名改为正式包名，版本选择 `stable`，正式固定页使用 `/download?channel=stable`。源码推送不会自动上传或公开此 APK。
+当前正式产物：`artifacts/android/wuxing-music-2.0.1-android-release.apk`，包名 `cn.azureglow.wuxing`，versionCode `2000007`，正式证书 MD5 为 `453d82a42eac6bd24178c9f9ae6381cc`（公开指纹）。上传前在「基础与下载」将包名改为正式包名，版本选择 `stable`，正式固定页使用 `/download?channel=stable`。源码推送不会自动上传或公开此 APK。
 
 微信开放平台与后台「微信登录」需登记正式包名及上述 MD5 后才能授权，后台填写不能代替微信侧审核。旧体验包仍为 `.preview` 与证书 MD5 `48b1a4fe20e435e59ab91ce295ddb0e3`，两者不可混填；当前微信配置为单套参数，切换为正式参数后旧体验包需按实际配置使用短信登录。长期私钥与本机保管方式见 [安卓构建](ANDROID.md)。
 
