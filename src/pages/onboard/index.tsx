@@ -4,7 +4,7 @@ import Taro from '@tarojs/taro';
 import Icon from '@/components/Icon';
 import { ELEMENT_LIST } from '@/constants/wuxing';
 import { A } from '@/utils/color';
-import { rpx } from '@/utils/unit';
+import { navTopStyle } from '@/utils/nav';
 import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
 
@@ -17,11 +17,11 @@ const STARS = Array.from({ length: 30 }).map(() => ({
   delay: Math.random() * 3
 }));
 
-// 罗盘节点位置：半径 95（px）→ rpx，圆心在 240rpx 容器中心
+// 节点使用容器百分比定位，让短屏上的罗盘缩小后仍保持五音布局。
 const NODES = ELEMENT_LIST.map((el, i) => {
   const angle = ((i * 72 - 90) * Math.PI) / 180;
-  const x = Math.cos(angle) * 190 + 240; // 95*2=190, 圆心 120*2=240
-  const y = Math.sin(angle) * 190 + 240;
+  const x = Math.cos(angle) * 37 + 50;
+  const y = Math.sin(angle) * 37 + 50;
   return { el, x, y };
 });
 
@@ -33,7 +33,7 @@ function Onboard() {
   const skip = () => Taro.reLaunch({ url: '/pages/home/index' });
 
   return (
-    <View className="onboard">
+    <View className="onboard" style={navTopStyle()}>
       {stars.map((s, i) => (
         <View
           key={i}
@@ -70,8 +70,8 @@ function Onboard() {
             key={el.id}
             className="onboard__node"
             style={{
-              left: rpx(x - 56),
-              top: rpx(y - 56),
+              left: `${x}%`,
+              top: `${y}%`,
               background: `radial-gradient(circle, ${A.a25(el.primary)}, transparent 70%)`,
               borderColor: A.a40(el.primary)
             }}
@@ -84,11 +84,13 @@ function Onboard() {
         </View>
       </View>
 
-      <View className="onboard__btn fade-up" style={{ animationDelay: '0.5s' }} onClick={startQuiz}>
-        <Text className="onboard__btn-text">开始测评</Text>
-        <Icon name="arrowRight" size={28} color="#0a0e1a" />
+      <View className="onboard__actions fade-up" style={{ animationDelay: '0.5s' }}>
+        <View className="onboard__btn" onClick={startQuiz}>
+          <Text className="onboard__btn-text">开始测评</Text>
+          <Icon name="arrowRight" size={28} color="#0a0e1a" />
+        </View>
+        <Text className="onboard__skip" onClick={skip}>跳过，直接体验</Text>
       </View>
-      <Text className="onboard__skip" onClick={skip}>跳过，直接体验</Text>
     </View>
   );
 }

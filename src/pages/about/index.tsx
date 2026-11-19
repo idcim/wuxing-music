@@ -31,11 +31,13 @@ function About() {
       </View>
 
       <View className="about__head fade-up">
-        {info?.logo_url ? (
-          <Image className="about__logo" src={resolveUrl(info.logo_url)} mode="aspectFit" />
-        ) : (
-          <Text className="about__logo-text serif">律</Text>
-        )}
+        <View className="about__logo-frame">
+          {info?.logo_url ? (
+            <Image className="about__logo" src={resolveUrl(info.logo_url)} mode="aspectFit" />
+          ) : (
+            <Text className="about__logo-text serif">律</Text>
+          )}
+        </View>
         <Text className="about__name serif">{info?.site_name || fallbackName}</Text>
       </View>
 

@@ -1,3 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
-    android:src="@drawable/brand_logo" android:gravity="fill" />
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:width="48dp" android:height="48dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/brandBlue" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+    <item android:width="40dp" android:height="40dp" android:gravity="center">
+        <bitmap android:src="@drawable/brand_logo" android:gravity="fill" />
+    </item>
+</layer-list>

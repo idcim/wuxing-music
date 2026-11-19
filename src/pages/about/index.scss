@@ -38,15 +38,29 @@
     padding: 40rpx 0 56rpx;
   }
 
+  &__logo-frame {
+    width: 168rpx;
+    height: 168rpx;
+    padding: 24rpx;
+    border: 2rpx solid $border;
+    border-radius: $radius-xl;
+    background: $surface;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   &__logo {
-    width: 140rpx;
-    height: 140rpx;
-    border-radius: 32rpx;
+    width: 120rpx;
+    height: 120rpx;
+    flex-shrink: 0;
+    border-radius: $radius-md;
   }
 
   &__logo-text {
-    width: 140rpx;
-    height: 140rpx;
+    width: 120rpx;
+    height: 120rpx;
+    flex-shrink: 0;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.06);
     color: $text-primary;

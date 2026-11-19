@@ -21,7 +21,10 @@ test('游客可打开免费试听，付费章节仍引导登录', () => {
       money: value => `¥${value / 100}`, useCommerce: select => select({ config: { courses_sale: false } }) },
     '@/stores/player': { usePlayerStore: () => ({}) },
     '@/components/MarkdownView': { default: () => null },
+    '@/utils/url': { resolveUrl: value => value },
+    '@/features/commerce/catalog': { DetailFacts: ({ children }) => React.createElement('facts', null, children) },
     '@/features/commerce/common': {
+      Section: ({ children }) => React.createElement('section', null, children),
       CommercePage: ({ children }) => React.createElement('page', null, children),
       Cover: () => null, CustomerService: () => null, Feedback: () => null,
       action: async work => work(),
@@ -42,11 +45,11 @@ test('游客可打开免费试听，付费章节仍引导登录', () => {
   let renderer;
   act(() => { renderer = create(React.createElement(exports.default)); });
   try {
-    const lesson = title => renderer.root.findAllByType('text').find(node => node.children.join('').includes(title));
-    act(() => { lesson('免费试听').parent.props.onClick(); });
+    const lesson = title => { let node = renderer.root.findAllByType('text').find(node => node.children.join('').includes(title)); while (node && !node.props.onClick) node = node.parent; return node; };
+    act(() => { lesson('免费试听').props.onClick(); });
     assert.deepEqual(navigations, ['/packages/courses/learn/index?id=8&lesson=10']);
     assert.equal(loginPrompts, 0);
-    act(() => { lesson('付费章节').parent.props.onClick(); });
+    act(() => { lesson('付费章节').props.onClick(); });
     assert.equal(navigations.length, 1);
     assert.equal(loginPrompts, 1);
   } finally { act(() => renderer.unmount()); }

@@ -25,7 +25,9 @@ function mount(relativeFile, config = {}) {
     '@/assets/commerce/shop-banner.jpg': { default: 'local-shop-banner' },
     '@/components/MarkdownView': { default: () => null },
     '@/utils/url': { resolveUrl: value => value },
+    '@/features/commerce/catalog': { CatalogHero: props => React.createElement('image', { src: props.image }), QuickEntry: () => null },
     '@/features/commerce/common': {
+      EmptyState: () => null, SectionHeading: () => null,
       CommercePage: ({ children }) => React.createElement('page', null, children),
       Cover: props => React.createElement('cover', props), Feedback: () => null, CustomerService: () => null,
       requireCommerceLogin: () => false,
@@ -72,8 +74,7 @@ for (const [kind, file, field] of [
   test(`${kind} 后台运营海报优先于内置图片`, () => {
     const ui = mount(file, { [field]: 'https://example.test/banner.jpg' });
     try {
-      assert.equal(ui.images().length, 0);
-      assert.equal(ui.covers()[0]?.props.src, 'https://example.test/banner.jpg');
+      assert.equal(ui.images()[0]?.props.src, 'https://example.test/banner.jpg');
     } finally { ui.close(); }
   });
 }
@@ -88,7 +89,7 @@ for (const [kind, file] of [
       assert.equal(ui.requests.at(-1), `/catalog/${kind}?page=1`);
       ui.choose('分类七');
       assert.equal(ui.requests.at(-1), `/catalog/${kind}?page=1&category=7`);
-      ui.choose('全部');
+      ui.choose(kind === 'course' ? '全部课程' : '全部好物');
       assert.equal(ui.requests.at(-1), `/catalog/${kind}?page=1`);
     } finally { ui.close(); }
   });

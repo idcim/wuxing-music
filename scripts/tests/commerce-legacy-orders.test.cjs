@@ -9,6 +9,9 @@ const { create, act } = require('react-test-renderer');
 
 function page(file, mocks) {
   mocks['@/theme/withTheme'] = { withTheme: Page => Page };
+  mocks['@/features/commerce/transactions.scss'] = {};
+  mocks['@/features/commerce/common'].Section = ({ children }) => React.createElement('section', null, children);
+  mocks['@/features/commerce/common'].EmptyState = () => null;
   const source = fs.readFileSync(path.join(__dirname, '../../src/packages/shop', file), 'utf8');
   const exports = {};
   vm.runInNewContext(ts.transpileModule(source, { compilerOptions: {
@@ -38,7 +41,7 @@ test('聚合列表中的历史会员订单进入对应详情', () => {
   let renderer;
   act(() => { renderer = create(React.createElement(page('orders/index.tsx', mocks))); });
   try {
-    const card = renderer.root.findAllByType('view').find(node => node.props.className === 'commerce__card commerce__card-body');
+    const card = renderer.root.findAllByType('view').find(node => node.props['aria-label'] === '查看订单legacy-001');
     act(() => { card.props.onClick(); });
     assert.deepEqual(navigations, ['/packages/shop/order/index?id=1&kind=music']);
   } finally { act(() => renderer.unmount()); }

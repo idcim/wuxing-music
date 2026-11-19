@@ -26,7 +26,9 @@ async function page(api, params = { kind: 'physical', sku: '1', quantity: '1' })
         return api(url, method, body);
       } },
     '@/services/commerce-payment': { payCommerceOrder: async (...args) => { payments.push(args); } },
-    '@/features/commerce/common': { CommercePage: ({ children }) => React.createElement('page', null, children),
+    '@/features/commerce/transactions.scss': {},
+    '@/features/commerce/common': { CommercePage: ({ children, footer }) => React.createElement('page', null, children, footer),
+      Section: ({ children }) => React.createElement('section', null, children), EmptyState: () => null,
       Feedback: props => React.createElement('feedback', props), action: async work => { try { await work(); } catch (e) { errors.push(e.message); } } },
   };
   const source = fs.readFileSync(path.join(__dirname, '../../src/packages/shop/checkout/index.tsx'), 'utf8');
@@ -40,10 +42,11 @@ async function page(api, params = { kind: 'physical', sku: '1', quantity: '1' })
   const invoke = async callback => { act(() => { callback(); }); await flush(); };
   const buttons = () => renderer.root.findAllByType('button');
   const pay = () => buttons().find(button => button.children.join('').startsWith('确认并支付'));
-  return { renderer, orders, payments, redirects, errors, flush, invoke, pay,
+  const showsAmount = amount => renderer.root.findAllByType('text').some(node => node.children.join('') === amount);
+  return { renderer, orders, payments, redirects, errors, flush, invoke, pay, showsAmount,
     show: () => invoke(show), hide: () => invoke(hide),
     retry: () => invoke(() => renderer.root.findByType('feedback').props.retry()),
-    agree: () => invoke(() => renderer.root.findAllByType('text').find(n => n.children.join('').includes('我已阅读')).props.onClick()),
+    agree: () => invoke(() => buttons().find(n => n.props['aria-label'] === '确认购买说明').props.onClick()),
     close: () => act(() => renderer.unmount()),
   };
 }
@@ -57,12 +60,12 @@ test('同一地址修改省份后重新报价并重新确认，旧按钮回调�
     throw new Error(url);
   });
   try {
-    await ui.show(); await ui.agree(); assert.ok(ui.pay().children.join('').includes('11.00'));
+    await ui.show(); await ui.agree(); assert.ok(ui.showsAmount('¥11.00'));
     const oldSubmit = ui.pay().props.onClick;
     await ui.hide(); shipping = 500; held = deferred(); await ui.show();
     assert.equal(ui.pay(), undefined); await ui.invoke(oldSubmit); assert.equal(ui.orders.length, 0);
     held.resolve(quote(shipping)); await ui.flush();
-    assert.ok(ui.pay().children.join('').includes('15.00')); assert.equal(ui.pay().props.disabled, true);
+    assert.ok(ui.showsAmount('¥15.00')); assert.equal(ui.pay().props.disabled, true);
     await ui.agree();
     const submit = ui.pay().props.onClick;
     await act(async () => { await Promise.all([submit(), submit()]); });
@@ -103,9 +106,9 @@ test('隐藏前迟到的报价不能覆盖返回后的新价格，课程也可�
   }, { kind: 'course', course: '3' });
   try {
     await ui.show(); await ui.hide(); await ui.show();
-    assert.ok(ui.pay().children.join('').includes('15.00'));
+    assert.ok(ui.showsAmount('¥15.00'));
     first.resolve(quote(100)); await ui.flush();
-    assert.ok(ui.pay().children.join('').includes('15.00'));
+    assert.ok(ui.showsAmount('¥15.00'));
   } finally { ui.close(); }
 });
 

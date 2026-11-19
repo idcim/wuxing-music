@@ -6,7 +6,8 @@ import { commerceApi, type Entry } from '@/services/commerce';
 import { createLessonProgress, waitForLessonProgress } from '@/services/lesson-progress';
 import { usePlayerStore } from '@/stores/player';
 import { useUserStore } from '@/stores/user';
-import { action, CommercePage, Cover, Feedback, useData } from '@/features/commerce/common';
+import { action, CommercePage, Cover, Feedback, Section, useData } from '@/features/commerce/common';
+import '@/features/commerce/catalog.scss';
 
 type PlaybackControl = { pause: () => void; save: () => Promise<void> };
 type ControlRef = MutableRefObject<PlaybackControl | undefined>;
@@ -106,10 +107,12 @@ function LessonPlayer({ lesson, cover, control }: { lesson: number; cover: strin
     void action(() => refresh(true));
   };
   return <>
-    <Feedback loading={loading} error={error} retry={() => action(() => refresh())} /><Text className='commerce__name'>{play.title}</Text>
+    <Feedback loading={loading} error={error} retry={() => action(() => refresh())} />
+    <View className='course-learning__heading'><Text className='commerce__eyebrow'>YOUR LEARNING MOMENT</Text><Text className='course-learning__title serif'>{play.title}</Text></View>
     {play.url && <CourseMedia key={play.url} lesson={lesson} play={play} cover={cover} control={control} resume={resumeAfterError} onPlaybackError={onPlaybackError} onPlaybackStarted={() => setResumeAfterError(false)} />}
-    <Text className='commerce__muted'>{owner ? '学习进度自动保存；' : '游客试听不保存学习进度；'}播放中断会尝试重新连接，仍失败时可手动刷新。</Text>
-    <Button className='commerce__secondary' loading={refreshing} disabled={refreshing} onClick={() => action(() => refresh())}>刷新播放地址</Button>
+    <Section><Text className='commerce__caption'>{owner ? '学习进度自动保存，下次从这里继续。' : '当前为游客试听，登录后可保存学习进度。'}</Text><Text className='commerce__caption'>播放中断会尝试重新连接，仍失败时可手动刷新。</Text>
+      <Button className='commerce__text-button' loading={refreshing} disabled={refreshing} onClick={() => action(() => refresh())}>重新连接播放</Button>
+    </Section>
   </>;
 }
 
@@ -125,10 +128,12 @@ function LearnCourse() {
   const { data: course } = useData<Entry>(`/courses/${Number(params.id)}`, {});
   return <CommercePage title='课程学习' learning>
     {Number.isSafeInteger(lesson) && lesson > 0 ? <LessonPlayer key={`${owner}:${lesson}`} lesson={lesson} cover={course.cover} control={control} /> : <Text>请选择学习章节</Text>}
-    {course.lessons?.map((item: Entry) => <View className={`commerce__chip ${lesson === item.id ? 'commerce__chip--active' : ''}`} key={item.id} onClick={() => {
+    <Section title={course.title || '课程目录'} eyebrow='CONTINUE LEARNING'>
+    {course.lessons?.map((item: Entry, index: number) => <View className={`course-lesson ${lesson === item.id ? 'course-lesson--active' : ''}`} key={item.id} onClick={() => {
       if (!course.owned && !item.preview) return Taro.showToast({ title: '该章节需要购买课程', icon: 'none' });
       control.current?.pause(); setLesson(item.id);
-    }}><Text>{item.title}{item.preview ? ' · 免费' : ''}</Text></View>)}
+    }}><Text className='course-lesson__number cormorant'>{String(index + 1).padStart(2, '0')}</Text><View className='course-lesson__body'><Text className='course-lesson__title'>{item.title}</Text><Text className='course-lesson__meta'>{lesson === item.id ? '正在学习' : item.progress?.completed ? '已学完' : item.preview ? '免费试看 / 试听' : course.owned ? '已解锁' : '购买后学习'}</Text></View><Text className='course-lesson__state'>{lesson === item.id ? '学习中' : '›'}</Text></View>)}
+    </Section>
   </CommercePage>;
 }
 

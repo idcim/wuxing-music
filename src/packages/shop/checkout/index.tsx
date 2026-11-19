@@ -4,7 +4,8 @@ import { View, Text, Button } from '@tarojs/components';
 import Taro, { useDidHide, useDidShow, useRouter } from '@tarojs/taro';
 import { commerceApi, shopPath, money, type Entry } from '@/services/commerce';
 import { payCommerceOrder } from '@/services/commerce-payment';
-import { action, CommercePage, Feedback } from '@/features/commerce/common';
+import { action, CommercePage, EmptyState, Feedback, Section } from '@/features/commerce/common';
+import '@/features/commerce/transactions.scss';
 
 function Checkout() {
   const params = useRouter().params;
@@ -84,18 +85,24 @@ function Checkout() {
       Taro.redirectTo({ url: `${shopPath}/order/index?id=${order.id}` });
     }); } finally { submitting.current = false; setBusy(false); }
   };
-  return <CommercePage title='确认订单'>
-    {kind === 'physical' && <View className='commerce__card commerce__card-body'><Text className='commerce__name'>收货地址</Text>
-      {addresses.map(a => <View key={a.id} className={`commerce__chip ${addressId === a.id ? 'commerce__chip--active' : ''}`} onClick={() => { if (!busy && !preparing) setAddressId(a.id); }}><Text>{a.name} {a.phone}</Text><Text className='commerce__muted'>{a.province}{a.city}{a.district}{a.detail}</Text></View>)}
-      <Button disabled={busy || preparing} onClick={() => Taro.navigateTo({ url: `${shopPath}/addresses/index` })}>管理收货地址</Button></View>}
+  return <CommercePage title='确认订单' footer={quote && <>
+    <View className='commerce-tx__footer-total'><Text className='commerce__muted'>应付合计</Text><Text className='commerce__price'>{money(quote.amount_fen)}</Text></View>
+    <Button className='commerce__primary' loading={busy} disabled={!agreed || busy} onClick={submit}>确认并支付</Button>
+  </>}>
+    <View className='commerce-tx__steps'><Text className='commerce-tx__step commerce-tx__step--active'>01 确认订单</Text><Text className='commerce-tx__step'>02 完成支付</Text><Text className='commerce-tx__step'>03 {kind === 'course' ? '开始学习' : '等待收货'}</Text></View>
+    {kind === 'physical' && <Section title='送到这里' eyebrow='DELIVERY'>
+      {!preparing && !addresses.length && <EmptyState title='添加一个收货地址' description='填写收货信息后，才能确认配送范围和运费。' />}
+      {addresses.map(a => <View key={a.id} className={`commerce-tx__address-option ${addressId === a.id ? 'commerce-tx__address-option--active' : ''}`} onClick={() => { if (!busy && !preparing) setAddressId(a.id); }}><View className='commerce-tx__between'><Text className='commerce__name'>{a.name}</Text><Text>{a.phone}</Text></View><Text className='commerce__muted'>{a.province}{a.city}{a.district}{a.detail}</Text><Text className='commerce-tx__address-selected'>{addressId === a.id ? '✓ 配送至此地址' : '选择此地址'}</Text></View>)}
+      <Button className='commerce__secondary' disabled={busy || preparing} onClick={() => Taro.navigateTo({ url: `${shopPath}/addresses/index` })}>{addresses.length ? '管理收货地址' : '新增收货地址'}</Button></Section>}
     <Feedback loading={preparing || quoting} error={error} retry={reload} />
-    <Button className='commerce__secondary' disabled={busy || preparing || quoting} onClick={reload}>重新获取价格与运费</Button>
-    {quote?.items.map((item: Entry) => <View className='commerce__card commerce__card-body' key={item.entity_id}><Text className='commerce__name'>{item.title}</Text><Text className='commerce__muted'>{item.spec} × {item.quantity}</Text><Text className='commerce__price'>{money(item.price_fen * item.quantity)}</Text>
-      {kind === 'course' && <Text className='commerce__muted'>{item.access_days ? `购买后可学习 ${item.access_days} 天` : '长期有效'}；课程权益与音乐会员独立。</Text>}</View>)}
-    {quote && <><Text className='commerce__muted'>运费：{money(quote.shipping_fen)}</Text><Text className='commerce__price'>应付：{money(quote.amount_fen)}</Text>
-      <Text className='commerce__muted'>订单保留 30 分钟，实际权益与发货以服务端确认支付为准。</Text>
-      <Text className='commerce__chip' onClick={() => setAgreed(!agreed)}>{agreed ? '☑' : '□'} 我已阅读商品/课程详情中的购买、学习/配送及售后说明</Text>
-      <Button className='commerce__primary' loading={busy} disabled={!agreed || busy} onClick={submit}>确认并支付 {money(quote.amount_fen)}</Button></>}
+    {quote && <><Section title={kind === 'course' ? '本次学习' : '本次好物'} eyebrow='YOUR SELECTION'>
+      {quote.items.map((item: Entry) => <View className='commerce-tx__line-item' key={item.entity_id}><View className='commerce-tx__between'><Text className='commerce__name'>{item.title}</Text><Text className='commerce-tx__amount'>{money(item.price_fen * item.quantity)}</Text></View><Text className='commerce__muted'>{item.spec} × {item.quantity}</Text>{kind === 'course' && <Text className='commerce-tx__notice'>{item.access_days ? `购买后可学习 ${item.access_days} 天` : '长期有效'}；课程权益与音乐会员独立。</Text>}</View>)}
+    </Section><Section title='费用明细' eyebrow='ORDER SUMMARY'>
+      <View className='commerce-tx__detail-row'><Text className='commerce__muted'>商品金额</Text><Text>{money(quote.amount_fen - quote.shipping_fen)}</Text></View><View className='commerce-tx__detail-row'><Text className='commerce__muted'>运费</Text><Text>{money(quote.shipping_fen)}</Text></View><View className='commerce-tx__detail-row commerce-tx__detail-row--total'><Text>应付合计</Text><Text className='commerce__price'>{money(quote.amount_fen)}</Text></View>
+      <Button className='commerce-tx__text-button' disabled={busy || preparing || quoting} onClick={reload}>重新获取价格与运费 ↻</Button>
+    </Section><View className='commerce-tx__notice'><Text>订单保留 30 分钟，实际权益与发货以服务端确认支付为准。</Text></View>
+      <Button className={`commerce-tx__agreement ${agreed ? 'commerce-tx__agreement--active' : ''}`} aria-label='确认购买说明' aria-pressed={agreed} onClick={() => setAgreed(!agreed)}><Text className='commerce-tx__agreement-check'>{agreed ? '✓' : '○'}</Text><Text>我已阅读商品/课程详情中的购买、学习/配送及售后说明</Text></Button></>}
+    {!quote && !preparing && !quoting && <Button className='commerce__secondary' disabled={busy} onClick={reload}>重新获取价格与运费</Button>}
   </CommercePage>;
 }
 

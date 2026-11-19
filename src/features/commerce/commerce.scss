@@ -1,35 +1,78 @@
 @use '../../styles/variables.scss' as *;
 .commerce {
-  min-height: 100vh; background: $bg-deep; color: $text-primary;
-  padding: 0 $pad-outer calc(390rpx + env(safe-area-inset-bottom));
-  &__header { height:44px; display:flex; align-items:center; padding-bottom:24rpx; }
-  &__title { flex:1; text-align:center; font-size:30rpx; font-weight:600; letter-spacing:2rpx; }
-  &__back { width:80rpx; color:$text-primary; font-size:56rpx; line-height:1; }
-  &__nav-spacer { width:80rpx; }
-  &__hero, &__card { border:1rpx solid $border; border-radius:$radius-md; background:$bg-mid; overflow:hidden; margin-bottom:$gap-list; }
-  &__card-body { padding:$pad-card; }
-  &__grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20rpx; }
-  &__cover { display:block; width:100%; height:260rpx; border-radius:$radius-sm; }
-  &__cover--large { height:390rpx; margin-bottom:24rpx; }
-  &__placeholder { display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,$bg-mid,rgba(190,242,100,.08)); color:$text-tertiary; font-size:32rpx; }
-  &__name { display:block; font-size:34rpx; font-weight:500; margin:14rpx 0; line-height:1.5; }
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 0 40rpx calc(180rpx + env(safe-area-inset-bottom));
+  background: $bg-deep;
+  color: $text-primary;
+  overflow-x: hidden;
+  &--tab { padding-bottom: calc(220rpx + env(safe-area-inset-bottom)); }
+  &--purchase { padding-bottom: calc(280rpx + env(safe-area-inset-bottom)); }
+  &--learning { padding-bottom: calc(80rpx + env(safe-area-inset-bottom)); }
+  &__header { display:flex; align-items:center; height:44px; padding-bottom:24rpx; }
+  &__header--brand { height:auto; padding-bottom:36rpx; justify-content:space-between; gap:24rpx; }
+  &__identity { display:flex; align-items:center; gap:20rpx; min-width:0; }
+  &__wordmark { min-width:0; }
+  &__brand-name { display:block; font-size:34rpx; letter-spacing:4rpx; line-height:1.4; overflow-wrap:anywhere; }
+  &__brand-caption { display:block; max-width:300rpx; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:4rpx; font-size:20rpx; letter-spacing:2rpx; color:$text-tertiary; }
+  &__brand-mark { flex-shrink:0; width:88rpx; height:88rpx; padding:16rpx; display:flex; align-items:center; justify-content:center; border:1rpx solid $border; border-radius:24rpx; background:$surface; color:$theme-accent; font-size:36rpx; overflow:hidden; }
+  &__brand-image { display:block; width:100%; height:100%; }
+  &__destination { flex-shrink:0; font-size:22rpx; color:$text-secondary; border-left:1rpx solid $border; padding-left:22rpx; letter-spacing:4rpx; }
+  &__title { flex:1; text-align:center; font-size:30rpx; font-weight:500; letter-spacing:3rpx; }
+  &__back { width:88rpx; min-height:88rpx; display:flex; align-items:center; cursor:pointer; }
+  &__nav-spacer { width:88rpx; }
+  &__content { min-width:0; }
+  &__section { padding:32rpx; background:$bg-mid; border:1rpx solid $border; border-radius:28rpx; margin-bottom:24rpx; }
+  &__section-title { display:block; font-size:34rpx; font-weight:500; letter-spacing:2rpx; line-height:1.5; margin-bottom:20rpx; }
+  &__section-heading { display:flex; align-items:center; justify-content:space-between; gap:20rpx; margin:40rpx 0 24rpx; }
+  &__section-heading .commerce__section-title { margin-bottom:6rpx; }
+  &__eyebrow { display:block; font-size:18rpx; letter-spacing:4rpx; text-transform:uppercase; color:$theme-accent; margin-bottom:12rpx; }
+  &__caption { display:block; font-size:24rpx; line-height:1.8; color:$text-tertiary; overflow-wrap:anywhere; }
+  &__card { border:1rpx solid $border; border-radius:28rpx; background:$bg-mid; overflow:hidden; margin-bottom:24rpx; }
+  &__card-body { padding:28rpx; }
+  &__grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24rpx; }
+  &__grid .commerce__card { margin:0; }
+  &__cover { display:block; width:100%; height:280rpx; object-fit:cover; }
+  &__cover--large { height:420rpx; border-radius:28rpx; margin-bottom:24rpx; }
+  &__placeholder { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16rpx; background:$surface; color:$text-tertiary; font-size:24rpx; }
+  &__placeholder-mark { color:$theme-accent; font-size:72rpx; opacity:.5; }
+  &__name { display:block; font-size:32rpx; font-weight:500; margin:12rpx 0; line-height:1.5; overflow-wrap:anywhere; }
   &__muted, &__contact { display:block; color:$text-secondary; font-size:26rpx; line-height:1.8; margin:12rpx 0; overflow-wrap:anywhere; }
-  &__price { display:block; color:$theme-accent; font-size:36rpx; margin:16rpx 0; }
+  &__price { display:block; color:$theme-accent; font-size:40rpx; font-weight:500; margin:16rpx 0; font-variant-numeric:tabular-nums; }
   &__chips, &__row { display:flex; flex-wrap:wrap; gap:16rpx; align-items:center; margin:20rpx 0; }
-  &__chip { padding:14rpx 22rpx; border:1rpx solid $border; border-radius:$radius-pill; font-size:28rpx; color:$text-secondary; }
-  &__chip--active { border-color:$theme-accent; color:$theme-accent; }
-  &__empty { display:block; text-align:center; color:$text-secondary; padding:64rpx 12rpx; font-size:30rpx; line-height:1.8; }
-  &__actions { display:flex; flex-wrap:wrap; gap:16rpx; margin:28rpx 0; }
-  button { font-size:28rpx; line-height:1.6; border-radius:$radius-sm; padding:18rpx 22rpx; margin:0; }
+  &__chip { display:block; padding:16rpx 24rpx; border:1rpx solid $border; border-radius:20rpx; font-size:26rpx; color:$text-secondary; line-height:1.6; background:$surface; }
+  &__chip--active { border-color:$theme-accent; color:$theme-accent; background:$bg-mid; }
+  &__empty { display:block; text-align:center; color:$text-secondary; padding:64rpx 16rpx; font-size:28rpx; line-height:1.8; }
+  &__empty-state { padding:56rpx 32rpx; margin:24rpx 0; text-align:center; border:1rpx solid $border; border-radius:28rpx; background:$surface; }
+  &__empty-symbol { display:flex; align-items:center; justify-content:center; width:96rpx; height:96rpx; border:1rpx solid $border; border-radius:50%; margin:0 auto 24rpx; color:$theme-accent; font-size:40rpx; }
+  &__empty-title { display:block; font-size:34rpx; margin-bottom:12rpx; }
+  &__empty-state button { display:inline-flex; margin-top:28rpx; }
+  &__loading { display:flex; align-items:center; justify-content:center; gap:16rpx; min-height:160rpx; font-size:24rpx; color:$text-tertiary; }
+  &__loading-dot { width:12rpx; height:12rpx; background:$theme-accent; border-radius:50%; animation:star-twinkle 1.4s ease-in-out infinite; }
+  &__actions { display:flex; flex-wrap:wrap; gap:16rpx; align-items:center; margin:28rpx 0; }
+  button { width:auto; display:flex; align-items:center; justify-content:center; min-height:88rpx; font-size:26rpx; font-weight:500; line-height:1.5; border-radius:20rpx; padding:20rpx 24rpx; margin:0; background:$surface; color:$text-primary; border:1rpx solid $border; }
   button::after { border:none; }
-  &__primary { background:$theme-accent; color:$bg-deep; flex:1; }
-  &__secondary { background:$bg-mid; color:$text-primary; border:1rpx solid $border; }
+  button[disabled='true'], button[disabled=''] { opacity:.42; color:$text-tertiary; background:$surface; }
+  &__primary { background:$theme-accent !important; color:$bg-deep !important; border-color:transparent !important; flex:1; }
+  &__primary[disabled='true'], &__primary[disabled=''] { opacity:.45; }
+  &__secondary { background:$surface; color:$text-primary; border:1rpx solid $border; }
+  button.commerce__text-button { min-height:72rpx; flex-shrink:0; font-size:24rpx; padding:8rpx 0 8rpx 16rpx; background:transparent; color:$theme-accent; border:0; }
   &__field { margin:24rpx 0; }
-  &__label { display:block; font-size:28rpx; color:$text-secondary; margin-bottom:12rpx; }
-  input, textarea { box-sizing:border-box; width:100%; background:$bg-mid; border:1rpx solid $border; border-radius:$radius-sm; padding:22rpx; color:$text-primary; font-size:32rpx; min-height:88rpx; }
-  textarea { min-height:160rpx; }
-  &__media { width:100%; height:400rpx; background:$bg-mid; }
-  &__fixed { position:fixed; bottom:0; left:0; right:0; z-index:50; display:flex; align-items:center; gap:16rpx; padding:20rpx $pad-outer calc(20rpx + env(safe-area-inset-bottom)); background:$bg-mid; border-top:1rpx solid $border; }
-  &__fixed button { flex:1; }
-  &--purchase .mini-player { bottom:calc(150rpx + env(safe-area-inset-bottom)); }
+  &__label { display:block; font-size:24rpx; color:$text-secondary; margin-bottom:12rpx; }
+  input, textarea, taro-input-core { box-sizing:border-box; width:100%; background:$surface; border:1rpx solid $border; border-radius:16rpx; padding:20rpx; color:$text-primary; font-size:32rpx; min-height:88rpx; }
+  taro-input-core input { min-height:0; border:0; border-radius:0; padding:0; background:transparent; }
+  textarea { min-height:180rpx; }
+  &__stepper { display:flex; align-items:center; width:264rpx; border:1rpx solid $border; border-radius:16rpx; overflow:hidden; }
+  &__stepper button { flex:0 0 88rpx; min-height:88rpx; border:0; border-radius:0; padding:0; background:$surface; font-size:32rpx; }
+  &__stepper input, &__stepper taro-input-core { flex:1; width:0; min-width:0; min-height:88rpx; border:0; padding:0; border-radius:0; background:transparent; text-align:center; }
+  &__stepper taro-input-core input { width:100%; min-height:0; }
+  &__media { display:block; width:100%; height:380rpx; border-radius:24rpx; overflow:hidden; background:$bg-mid; margin-bottom:24rpx; }
+  &__fixed { position:fixed; bottom:0; left:0; right:0; z-index:50; display:flex; align-items:center; gap:16rpx; padding:20rpx 40rpx calc(20rpx + env(safe-area-inset-bottom)); background:$bg-mid; border-top:1rpx solid $border; box-shadow:0 -12rpx 48rpx rgba(0,0,0,.1); }
+  &__fixed button { flex:1; min-width:0; font-size:24rpx; padding:20rpx 12rpx; }
+  &__fixed .commerce__primary { flex:1.3; }
+  &__fixed .commerce__service { flex:0 0 88rpx; font-size:22rpx; padding:8rpx 0; background:transparent; border:0; }
+  &--purchase .mini-player { bottom:calc(148rpx + env(safe-area-inset-bottom)); }
+  &__signature { display:flex; flex-direction:column; align-items:center; gap:8rpx; margin:56rpx 0 16rpx; padding-top:28rpx; border-top:1rpx solid $border; color:$text-quaternary; font-size:20rpx; letter-spacing:4rpx; text-align:center; }
+  &__signature-name { font-size:26rpx; color:$text-tertiary; }
+  &__contact { text-align:center; font-size:22rpx; color:$text-tertiary; }
 }

@@ -1,11 +1,12 @@
 import { withTheme } from '@/theme/withTheme';
 import { useState } from 'react';
-import { View, Text, Button, Input, Swiper, SwiperItem, Image } from '@tarojs/components';
+import { View, Text, Button, Swiper, SwiperItem, Image } from '@tarojs/components';
 import Taro, { useRouter } from '@tarojs/taro';
 import { commerceApi, shopPath, money, useCommerce, type Entry } from '@/services/commerce';
 import { resolveUrl } from '@/utils/url';
 import MarkdownView from '@/components/MarkdownView';
-import { action, CommercePage, Cover, CustomerService, Feedback, requireCommerceLogin, useData } from '@/features/commerce/common';
+import { action, CommercePage, Cover, CustomerService, Feedback, Section, QuantityStepper, requireCommerceLogin, useData } from '@/features/commerce/common';
+import '@/features/commerce/catalog.scss';
 
 function ProductDetail() {
   const id = Number(useRouter().params.id);
@@ -34,14 +35,15 @@ function ProductDetail() {
   };
   return <CommercePage title='商品详情' footer={product.id && <><CustomerService /><Button className='commerce__secondary' disabled={busy || !sku || sku.price_fen <= 0 || !sku.available} onClick={() => buy(true)}>加入购物车</Button><Button className='commerce__primary' loading={busy} disabled={!shopSaleOpen || !sku || sku.price_fen <= 0 || !sku.available} onClick={() => buy(false)}>{!shopSaleOpen ? '暂未开放购买' : !sku?.available || sku.price_fen <= 0 ? '暂时售罄' : '立即购买'}</Button></>}><Feedback loading={loading} error={error} retry={load} />
     {product.id && <>
-      {product.images?.length ? <Swiper className='commerce__cover commerce__cover--large' indicatorDots>{product.images.map((src: string) => <SwiperItem key={src}><Image src={resolveUrl(src)} className='commerce__cover commerce__cover--large' mode='aspectFill' /></SwiperItem>)}</Swiper> : <Cover src={product.cover} large />}
-      <Text className='commerce__name'>{product.title}</Text><Text className='commerce__muted'>{product.subtitle}</Text><Text className='commerce__price'>{sku?.price_fen > 0 ? money(sku.price_fen) : '暂无可售规格'}</Text>
-      <Text className='commerce__name'>选择规格</Text><View className='commerce__chips'>{product.skus?.map((s: Entry) => <Text className={`commerce__chip ${sku?.id === s.id ? 'commerce__chip--active' : ''}`} key={s.id} onClick={() => { setSelected(s.id); setQuantity(1); }}>{s.name}{s.price_fen <= 0 ? ' · 暂不可售' : s.available ? '' : ' · 售罄'}</Text>)}</View>
-      <View className='commerce__field'><Text className='commerce__label'>数量（剩余 {sku?.available || 0}）</Text><Input type='number' value={String(quantity)} onInput={e => setQuantity(Math.max(1, Math.min(99, Number(e.detail.value) || 1)))} /></View>
-      <Text className='commerce__name'>商品介绍</Text><MarkdownView source={product.intro || ''} />
-      <Text className='commerce__name'>发货说明</Text><MarkdownView source={product.shipping_note || '具体配送区域与运费在结算时确认。'} />
-      <Text className='commerce__name'>售后说明</Text><MarkdownView source={product.aftersale_note || product.policy || '如有疑问，请先咨询客服。'} />
-      <Button className='commerce__secondary' onClick={() => requireCommerceLogin() && Taro.navigateTo({ url: `${shopPath}/cart/index` })}>查看购物车</Button>
+      {(product.images?.length || product.cover) ? <Swiper className='catalog-detail__gallery' indicatorDots>{(product.images?.length ? product.images : [product.cover]).filter(Boolean).map((src: string, index: number) => <SwiperItem key={`${src}:${index}`}><Image src={resolveUrl(src)} className='catalog-detail__photo' mode='aspectFit' /></SwiperItem>)}</Swiper> : <Cover title={product.title} large />}
+      <View className='catalog-detail__intro'><Text className='commerce__eyebrow'>CURATED FOR EVERYDAY</Text><Text className='catalog-detail__title serif'>{product.title}</Text><Text className='commerce__muted'>{product.subtitle}</Text><View className='catalog-detail__price-row'><Text className='commerce__price'>{sku?.price_fen > 0 ? money(sku.price_fen) : '暂无可售规格'}</Text><Text className='catalog-detail__badge'>{sku?.available ? '现有库存' : '暂时售罄'}</Text></View></View>
+      <Section title='选一份心意'><Text className='commerce__label'>商品规格</Text><View className='commerce__chips'>{product.skus?.map((s: Entry) => <Text className={`commerce__chip ${sku?.id === s.id ? 'commerce__chip--active' : ''}`} key={s.id} onClick={() => { setSelected(s.id); setQuantity(1); }}>{s.name}{s.price_fen <= 0 ? ' · 暂不可售' : s.available ? '' : ' · 售罄'}</Text>)}</View>
+        <View className='catalog-detail__quantity'><View><Text className='commerce__label'>购买数量</Text><Text className='commerce__caption'>可售 {sku?.available || 0} 件</Text></View><QuantityStepper value={quantity} max={sku?.available || 1} disabled={busy || !sku?.available} onChange={setQuantity} /></View>
+      </Section>
+      <Section title='好物细节' eyebrow='THE DETAILS'><MarkdownView source={product.intro || '商品介绍即将更新。'} /></Section>
+      <Section title='配送与发货'><MarkdownView source={product.shipping_note || '具体配送区域与运费在结算时确认。'} /></Section>
+      <Section title='售后与服务'><MarkdownView source={product.aftersale_note || product.policy || '如有疑问，请先咨询客服。'} /></Section>
+      <Button className='commerce__secondary' onClick={() => requireCommerceLogin() && Taro.navigateTo({ url: `${shopPath}/cart/index` })}>查看购物袋 ›</Button>
     </>}
   </CommercePage>;
 }

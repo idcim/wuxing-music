@@ -24,8 +24,11 @@ test('购物车条目已被结算移除后，不再保留可结算的幽灵勾�
     },
     '@/utils/url': { resolveUrl: value => value },
     '@/components/MarkdownView': { default: () => null },
+    '@/features/commerce/transactions.scss': {},
     '@/features/commerce/common': {
-      CommercePage: ({ children }) => React.createElement('page', null, children),
+      CommercePage: ({ children, footer }) => React.createElement('page', null, children, footer),
+      Section: ({ children }) => React.createElement('section', null, children), EmptyState: () => null,
+      QuantityStepper: () => null,
       Feedback: () => null, Cover: () => null, CustomerService: () => null,
       requireCommerceLogin: () => true, action: async work => work(),
       useData: () => {
@@ -47,12 +50,12 @@ test('购物车条目已被结算移除后，不再保留可结算的幽灵勾�
   let renderer;
   act(() => { renderer = create(React.createElement(exports.default)); });
   try {
-    const row = renderer.root.findAllByType('text').find(node => node.children.join('').includes('测试茶'));
+    const row = renderer.root.findAllByType('button').find(node => node.props['aria-label'] === '选择商品');
     act(() => { row.props.onClick(); });
     const checkout = () => renderer.root.findAllByType('button').find(node => node.children.join('') === '去结算');
     assert.equal(checkout().props.disabled, false);
     act(() => { setCart([]); });
-    assert.equal(checkout().props.disabled, true);
+    assert.equal(checkout(), undefined, '商品移除后应撤下结算入口');
     assert.equal(navigations.length, 0);
   } finally { act(() => renderer.unmount()); }
 });

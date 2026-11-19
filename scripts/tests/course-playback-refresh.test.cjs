@@ -39,7 +39,9 @@ test('课程媒体播放报错后自动重新授权一次，重复报错仍可�
     '@/stores/user': { useUserStore: Object.assign(selector => selector({ user: { id: '1' } }), {
       getState: () => ({ user: { id: '1' } }),
     }) },
+    '@/features/commerce/catalog.scss': {},
     '@/features/commerce/common': {
+      Section: ({ children }) => React.createElement('section', null, children),
       CommercePage: ({ children }) => React.createElement('page', null, children),
       Cover: () => null, Feedback: () => null,
       action: async work => work(),
@@ -72,7 +74,7 @@ test('课程媒体播放报错后自动重新授权一次，重复报错仍可�
     await act(async () => { video().props.onError(); });
     assert.equal(playRequests, 1);
     assert.match(toasts.at(-1), /播放失败/);
-    const refresh = renderer.root.findAllByType('button').find(node => node.children.join('') === '刷新播放地址');
+    const refresh = renderer.root.findAllByType('button').find(node => node.children.join('') === '重新连接播放');
     await act(async () => { await refresh.props.onClick(); });
     assert.equal(playRequests, 2);
     assert.equal(video().props.autoplay, false);
