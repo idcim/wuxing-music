@@ -94,7 +94,7 @@ class AppReleaseTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             app_packages.sign_package(cfg, 'bad.html')
 
-    def test_download_signs_only_unchanged_published_oss_object(self):
+    def test_download_uses_app_cdn_only_after_origin_integrity_check(self):
         draft = self.draft()
         asset = api.read(self.db, 'app_asset_' + draft['asset_id'])
         asset['etag'] = 'original'
@@ -103,17 +103,45 @@ class AppReleaseTests(unittest.TestCase):
         api.publish_release(draft['id'], self.db, None)
         bucket = Mock()
         bucket.head_object.return_value = Mock(etag='original', content_length=100)
-        bucket.sign_url.return_value = 'https://test.oss.test/apps/test.apk?signature=short-lived'
         cfg = dict(oss_bucket='test', oss_endpoint='https://oss.test')
         with patch.object(api.storage, 'get_storage_cfg', return_value=cfg), patch.object(api.storage, '_oss_bucket', return_value=bucket):
             result = api.download(draft['id'], self.db)
             self.assertEqual(result.status_code, 302)
             self.assertEqual(result.headers['cache-control'], 'no-store')
-            self.assertEqual(bucket.sign_url.call_args.args[2], 300)
-            bucket.head_object.return_value = Mock(etag='modified', content_length=100)
-            with self.assertRaises(HTTPException) as caught:
-                api.download(draft['id'], self.db)
-            self.assertEqual(caught.exception.status_code, 503)
+            self.assertEqual(result.headers['location'], 'https://cdn.azure-glow.cn/' + asset['key'])
+            bucket.head_object.assert_called_with(asset['key'])
+            bucket.sign_url.assert_not_called()
+            # 修改独立 APP 域名后立即生效，不改变 OSS 上传/校验配置。
+            api.save_config(api.AppConfig(enabled=True, download_domain=' downloads.example.com/ '), self.db, None)
+            self.assertEqual(api.get_config(self.db, None)['data']['download_domain'], 'https://downloads.example.com')
+            self.assertEqual(api.download(draft['id'], self.db).headers['location'],
+                             'https://downloads.example.com/' + asset['key'])
+            # 旧 OSS endpoint 使用 HTTP 时，不能再把其 HTTP 签名地址下发给用户。
+            asset['endpoint'] = cfg['oss_endpoint'] = 'http://oss.test'
+            api.write(self.db, 'app_asset_' + draft['asset_id'], asset)
+            self.db.commit()
+            self.assertEqual(api.download(draft['id'], self.db).headers['location'],
+                             'https://downloads.example.com/' + asset['key'])
+            bucket.sign_url.assert_not_called()
+            for etag, size in [('modified', 100), ('original', 101)]:
+                bucket.head_object.return_value = Mock(etag=etag, content_length=size)
+                with self.subTest(etag=etag, size=size), self.assertRaises(HTTPException) as caught:
+                    api.download(draft['id'], self.db)
+                self.assertEqual(caught.exception.status_code, 503)
+
+    def test_download_domain_defaults_for_existing_config_and_rejects_non_origins(self):
+        api.write(self.db, api.CONFIG, {'enabled': True})
+        self.db.commit()
+        self.assertEqual(api.config(self.db)['download_domain'], 'https://cdn.azure-glow.cn')
+        self.assertEqual(api.AppConfig(download_domain='HTTPS://CDN.EXAMPLE.COM/').download_domain,
+                         'https://cdn.example.com')
+        for value in ('', 'http://cdn.example.com', 'https://user:pass@cdn.example.com',
+                      'https://cdn.example.com/apps', 'https://cdn.example.com?token=x',
+                      'https://cdn.example.com#x', 'https://cdn.example.com:443',
+                      'https://localhost', 'https://127.0.0.1', '//cdn.example.com',
+                      'https://cdn.example.com\\evil', 'https://cdn.example.com\n.evil.com'):
+            with self.subTest(domain=value), self.assertRaises(ValueError):
+                api.AppConfig(download_domain=value)
 
     def test_apk_metadata_reads_real_existing_apk_and_rejects_fake(self):
         import pathlib
@@ -159,6 +187,30 @@ class AppReleaseTests(unittest.TestCase):
             app.dependency_overrides[get_current_admin] = lambda: Admin(username='viewer', is_super=False)
             self.assertEqual(client.put('/api/admin/apps/config', json={}).status_code, 403)
             self.assertEqual(client.post('/api/admin/apps/packages/sign', json={'filename': 'test.apk'}).status_code, 403)
+
+    def test_http_app_download_domain_save_read_and_validation(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from app.database import get_db
+        from app.security import get_current_admin
+        from app.models import Admin
+        app = FastAPI()
+        app.include_router(api.router)
+        app.dependency_overrides[get_db] = lambda: self.db
+        app.dependency_overrides[get_current_admin] = lambda: Admin(username='admin', is_super=True)
+        with TestClient(app) as client:
+            response = client.put('/api/admin/apps/config', json={
+                'enabled': True, 'download_domain': 'apk.example.com/',
+            })
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()['data']['download_domain'], 'https://apk.example.com')
+            self.assertEqual(client.get('/api/admin/apps/config').json()['data']['download_domain'],
+                             'https://apk.example.com')
+            self.assertEqual(client.put('/api/admin/apps/config', json={
+                'download_domain': 'http://apk.example.com',
+            }).status_code, 422)
+            self.assertEqual(client.get('/api/admin/apps/config').json()['data']['download_domain'],
+                             'https://apk.example.com')
 
     def test_binary_manifest_parser_with_constructed_utf8_pool(self):
         import struct

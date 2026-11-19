@@ -1,8 +1,10 @@
 """APP 配置、独立版本记录与匿名下载。每条记录独立存储，无表结构迁移。"""
 import json
+import re
 import uuid
 from datetime import datetime, timedelta
 from typing import Literal
+from urllib.parse import quote, urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
@@ -49,6 +51,26 @@ class AppConfig(BaseModel):
     description: str = Field(default='音乐、课程与东方生活，在这里相遇。', max_length=2000)
     install_guide: str = Field(default='下载后打开 APK，按 Android 系统提示允许本次安装。\n微信内请使用右上角菜单，在浏览器中打开本页。', max_length=6000)
     ios_store_url: str = Field(default='', max_length=500)
+    download_domain: str = Field(default='https://cdn.azure-glow.cn', max_length=300)
+
+    @field_validator('download_domain')
+    @classmethod
+    def apk_domain(cls, value):
+        value = value.strip()
+        if any(c.isspace() for c in value) or '\\' in value:
+            raise ValueError('APP 下载域名应为 HTTPS 域名，不包含路径、端口或参数')
+        if '://' not in value:
+            value = 'https://' + value
+        p = urlsplit(value)
+        host = p.hostname or ''
+        labels = host.split('.')
+        valid_host = (len(host) <= 253 and len(labels) >= 2 and
+                      all(re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', label) for label in labels) and
+                      re.fullmatch(r'[a-z]{2,63}', labels[-1]))
+        if (p.scheme != 'https' or not valid_host or p.netloc.lower() != host or
+                p.path not in ('', '/') or p.query or p.fragment):
+            raise ValueError('APP 下载域名应为 HTTPS 域名，不包含路径、端口或参数')
+        return 'https://' + host
 
     @field_validator('ios_store_url')
     @classmethod
@@ -252,12 +274,9 @@ def download(rid: str, db: Session = Depends(get_db)):
         meta = bucket.head_object(asset['key'])
         if meta.etag != asset.get('etag') or meta.content_length != data['size']:
             raise HTTPException(503, '安装包已改变，请联系管理员重新上传发布')
-        url = bucket.sign_url('GET', asset['key'], 300, params={
-            'response-content-disposition': f'attachment; filename="wuxing-{data["version_code"]}.apk"',
-            'response-content-type': app_packages.CONTENT_TYPE,
-        }, slash_safe=True)
-        if not url.startswith('https://'):
-            raise HTTPException(503, '安装包存储必须使用 HTTPS')
+        # CDN 使用自身回源配置；叠加 OSS 签名会与私有桶回源鉴权冲突。
+        # 仅拼接服务器记录的对象路径，上传与完整性校验仍直连原 OSS。
+        url = cfg['download_domain'] + '/' + quote(asset['key'], safe='/')
     except HTTPException:
         raise
     except Exception:

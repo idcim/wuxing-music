@@ -61,6 +61,7 @@ DPAPI 凭据绑定当前 Windows 用户和机器，单独复制 `credentials.cli
 | 后台「APP 管理 → 微信登录」 | 已审核的移动应用 AppID/AppSecret、正式包名和正式证书 MD5 |
 | 微信开放平台的移动应用 | 登记相同正式包名和 MD5；本文件不代表微信侧已审核 |
 | 正式下载固定页 | `https://app.azure-glow.cn/download?channel=stable`，需后台发布并开放下载后可用 |
+| 后台「APP 管理 → 基础与下载 → APP 文件下载域名」 | 默认 `https://cdn.azure-glow.cn`；仅分发 OSS 中的 APK，修改后无需重新打包 |
 
 AppID/AppSecret 是另外的微信应用配置，不是 APK 签名参数；其实际值在后台维护，不记入本档案。当前后台只有一套 APP 微信参数，切换正式参数后不能把旧体验包的包名或 debug 指纹混用。
 

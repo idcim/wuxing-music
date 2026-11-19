@@ -3,9 +3,9 @@ import { computed, onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import req from '@/api/request';
 import { useAuthStore } from '@/stores/auth';
-interface AppConfig { enabled: boolean; app_name: string; android_package: string; title: string; description: string; install_guide: string; ios_store_url: string; }
+interface AppConfig { enabled: boolean; app_name: string; android_package: string; title: string; description: string; install_guide: string; ios_store_url: string; download_domain: string; }
 const auth = useAuthStore();
-const form = ref<AppConfig>({ enabled: false, app_name: '', android_package: 'cn.azureglow.wuxing.preview', title: '', description: '', install_guide: '', ios_store_url: '' });
+const form = ref<AppConfig>({ enabled: false, app_name: '', android_package: 'cn.azureglow.wuxing.preview', title: '', description: '', install_guide: '', ios_store_url: '', download_domain: 'https://cdn.azure-glow.cn' });
 const loading = ref(true), failed = ref(false), saving = ref(false);
 const channel = ref<'preview' | 'stable'>('preview');
 const downloadUrl = computed(() => new URL(`/download${channel.value === 'stable' ? '?channel=stable' : ''}`, window.location.origin).href);
@@ -42,6 +42,7 @@ onMounted(load);
         <el-form-item label="APP名称"><el-input v-model="form.app_name" maxlength="60" placeholder="留空沿用站点名称" /></el-form-item>
         <el-form-item label="安卓应用包名"><el-input v-model="form.android_package" maxlength="180" /><p class="field-hint">用于核对上传的 APK；已安装用户升级需要保持包名与签名一致。</p></el-form-item>
         <el-form-item label="iOS App Store 地址（选填）"><el-input v-model="form.ios_store_url" placeholder="https://apps.apple.com/…" /></el-form-item>
+        <el-form-item label="APP 文件下载域名"><el-input v-model="form.download_domain" maxlength="300" placeholder="https://cdn.azure-glow.cn" /><p class="field-hint">仅用于 APK 下载，可直接填写域名。需已配置 HTTPS 和当前 OSS 的 CDN 回源；上传仍走 OSS，音乐与课件域名不受影响。</p></el-form-item>
       </div>
       <el-form-item label="下载页标题"><el-input v-model="form.title" maxlength="100" placeholder="留空使用APP名称" /></el-form-item>
       <el-form-item label="APP介绍"><el-input v-model="form.description" type="textarea" :rows="4" maxlength="2000" show-word-limit /></el-form-item>
