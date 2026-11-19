@@ -24,7 +24,8 @@ class AppWechatTests(unittest.TestCase):
         self.app.dependency_overrides[get_db] = lambda: self.db
         self.app.dependency_overrides[get_current_admin] = lambda: Admin(username='test', is_super=True)
         self.client = TestClient(self.app)
-        self.cfg = dict(enabled=True, app_id='wx1234567890abcdef', app_secret='server-only', android_package='cn.azureglow.wuxing.preview', android_signature='a'*32, ios_bundle_id='', privacy_policy='测试隐私政策与微信登录资料说明')
+        # 格式校验需要合法形状；用全零合成值，不使用实际应用配置。
+        self.cfg = dict(enabled=True, app_id='wx' + '0' * 16, app_secret='server-only', android_package='cn.azureglow.wuxing.preview', android_signature='a'*32, ios_bundle_id='', privacy_policy='测试隐私政策与微信登录资料说明')
         self.db.add(Setting(key=app_wechat.CONFIG_KEY, value=json.dumps(self.cfg)))
         self.db.commit()
 

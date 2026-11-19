@@ -182,7 +182,7 @@ class AppBindingTests(unittest.TestCase):
         row = self.db.get(Setting, 'appwx:' + challenge['state'])
         record = json.loads(row.value)
         with patch.object(app_wechat, 'exchange_code') as exchange:
-            for changes in [{'expires': 1}, {'app_id': 'wx0000000000000000'}, {'proof': 'bad'}]:
+            for changes in [{'expires': 1}, {'app_id': 'wx' + '1' * 16}, {'proof': 'bad'}]:
                 row.value = json.dumps({**record, **changes})
                 self.db.commit()
                 self.assertEqual(self.bind_response(challenge).status_code, 400)

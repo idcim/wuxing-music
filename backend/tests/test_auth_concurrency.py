@@ -35,7 +35,8 @@ class AuthConcurrencyTests(unittest.TestCase):
                 yield db
         self.app.dependency_overrides[get_db] = database
         self.client = TestClient(self.app)
-        self.cfg = dict(enabled=True, app_id='wx1234567890abcdef', app_secret='server-only',
+        # 仅供本地格式校验及身份隔离的合成 AppID，不对应实际微信应用。
+        self.cfg = dict(enabled=True, app_id='wx' + '0' * 16, app_secret='server-only',
                         android_package='cn.azureglow.wuxing.preview', android_signature='a'*32,
                         privacy_policy='隐私政策')
         with self.factory() as db:

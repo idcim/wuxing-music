@@ -174,7 +174,8 @@ test('安卓微信服务校验 SDK state，凭据只交服务端并保存统一�
   const service = load('src/services/appWechat.ts', {
     '@capacitor/core': { registerPlugin: () => ({ authorize: async ({ state }) => { authorizations++; return { state: mismatch ? 'forged' : state, code: 'sdk-code' }; } }) },
     '@/services/api': { request: async (url, options) => {
-      if (url.endsWith('/config')) return { enabled: true, app_id: 'wx1234567890abcdef', android_package: 'cn.azureglow.wuxing.preview', android_signature: 'a'.repeat(32) };
+      // 纯模拟 SDK 不要求真实 AppID 格式，使用明确的测试占位符。
+      if (url.endsWith('/config')) return { enabled: true, app_id: 'unit-test-wechat-app', android_package: 'cn.azureglow.wuxing.preview', android_signature: 'a'.repeat(32) };
       if (url.endsWith('/challenge')) return { state: 'server-state', proof: 'server-proof' };
       if (url.endsWith('/login')) { loginRequests++; assert.equal(options.data.proof, 'server-proof'); return { token: 'user-token', user }; }
       throw new Error(url);
