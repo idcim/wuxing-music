@@ -7,7 +7,7 @@ import { useUserStore } from '@/stores/user';
 import { useSiteStore } from '@/stores/site';
 import { THEMES } from '@/theme';
 import { sendSmsCode, isQrLoginConfigured } from '@/services/auth';
-import { isWeapp, isInWeChat } from '@/utils/platform';
+import { isWeapp, isInWeChat, isAndroidApp } from '@/utils/platform';
 import { goBack, navBarStyle } from '@/utils/nav';
 import { openWeappPrivacyPolicy } from '@/services/privacy';
 import './index.scss';
@@ -53,7 +53,7 @@ function Login() {
   });
 
   useEffect(() => {
-    if (isInWeChat) return;
+    if (isInWeChat || isAndroidApp) return;
     isQrLoginConfigured().then(setQrReady);
   }, []);
 
@@ -171,6 +171,20 @@ function Login() {
       <Text className="login__slogan cormorant italic">SOUND HEALS · MUSIC RESTORES</Text>
     </View>
   );
+
+  // 体验包先提供游客浏览，正式安卓账号授权另行接入。
+  if (isAndroidApp) {
+    return <View className="login">
+      <View className="login__nav" style={navBarStyle()}>
+        <Text className="login__back" onClick={() => goBack()}>‹ 返回</Text>
+      </View>
+      {brand}
+      <View className="login__actions">
+        <Text className="login__terms">安卓体验版支持页面浏览与音乐试听，账号登录将在后续版本开放。</Text>
+        <View className="login__guest" onClick={() => goBack()}><Text>继续体验</Text></View>
+      </View>
+    </View>;
+  }
 
   // ── 小程序端 ──
   if (isWeapp) {

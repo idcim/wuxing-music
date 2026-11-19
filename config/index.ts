@@ -1,15 +1,20 @@
 import { defineConfig } from '@tarojs/cli';
 import * as path from 'path';
 
+const android = process.env.TARO_APP_PLATFORM === 'android';
+
 export default defineConfig({
   projectName: 'wuxing-music',
   date: '2026-5-23',
   designWidth: 750,
   deviceRatio: { 640: 2.34 / 2, 750: 1, 828: 1.81 / 2 },
   sourceRoot: 'src',
-  outputRoot: process.env.TARO_ENV === 'h5' ? 'dist-h5' : 'dist',
+  outputRoot: android ? 'dist-android' : process.env.TARO_ENV === 'h5' ? 'dist-h5' : 'dist',
   plugins: [path.resolve(__dirname, 'sass')],
-  defineConstants: {},
+  defineConstants: {
+    'process.env.TARO_APP_PLATFORM': JSON.stringify(android ? 'android' : ''),
+    'process.env.TARO_APP_ANDROID_API_BASE': JSON.stringify(process.env.TARO_APP_ANDROID_API_BASE || 'https://app.azure-glow.cn'),
+  },
   copy: { patterns: [], options: {} },
   framework: 'react',
   compiler: 'vite',

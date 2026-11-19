@@ -18,7 +18,7 @@ import CdkeyModal from '@/components/CdkeyModal';
 import type { ElementId } from '@/types';
 import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
-import { isH5 } from '@/utils/platform';
+import { isLegacyH5 as isH5, isAndroidApp } from '@/utils/platform';
 
 const TIMER_OPTS = [15, 30, 45, 60];
 
@@ -86,13 +86,14 @@ function Home() {
         <View>
           <Text className="home__greeting cormorant italic">Good evening</Text>
           <Text className="home__el">
-            {el.id}型 · {el.note}音{el.meta?.notation ? ` · ${el.meta.notation}` : ''}
+            {el.id}型 · {el.note}音{!isAndroidApp && el.meta?.notation ? ` · ${el.meta.notation}` : ''}
           </Text>
+          {isAndroidApp && el.meta?.notation && <Text className="home__notation">{el.meta.notation}</Text>}
         </View>
         <View className="home__actions">
-          <Button className="home__icon-btn" openType="share">
+          {!isAndroidApp && <Button className="home__icon-btn" openType="share">
             <Icon name="share2" size={30} color="#cbd5e1" strokeWidth={1.5} />
-          </Button>
+          </Button>}
           <View className="home__gift" onClick={() => setCdkeyOpen(true)}>
             <Icon name="gift" size={32} color="#cbd5e1" strokeWidth={1.5} />
           </View>

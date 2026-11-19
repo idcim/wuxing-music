@@ -1,7 +1,7 @@
 import Taro from '@tarojs/taro';
 import { USE_MOCK } from '@/constants/env';
 import { request, ApiError } from '@/services/api';
-import { isWeapp, isH5 } from '@/utils/platform';
+import { isWeapp, isH5, isAndroidApp } from '@/utils/platform';
 import wechat from '@/services/wechat';
 import type { PayParams } from '@/services/wechat/types';
 import type { Plan, PlanId, Membership } from '@/types';
@@ -124,6 +124,7 @@ function payFailure(err: any): { ok: false; reason: 'cancel' | 'fail' | 'auth'; 
 }
 
 export async function getPurchaseStatus(): Promise<boolean> {
+  if (isAndroidApp) return false;
   if (USE_MOCK) return true;
   const platform = isWeapp ? Taro.getDeviceInfo().platform : 'other';
   const res = await request<{ enabled: boolean; provider?: 'wxpay' | 'virtual' }>(`/api/mp/pay/purchase-status?channel=${isH5 ? 'h5' : 'weapp'}&platform=${platform}`, { auth: false });
@@ -142,6 +143,7 @@ export async function fetchPlans(): Promise<Plan[]> {
 
 // 创建订单并拉起微信支付。成功后返回新会员信息（由调用方刷新 store）。
 export async function purchasePlan(planId: PlanId): Promise<PayOutcome> {
+  if (isAndroidApp) return { ok: false, reason: 'platform', message: '安卓体验版暂未开放购买' };
   // 小程序 / H5（微信内）端内支付；其它端（未来 rn / iOS App 走 IAP）返回 platform。
   if (!isWeapp && !isH5) return { ok: false, reason: 'platform' };
 
@@ -248,6 +250,7 @@ async function pollGiftCode(orderNo: string): Promise<{ giftCode: string; planNa
 
 // 购买礼物卡：成功返回礼物码（调用方用海报展示分享）。
 export async function purchaseGift(planId: PlanId): Promise<GiftOutcome> {
+  if (isAndroidApp) return { ok: false, reason: 'platform', message: '安卓体验版暂未开放购买' };
   if (!isWeapp && !isH5) return { ok: false, reason: 'platform' };
 
   if (USE_MOCK) {

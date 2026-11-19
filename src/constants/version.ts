@@ -11,4 +11,4 @@ export const APP_VERSION = '2.0.0-rc.2';
 export const API_VERSION = '1.3.0';
 
 // 构建渠道：weapp | h5 | rn（未来 APP）。android/ios 的细分在 APP 阶段区分。
-export const BUILD_CHANNEL = (process.env.TARO_ENV as string) || 'unknown';
+export const BUILD_CHANNEL = process.env.TARO_APP_PLATFORM === 'android' ? 'android-preview' : (process.env.TARO_ENV as string) || 'unknown';

@@ -7,6 +7,7 @@ import { useSiteStore } from '@/stores/site';
 import { isH5, isInWeChat } from '@/utils/platform';
 import { getToken, hasQrLoginCallback } from '@/services/auth';
 import { captureAgentCode } from '@/services/agent';
+import { setupAndroid } from '@/services/android';
 import './app.scss';
 
 function App({ children }: PropsWithChildren) {
@@ -22,6 +23,7 @@ function App({ children }: PropsWithChildren) {
     // 恢复睡眠定时（刷新/冷启动后按截止时间戳校正）
     usePlayerStore.getState().checkTimer();
     watchForeground();
+    void setupAndroid(refreshForegroundState);
   });
 
   return children;

@@ -17,7 +17,7 @@ import TabBar from '@/components/TabBar';
 import type { ElementId } from '@/types';
 import type { IconName } from '@/components/Icon/paths';
 import './index.scss';
-import { isH5 } from '@/utils/platform';
+import { isLegacyH5 as isH5 } from '@/utils/platform';
 import { coursePath, shopPath, useCommerce } from '@/services/commerce';
 
 interface MenuItem {

@@ -14,7 +14,7 @@ import Icon from '@/components/Icon';
 import SeekBar from '@/components/SeekBar';
 import SleepTimer from '@/components/SleepTimer';
 import Playlist from '@/components/Playlist';
-import { isH5, isRN, isWeapp } from '@/utils/platform';
+import { isLegacyH5 as isH5, isRN, isWeapp, isAndroidApp } from '@/utils/platform';
 import UpgradePrompt from '@/components/UpgradePrompt';
 import type { ElementId } from '@/types';
 import type { IconName } from '@/components/Icon/paths';
@@ -76,7 +76,7 @@ export default function MiniPlayer() {
   //  凡是时长不等于 36 分钟的曲目，显示的时间都是错的。）
   const curLabel = fmtTime(currentTime);
   const hasTabBar = currentPageHasTabBar();
-  const compact = (isWeapp || isRN) && !expanded;
+  const compact = (isWeapp || isRN || isAndroidApp) && !expanded;
 
   return (
     <Fragment>
@@ -106,7 +106,7 @@ export default function MiniPlayer() {
         </View>
       ) : (
       <Fragment>
-      {(isWeapp || isRN) && <View className="mini-player__collapse" onClick={() => setExpanded(false)} aria-label="收起播放器"><Icon name="x" size={20} color="#cbd5e1" /></View>}
+      {(isWeapp || isRN || isAndroidApp) && <View className="mini-player__collapse" onClick={() => setExpanded(false)} aria-label="收起播放器"><Icon name="x" size={20} color="#cbd5e1" /></View>}
       <View className="mini-player__body">
         <View
           className="mini-player__cover"

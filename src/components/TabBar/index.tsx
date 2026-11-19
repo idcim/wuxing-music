@@ -7,7 +7,7 @@ import { usePlayerStore } from '@/stores/player';
 import { useContentStore } from '@/stores/content';
 import { useSiteStore } from '@/stores/site';
 import { THEMES } from '@/theme';
-import { isH5 } from '@/utils/platform';
+import { isLegacyH5 as isH5 } from '@/utils/platform';
 import { rpx } from '@/utils/unit';
 import Icon from '@/components/Icon';
 import Playlist from '@/components/Playlist';

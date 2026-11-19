@@ -19,6 +19,7 @@ test('会员状态未确认或查询失败时不展示可购买入口', async ()
   const mocks = {
     react: React,
     'react/jsx-runtime': require('react/jsx-runtime'),
+    '@/theme/withTheme': { withTheme: Page => Page },
     '@tarojs/components': { View: 'view', Text: 'text' },
     '@tarojs/taro': {
       default: { showToast: options => toasts.push(options.title), showModal: () => {} },

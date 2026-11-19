@@ -38,6 +38,14 @@
     flex-shrink: 0;
   }
 
+  &__notation {
+    display: block;
+    margin-top: 8rpx;
+    color: $text-tertiary;
+    font-size: 24rpx;
+    letter-spacing: 2rpx;
+  }
+
   &__icon-btn {
     width: 80rpx;
     height: 80rpx;

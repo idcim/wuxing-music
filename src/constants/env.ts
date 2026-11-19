@@ -5,7 +5,9 @@ export const USE_MOCK = false;
 // H5 走容器内 nginx 同源反代 /api（相对地址、免 CORS，自包含）。
 // 小程序在 .env.local 中配置 TARO_APP_API_BASE。
 export const API_BASE =
-  process.env.TARO_ENV === 'h5' ? '' : process.env.TARO_APP_API_BASE || '';
+  process.env.TARO_APP_PLATFORM === 'android'
+    ? process.env.TARO_APP_ANDROID_API_BASE || 'https://app.azure-glow.cn'
+    : process.env.TARO_ENV === 'h5' ? '' : process.env.TARO_APP_API_BASE || '';
 
 // H5 站点的公网地址（小程序 web-view 内嵌播放页用；PC 微信小程序音频不可用时的逃生通道）。
 // 目标域名须先登记到小程序后台「开发管理 → 业务域名」。

@@ -20,7 +20,12 @@ export default defineAppConfig({
     'pages/agent/index',
     'pages/about/index',
     'pages/h5play/index',
-    'pages/webview/index'
+    'pages/webview/index',
+    ...(process.env.TARO_APP_PLATFORM === 'android' ? [
+      'packages/courses/list/index', 'packages/courses/detail/index', 'packages/courses/mine/index', 'packages/courses/learn/index',
+      'packages/shop/list/index', 'packages/shop/detail/index', 'packages/shop/cart/index', 'packages/shop/checkout/index',
+      'packages/shop/addresses/index', 'packages/shop/orders/index', 'packages/shop/order/index', 'packages/shop/aftersale/index', 'packages/shop/logistics/index',
+    ] : []),
   ],
   subPackages: process.env.TARO_ENV === 'weapp' ? [
     { root: 'packages/courses', pages: ['list/index', 'detail/index', 'mine/index', 'learn/index'] },

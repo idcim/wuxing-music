@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { ApiError, request } from './api';
 import { USE_MOCK } from '@/constants/env';
+import { isAndroidApp } from '@/utils/platform';
 
 export const COMMERCE = '/api/mp/v2';
 export const coursePath = '/packages/courses';
@@ -9,6 +10,9 @@ export type Entry = Record<string, any>;
 export const money = (fen: number) => `¥${((fen || 0) / 100).toFixed(2)}`;
 
 export async function commerceApi<T = any>(path: string, method: 'GET' | 'POST' | 'DELETE' = 'GET', data?: Record<string, unknown>): Promise<T> {
+  if (isAndroidApp && method === 'POST' && (path === '/orders' || /\/pay$/.test(path))) {
+    throw new Error('安卓体验版暂未开放购买');
+  }
   if (USE_MOCK) {
     if (path === '/config') return { courses_visible: true, shop_visible: true, courses_sale: false, shop_sale: false, capabilities: {}, customer_service: '' } as T;
     if (method !== 'GET') throw new Error('演示模式不执行真实交易，请连接测试后端');
@@ -30,5 +34,10 @@ export async function commerceApi<T = any>(path: string, method: 'GET' | 'POST' 
 
 export const useCommerce = create<{ config: Entry; load: () => Promise<void> }>((set) => ({
   config: {},
-  load: async () => { try { set({ config: await commerceApi('/config') }); } catch { /* 保留已加载的入口配置，服务端仍逐次校验开关。 */ } },
+  load: async () => {
+    try {
+      const config = await commerceApi('/config');
+      set({ config: isAndroidApp ? { ...config, courses_sale: false, shop_sale: false } : config });
+    } catch { /* 保留已加载的入口配置，服务端仍逐次校验开关。 */ }
+  },
 }));

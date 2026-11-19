@@ -16,6 +16,8 @@ declare namespace NodeJS {
     TARO_ENV: 'weapp' | 'swan' | 'alipay' | 'h5' | 'rn' | 'tt' | 'qq' | 'jd';
     TARO_APP_ID?: string;
     TARO_APP_API_BASE?: string;
+    TARO_APP_PLATFORM?: 'android';
+    TARO_APP_ANDROID_API_BASE?: string;
     NODE_ENV: 'development' | 'production';
   }
 }

@@ -5,6 +5,9 @@ export const PLATFORM = process.env.TARO_ENV;
 export const isWeapp = PLATFORM === 'weapp';
 export const isRN = PLATFORM === 'rn';
 export const isH5 = PLATFORM === 'h5';
+// 安卓体验包使用 Web 渲染；业务入口与已停止更新的 H5 站点分开。
+export const isAndroidApp = process.env.TARO_APP_PLATFORM === 'android';
+export const isLegacyH5 = isH5 && !isAndroidApp;
 
 // 是否运行在微信内置浏览器（仅 H5 端有意义，决定是否走公众号网页授权 / JSSDK）。
 // SSR 或无 navigator 环境需做存在性保护，否则会抛错。

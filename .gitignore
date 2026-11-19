@@ -1,6 +1,8 @@
 node_modules/
 dist/
 dist-h5/
+dist-android/
+artifacts/
 lib/
 .temp/
 .rn_temp/
