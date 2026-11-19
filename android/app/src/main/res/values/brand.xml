@@ -2,4 +2,5 @@
 <resources>
     <color name="brandBlue">#06294F</color>
     <color name="appBackground">#03050A</color>
+    <integer name="brand_splash_duration_ms">3150</integer>
 </resources>

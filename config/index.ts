@@ -13,6 +13,7 @@ export default defineConfig({
   plugins: [path.resolve(__dirname, 'sass')],
   defineConstants: {
     'process.env.TARO_APP_PLATFORM': JSON.stringify(android ? 'android' : ''),
+    'process.env.TARO_APP_ANDROID_CHANNEL': JSON.stringify(process.env.TARO_APP_ANDROID_CHANNEL === 'stable' ? 'stable' : 'preview'),
     'process.env.TARO_APP_ANDROID_API_BASE': JSON.stringify(process.env.TARO_APP_ANDROID_API_BASE || 'https://app.azure-glow.cn'),
   },
   copy: { patterns: [], options: {} },

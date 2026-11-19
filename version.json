@@ -1,11 +1,11 @@
 {
   "current": {
-    "app": "2.0.0-rc.3",
+    "app": "2.0.0",
     "api": "1.3.0"
   },
   "channels": {
     "weapp": {
-      "version": "2.0.0-rc.3",
+      "version": "2.0.0",
       "published": "unconfirmed",
       "note": "version 为源码版本；线上已发布的包版本待人工确认（不随服务器自动部署，需 build:weapp + 开发者工具上传）。发布后请把实际版本填进 published。欠账清单见 docs/WEAPP-TODO.md"
     },
@@ -14,11 +14,11 @@
       "note": "H5 端，随 master 自动部署。微信内走公众号授权，微信外浏览器走开放平台扫码登录"
     },
     "android": {
-      "version": "2.0.0-rc.3-android-preview.2",
+      "version": "2.0.0",
       "url": "",
       "forceUpdate": false,
       "minSupported": "",
-      "note": "后台 APP 管理发布与 OSS 下载；新版支持更新检查及微信移动应用登录配置，真实授权需匹配已审核参数与安装签名"
+      "note": "正式签名 release APK；包名 cn.azureglow.wuxing，stable 更新渠道。安装包尚未上传 OSS 或发布下载；微信需登记正式证书。"
     },
     "ios": {
       "version": "",
@@ -29,6 +29,15 @@
     }
   },
   "changelog": [
+    {
+      "version": "2.0.0",
+      "date": "2026-11-20",
+      "notes": [
+        "修复安卓启动 LOGO 被固定尺寸图层裁切，原图按比例留白完整展示",
+        "新增安卓正式签名构建、独立正式包名与 stable 更新渠道，保留体验包",
+        "APP 支持短信登录及登录后绑定微信，后台沿用现有短信与移动应用配置；原生支付仍未开启"
+      ]
+    },
     {
       "version": "2.0.0-rc.3",
       "date": "2026-11-19",

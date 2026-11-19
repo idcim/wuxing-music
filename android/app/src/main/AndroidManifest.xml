@@ -26,7 +26,7 @@
 
         </activity>
 
-        <activity android:name=".wxapi.WXEntryActivity" android:exported="true" android:launchMode="singleTop" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:taskAffinity="cn.azureglow.wuxing.preview" />
+        <activity android:name="${applicationId}.wxapi.WXEntryActivity" android:exported="true" android:launchMode="singleTop" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:taskAffinity="${applicationId}" />
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

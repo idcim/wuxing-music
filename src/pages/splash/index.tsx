@@ -5,6 +5,7 @@ import Icon from '@/components/Icon';
 import { useUserStore } from '@/stores/user';
 import { useSiteStore } from '@/stores/site';
 import { rpx } from '@/utils/unit';
+import { isAndroidApp } from '@/utils/platform';
 import './index.scss';
 
 // 模块级预生成星点（一次性，固定）。避免在组件内用 useMemo——
@@ -25,6 +26,8 @@ function Splash() {
   useDidShow(() => {
     const { element } = useUserStore.getState();
     const next = element ? '/pages/home/index' : '/pages/onboard/index';
+    // APP 已由原生启动层播放品牌合成动画，不再串联一段月亮等待页。
+    if (isAndroidApp) { void Taro.reLaunch({ url: next }); return; }
     setTimeout(() => Taro.reLaunch({ url: next }), 2200);
   });
 

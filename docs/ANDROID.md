@@ -1,23 +1,23 @@
-# 安卓体验版
+# 安卓 APP 构建与安装
 
-用户确认的首版用途是页面、后台风格切换与播放器体验。使用 Capacitor Android，页面资源内置在 APK 中，启动不依赖远程 H5 页面。H5 产品仍停止后续更新。
+页面使用 Taro 构建，现有 Android 容器为 Capacitor，资源内置于 APK；H5 产品停止后续更新。当前支持正式签名 release 与 debug 体验包两个构建，功能仍沿用现有 APP 实现。
 
 ## 安装与使用
 
-- 应用名称：五行律音体验版。
-- 应用标识：`cn.azureglow.wuxing.preview`，与未来正式应用隔离。
+- 正式应用名称：五行律音；包名 `cn.azureglow.wuxing`，更新渠道 `stable`。
+- 体验包保留 `cn.azureglow.wuxing.preview`，更新渠道 `preview`；两者可并存，不覆盖安装或迁移本地缓存，登录后使用同一后端账号。
 - 最低 Android 7.0（API 24）；使用系统 WebView，建议保持 WebView 更新。
-- 构建产物：`artifacts/android/wuxing-music-2.0.0-rc.3-android-preview.5.apk`，同目录附 `.sha256` 校验文件。
-- 使用 Android debug 签名供本地安装体验，未做应用商店发布。debug 签名由本机 Android 工具管理，不进入仓库；换机器打包可能需要先卸载旧体验版。
-- 图标与原生启动页使用用户提供的蓝底金色 LOGO，源文件随 Android 资源保存，后续打包不依赖原素材目录。
+- 正式产物：`artifacts/android/wuxing-music-2.0.0-android-release.apk`，附 SHA256、包名/版本/公开证书摘要 JSON。
+- 正式包使用独立长期发布签名，关闭调试；体验包继续使用 debug 签名。生成 release APK 不等于已上架应用商店或发布下载。
+- 启动 LOGO 沿原图轮廓拆成三个矢量部件，Android 12+ 播放约 3 秒的双向光轨、金线汇聚与火焰合成动画；原始 JPG 保留。旧系统及关闭动画时显示完整静态标识，APP 不再追加旧月亮等待页。
 
 连接现有 API，默认 `https://app.azure-glow.cn`。后台修改品牌和风格后，重启应用或从后台切回应用会重新读取配置。课程、商城入口遵守后台展示开关。
 
 APP 页面不预留微信胶囊空间。后续页面统一使用 `navTopStyle()`（设备安全区加 32rpx 页面间距）或 `navBarStyle()`（设备安全区加实际 44px 导航行）；安全区优先采用原生容器注入值，避免重复增加状态栏高度。小程序胶囊避让和旧 H5 间距各自保留。
 
-版本发布、公开下载与移动应用微信配置见 [APP 管理](APP-MANAGEMENT.md)。当前 versionCode 为 `2000005`，支持启动/回前台及设置页检查更新。
+版本发布、公开下载与移动应用微信配置见 [APP 管理](APP-MANAGEMENT.md)。当前 versionCode 为 `2000006`，支持启动/回前台及设置页检查更新。
 
-支持游客浏览、音乐前台试听、播放器收展，以及课程商品展示。APP 登录页接入微信移动应用原生授权，须在后台 APP 管理的「微信登录」填写并开启；用户自行勾选协议，允许拒绝或返回游客体验，不复用旧 H5 网站扫码流程。未新增安卓支付、分享 SDK 或可靠的原生后台音乐服务；音乐会员、礼物卡和课程商城下单在体验包中关闭。不得将体验版验证视为这些原生能力验收。
+支持短信登录、绑定微信、游客浏览、音乐前台试听、播放器收展及课程商品展示。微信移动应用原生授权须在后台及微信开放平台登记实际包名、证书后开启；协议自主勾选，允许返回游客。正式签名不增加原生支付、分享 SDK 或可靠后台音乐服务，APP 音乐会员、礼物卡及课程商城下单仍关闭，不能把发布构建当成这些能力已验收。
 
 ## 重新构建
 
@@ -29,7 +29,11 @@ npm run type-check
 npm run build:android
 ```
 
-脚本会构建到独立目录 `dist-android/`、同步原生资源、执行 `assembleDebug`、复制 APK 并生成 SHA256。不会覆盖小程序 `dist/` 或 H5 `dist-h5/`。Android 工程、构建产物和私有签名材料分别管理；`local.properties`、Gradle 缓存、APK 和凭证不得提交。
+`build:android` 生成 debug 体验包；本机正式签名已建立后执行 `npm run build:android:release`。脚本构建独立的 `dist-android/`，同步原生资源并执行对应构建任务；release 校验签名、正式包名、版本及非调试标记后才交付 APK。缺签名时拒绝，不回退至 debug 签名。小程序与 H5 产物目录不受影响。
+
+Windows 发布签名保存在 `%USERPROFILE%/.wuxing-music/android-signing/`。`release.p12` 为私钥容器，`credentials.clixml` 为当前用户的 DPAPI 加密凭据，`release-certificate.pem` 只含公开证书；目录 ACL 仅允许当前用户与 SYSTEM。首次创建必须显式执行 `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-android-release.ps1 -InitializeSigning`，已有文件时拒绝覆盖。密码仅短暂传给构建子进程，结束清理，不写参数或日志。
+
+长期更新必须沿用同一发布签名。DPAPI 凭据仅当前 Windows 用户在本机可解密；不能仅复制 clixml 到其他电脑恢复。应由维护者通过可信保管流程备份签名与可恢复凭据，不能删除用户配置目录、把密钥提交 Git 或上传聊天。CI/Linux 可在其保密环境注入 `WUXING_ANDROID_STORE_FILE/STORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD` 后调用 `node scripts/build-android.cjs --release`。
 
 Windows 未指定 JAVA_HOME 时会尝试 Android Studio 自带的 `jbr`；SDK 默认取 `%LOCALAPPDATA%/Android/Sdk`。也可设置 JAVA_HOME、ANDROID_HOME。替换服务端只需在本次构建进程设置公开地址：
 
@@ -39,6 +43,14 @@ npm run build:android
 ```
 
 只编译页面资源使用 `npm run build:android:web`。Android 通过 CapacitorHttp 发起现有 API 请求；保留 HTTPS 校验，不关闭证书校验，不为本地 WebView 放宽生产 CORS。
+
+## 2026-11-20 正式包与开屏验证
+
+- `2.0.0` / versionCode `2000006` 的 release 构建、签名验证、公开证书指纹校验、包名与非调试检查通过，已在 MuMu Android 15 安装及覆盖安装。APK SHA256：`8c86a22785dcd602dd04d4507ac03f5b60192a1e50e74a8f726715116e6b611d`。
+- 93 项前端回归、类型检查与小程序构建通过。Android 仪器测试覆盖静态位图和动画定格矢量在 144/288/864 像素边界内的安全圆；原固定 dp 图层在 144 边界失败，修复后通过。
+- 原生冷启动录屏确认三个部件合成、双向光轨、收尾闪光与完整定格，随后进入引导页并可作为游客进入首页；关闭系统动画时展示完整静态 LOGO 且不强留动画时长。动画正常速度约 3 秒，原生等待最多约 3.15 秒，与 WebView 初始化并行。
+- MuMu 原有动画缩放为 0.5，本轮临时使用 1 与 0 检查正常及关闭动画，测试后已恢复为 0.5；不改用户系统偏好。旧安卓回退仅验证资源与构建，未在旧 API 设备运行。未发送短信、授权微信、支付、上传 OSS 或发布下载。
+- 冷启动录屏、截图及 `splash-animation-preview.gif` 保存在忽略的 `artifacts/android/`。系统开屏约束参考 [Android 启动画面](https://developer.android.com/develop/ui/views/launch/splash-screen)，签名流程参考 [Android 应用签名](https://developer.android.com/studio/publish/app-signing)。
 
 ## 本机构建环境排障
 

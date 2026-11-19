@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const test = require('node:test');
 const ts = require('typescript');
 
-function setup({ android = true, payload, native = {} } = {}) {
+function setup({ android = true, payload, native = {}, channel = 'preview' } = {}) {
   let now = 1000000;
   const calls = [], opened = [];
   let exits = 0;
@@ -32,7 +32,7 @@ function setup({ android = true, payload, native = {} } = {}) {
   const source = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : 'export {};';
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
   const exports = {};
-  vm.runInNewContext(compiled, { exports, URL, Set, Number, Date: { now: () => now }, require: key => {
+  vm.runInNewContext(compiled, { exports, process: { env: { TARO_APP_ANDROID_CHANNEL: channel } }, URL, Set, Number, Date: { now: () => now }, require: key => {
     if (key in deps) return deps[key];
     throw new Error(`Unexpected dependency ${key}`);
   } });
@@ -42,6 +42,15 @@ function setup({ android = true, payload, native = {} } = {}) {
 const releaseId = 'b'.repeat(32);
 const latest = overrides => ({ id: releaseId, version_name: '1.3', version_code: 124, package_name: 'cn.test.preview', channel: 'preview', size: 1024, sha256: 'a'.repeat(64), notes: '修复播放器', download_url: `/api/app/download/${releaseId}`, ...overrides });
 const info = overrides => ({ enabled: true, app_name: '测试', title: '安卓应用', install_guide: '下载后安装', latest: latest(), update_available: true, force_update: false, ...overrides });
+
+test('正式包只查询正式渠道并拒绝体验渠道更新', async () => {
+  const payload = info({ latest: latest({ channel: 'stable', package_name: 'cn.azureglow.wuxing' }) });
+  const service = setup({ channel: 'stable', native: { id: 'cn.azureglow.wuxing' }, payload });
+  assert.equal(await service.checkAppUpdate(), 'update');
+  assert.match(service.calls[0], /channel=stable&version_code=123&package_name=cn.azureglow.wuxing/);
+  const wrong = setup({ channel: 'stable', payload: info() });
+  assert.equal(await wrong.checkAppUpdate(), 'current');
+});
 
 test('实际原生版本用于检查，自动更新节流，普通更新在本会话忽略', async () => {
   const service = setup({ payload: info() });

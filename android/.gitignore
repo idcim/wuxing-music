@@ -54,6 +54,8 @@ captures/
 
 # Signing credentials stay on the build machine.
 *.jks
+*.p12
+*.clixml
 *.keystore
 keystore.properties
 

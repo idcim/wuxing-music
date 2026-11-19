@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android" android:drawable="@drawable/brand_splash_mark">
+  <target android:name="flame_group" android:animation="@animator/brand_flame_move" />
+  <target android:name="flame" android:animation="@animator/brand_flame_light" />
+  <target android:name="orbit_group" android:animation="@animator/brand_orbit_move" />
+  <target android:name="orbit" android:animation="@animator/brand_orbit_light" />
+  <target android:name="heart_group" android:animation="@animator/brand_heart_move" />
+  <target android:name="heart" android:animation="@animator/brand_heart_light" />
+  <target android:name="glint" android:animation="@animator/brand_glint_light" />
+  <target android:name="sparks_group" android:animation="@animator/brand_sparks_move" />
+  <target android:name="sparks" android:animation="@animator/brand_sparks_light" />
+  <target android:name="energy_left_group" android:animation="@animator/brand_energy_left_move" />
+  <target android:name="energy_left_glow" android:animation="@animator/brand_energy_left_glow" />
+  <target android:name="energy_left_line" android:animation="@animator/brand_energy_left_line" />
+  <target android:name="energy_right_group" android:animation="@animator/brand_energy_right_move" />
+  <target android:name="energy_right_glow" android:animation="@animator/brand_energy_right_glow" />
+  <target android:name="energy_right_line" android:animation="@animator/brand_energy_right_line" />
+</animated-vector>

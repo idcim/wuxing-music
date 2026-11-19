@@ -35,7 +35,7 @@ export const useAppUpdate = create<UpdateState>(() => ({
   nativeInfo: null, release: null, guide: '', visible: false, force: false, checking: false,
 }));
 
-const CHANNEL = 'preview';
+const CHANNEL = process.env.TARO_APP_ANDROID_CHANNEL === 'stable' ? 'stable' : 'preview';
 const CHECK_INTERVAL = 5 * 60 * 1000;
 let lastCheck = 0;
 let nativeInfoPromise: Promise<NativeAppInfo> | undefined;

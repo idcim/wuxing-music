@@ -1,16 +1,18 @@
 apply plugin: 'com.android.application'
 
 def appPackage = new groovy.json.JsonSlurper().parse(file('../../package.json'))
+def signingEnv = ['WUXING_ANDROID_STORE_FILE', 'WUXING_ANDROID_STORE_PASSWORD', 'WUXING_ANDROID_KEY_ALIAS', 'WUXING_ANDROID_KEY_PASSWORD']
+def releaseSigningReady = signingEnv.every { System.getenv(it) }
 
 android {
     namespace = "cn.azureglow.wuxing.preview"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "cn.azureglow.wuxing.preview"
+        applicationId "cn.azureglow.wuxing"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2000005
-        versionName "${appPackage.version}-android-preview.5"
+        versionCode 2000006
+        versionName appPackage.version
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -18,13 +20,38 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (releaseSigningReady) {
+            release {
+                storeFile file(System.getenv('WUXING_ANDROID_STORE_FILE'))
+                storePassword System.getenv('WUXING_ANDROID_STORE_PASSWORD')
+                keyAlias System.getenv('WUXING_ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('WUXING_ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
+        debug {
+            applicationIdSuffix '.preview'
+            versionNameSuffix '-android-preview.6'
+            resValue 'string', 'app_name', '五行律音体验版'
+            resValue 'string', 'title_activity_main', '五行律音体验版'
+        }
         release {
+            debuggable false
+            if (releaseSigningReady) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
 }
+
+tasks.register('requireReleaseSigning') {
+    doLast {
+        if (!releaseSigningReady) throw new GradleException('正式构建缺少发布签名配置；不会退回 debug 签名。')
+    }
+}
+tasks.matching { it.name == 'preReleaseBuild' }.configureEach { dependsOn 'requireReleaseSigning' }
 
 repositories {
     flatDir{

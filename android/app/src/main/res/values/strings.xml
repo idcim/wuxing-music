@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">五行律音体验版</string>
-    <string name="title_activity_main">五行律音体验版</string>
-    <string name="package_name">cn.azureglow.wuxing.preview</string>
-    <string name="custom_url_scheme">cn.azureglow.wuxing.preview</string>
+    <string name="app_name">五行律音</string>
+    <string name="title_activity_main">五行律音</string>
+    <string name="package_name">cn.azureglow.wuxing</string>
+    <string name="custom_url_scheme">cn.azureglow.wuxing</string>
 </resources>
